@@ -515,7 +515,7 @@ class NodeRuntimeTests(unittest.TestCase):
                 start_node.return_value = {
                     "stack_dir": str(stack_dir),
                     "container_target": "abci-up",
-                    "node_target": "up",
+                    "node_target": "node-start",
                     "rpc_checked": False,
                 }
                 with redirect_stdout(stdout):
@@ -691,7 +691,7 @@ class RuntimeHelperTests(unittest.TestCase):
             run_make_target.call_args_list,
             [
                 call(stack_dir, "abci-bds-up"),
-                call(stack_dir, "up-bds"),
+                call(stack_dir, "node-start-bds"),
             ],
         )
         wait_for_rpc.assert_called_once_with(timeout_seconds=12.5)
@@ -709,7 +709,7 @@ class RuntimeHelperTests(unittest.TestCase):
         self.assertEqual(
             run_make_target.call_args_list,
             [
-                call(stack_dir, "down"),
+                call(stack_dir, "node-stop"),
                 call(stack_dir, "abci-down"),
             ],
         )

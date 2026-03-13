@@ -86,7 +86,7 @@ def start_xian_stack_node(
     rpc_timeout_seconds: float = 30.0,
 ) -> dict:
     container_target = "abci-bds-up" if service_node else "abci-up"
-    node_target = "up-bds" if service_node else "up"
+    node_target = "node-start-bds" if service_node else "node-start"
 
     run_make_target(stack_dir, container_target)
     run_make_target(stack_dir, node_target)
@@ -108,7 +108,7 @@ def start_xian_stack_node(
 def stop_xian_stack_node(*, stack_dir: Path, service_node: bool) -> dict:
     container_target = "abci-bds-down" if service_node else "abci-down"
 
-    run_make_target(stack_dir, "down")
+    run_make_target(stack_dir, "node-stop")
     run_make_target(stack_dir, container_target)
 
     return {
