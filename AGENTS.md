@@ -2,7 +2,9 @@
 
 ## Scope
 - `xian-cli` owns the operator UX for Xian nodes and networks.
-- Keep commands such as `network create`, `network join`, `node init`, `node start`, `node stop`, `node status`, and future `doctor` flows here.
+- Keep commands such as `network create`, `network join`, `node init`,
+  `node start`, `node stop`, `node status`, `snapshot restore`, and `doctor`
+  flows here.
 - Reusable bootstrap logic belongs in `xian-abci`; backend runtime orchestration belongs in `xian-stack`.
 - This repo should consume network metadata and manifests, not become the canonical home for chain-specific genesis assets.
 
@@ -23,9 +25,14 @@
 - If you change manifest or profile formats, update `docs/LIFECYCLE_CONTRACT.md` and `README.md` in the same change.
 - If a feature needs canonical network definitions, keep those in
   `xian-configs` and consume them here.
+- Prefer the network-first local layout `./networks/<name>/manifest.json`.
+  Treat flat `./networks/<name>.json` manifests as legacy fallback only.
 - `network join` must resolve the referenced network manifest up front. Keep
   network-owned metadata in the manifest and node-local overrides in the
   profile.
+- `network create` may generate a colocated local `genesis.json`, but private
+  key material must still live under `./keys/` and be referenced from node
+  profiles rather than embedded in manifests.
 - `network join --init-node` should reuse the same initialization path as
   `node init`, not fork a second bootstrap implementation.
 - Snapshot restore precedence must stay explicit: CLI override, then node
@@ -43,6 +50,8 @@
 - The reference workspace is `~/xian` with sibling repos beside this one.
 - `xian-cli` should prefer local `./networks` manifests when present, but fall
   back cleanly to canonical manifests from the sibling `xian-configs` repo.
+- `network create --bootstrap-node` should be able to carry the flow through to
+  a ready-to-init node without requiring manual file assembly.
 - Keep precedence rules explicit: local node overrides win over network
   defaults, but the CLI should not duplicate canonical network metadata into
   node profiles without a clear reason.

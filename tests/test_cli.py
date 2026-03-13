@@ -85,8 +85,35 @@ class NetworkManifestTests(unittest.TestCase):
             manifest = json.loads(output_path.read_text(encoding="utf-8"))
             self.assertEqual(manifest["name"], "local-dev")
             self.assertEqual(manifest["chain_id"], "xian-local-1")
-            self.assertEqual(manifest["mode"], "join")
+            self.assertEqual(manifest["mode"], "create")
             self.assertEqual(manifest["runtime_backend"], "xian-stack")
+
+    def test_network_create_defaults_to_network_first_layout(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            base_dir = Path(tmp_dir)
+            stdout = io.StringIO()
+            with redirect_stdout(stdout):
+                exit_code = main(
+                    [
+                        "network",
+                        "create",
+                        "local-dev",
+                        "--base-dir",
+                        str(base_dir),
+                        "--chain-id",
+                        "xian-local-1",
+                    ]
+                )
+
+            self.assertEqual(exit_code, 0)
+            result = json.loads(stdout.getvalue())
+            manifest_path = (
+                base_dir / "networks" / "local-dev" / "manifest.json"
+            )
+            self.assertEqual(result["manifest_path"], str(manifest_path))
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            self.assertEqual(manifest["mode"], "create")
+            self.assertIsNone(manifest["genesis_source"])
 
     def test_network_join_writes_node_profile(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -391,13 +418,95 @@ class NetworkManifestTests(unittest.TestCase):
                 "keys/validator-1/validator_key_info.json",
             )
 
+    def test_network_create_can_bootstrap_local_network(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            base_dir = Path(tmp_dir)
+            home = base_dir / ".cometbft"
+            stdout = io.StringIO()
+
+            fake_genesis = {
+                "chain_id": "xian-local-1",
+                "validators": [],
+                "abci_genesis": {},
+            }
+            genesis_builder = type(
+                "GenesisBuilder",
+                (),
+                {
+                    "build_single_validator_genesis": staticmethod(
+                        unittest.mock.Mock(return_value=fake_genesis)
+                    )
+                },
+            )()
+
+            with patch(
+                "xian_cli.cli.get_genesis_builder_module",
+                return_value=genesis_builder,
+            ):
+                with redirect_stdout(stdout):
+                    exit_code = main(
+                        [
+                            "network",
+                            "create",
+                            "local-dev",
+                            "--base-dir",
+                            str(base_dir),
+                            "--chain-id",
+                            "xian-local-1",
+                            "--generate-validator-key",
+                            "--bootstrap-node",
+                            "validator-1",
+                            "--init-node",
+                            "--home",
+                            str(home),
+                        ]
+                    )
+
+            self.assertEqual(exit_code, 0)
+            result = json.loads(stdout.getvalue())
+            manifest_path = (
+                base_dir / "networks" / "local-dev" / "manifest.json"
+            )
+            profile_path = base_dir / "nodes" / "validator-1.json"
+            genesis_path = base_dir / "networks" / "local-dev" / "genesis.json"
+
+            self.assertEqual(result["manifest_path"], str(manifest_path))
+            self.assertEqual(result["profile_path"], str(profile_path))
+            self.assertTrue(result["node_initialized"])
+            self.assertTrue(genesis_path.exists())
+            self.assertTrue((home / "config" / "config.toml").exists())
+            self.assertTrue(
+                (
+                    base_dir
+                    / "keys"
+                    / "validator-1"
+                    / "validator_key_info.json"
+                ).exists()
+            )
+
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            profile = json.loads(profile_path.read_text(encoding="utf-8"))
+            self.assertEqual(manifest["genesis_source"], "./genesis.json")
+            self.assertEqual(
+                profile["validator_key_ref"],
+                "keys/validator-1/validator_key_info.json",
+            )
+            (
+                genesis_builder.build_single_validator_genesis.assert_called_once()
+            )
+
 
 class AbciBridgeTests(unittest.TestCase):
     def setUp(self) -> None:
         self.original_sys_path = list(sys.path)
         self.original_modules = {
             name: sys.modules.pop(name, None)
-            for name in ("xian", "xian.node_setup", "xian.node_admin")
+            for name in (
+                "xian",
+                "xian.node_setup",
+                "xian.node_admin",
+                "xian.genesis_builder",
+            )
         }
         self.workspace_src = (
             Path(__file__).resolve().parents[2] / "xian-abci" / "src"
@@ -409,11 +518,18 @@ class AbciBridgeTests(unittest.TestCase):
         ]
         abci_bridge.get_node_setup_module.cache_clear()
         abci_bridge.get_node_admin_module.cache_clear()
+        abci_bridge.get_genesis_builder_module.cache_clear()
 
     def tearDown(self) -> None:
         abci_bridge.get_node_setup_module.cache_clear()
         abci_bridge.get_node_admin_module.cache_clear()
-        for name in ("xian", "xian.node_setup", "xian.node_admin"):
+        abci_bridge.get_genesis_builder_module.cache_clear()
+        for name in (
+            "xian",
+            "xian.node_setup",
+            "xian.node_admin",
+            "xian.genesis_builder",
+        ):
             sys.modules.pop(name, None)
         for name, module in self.original_modules.items():
             if module is not None:
@@ -446,6 +562,8 @@ class AbciBridgeTests(unittest.TestCase):
                 abci_bridge.get_node_setup_module()
             with self.assertRaisesRegex(RuntimeError, "xian-abci helpers"):
                 abci_bridge.get_node_admin_module()
+            with self.assertRaisesRegex(RuntimeError, "xian-abci helpers"):
+                abci_bridge.get_genesis_builder_module()
 
 
 class NodeInitTests(unittest.TestCase):
@@ -1205,6 +1323,196 @@ class NodeRuntimeTests(unittest.TestCase):
                     ]
                 )
 
+    def test_node_status_reports_initialized_home_and_rpc(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            base_dir = Path(tmp_dir)
+            (base_dir / "networks").mkdir()
+            (base_dir / "nodes").mkdir()
+            stack_dir = base_dir / "xian-stack"
+            stack_dir.mkdir()
+            home = stack_dir / ".cometbft"
+            config_dir = home / "config"
+            data_dir = home / "data"
+            config_dir.mkdir(parents=True)
+            data_dir.mkdir(parents=True)
+            (config_dir / "config.toml").write_text("", encoding="utf-8")
+            (config_dir / "genesis.json").write_text("{}", encoding="utf-8")
+            (config_dir / "node_key.json").write_text(
+                json.dumps({"node_id": "node-123"}),
+                encoding="utf-8",
+            )
+            (data_dir / "priv_validator_state.json").write_text(
+                "{}",
+                encoding="utf-8",
+            )
+
+            with redirect_stdout(io.StringIO()):
+                main(
+                    [
+                        "network",
+                        "create",
+                        "local-dev",
+                        "--chain-id",
+                        "xian-local-1",
+                        "--output",
+                        str(base_dir / "networks" / "local-dev.json"),
+                    ]
+                )
+                main(
+                    [
+                        "network",
+                        "join",
+                        "validator-1",
+                        "--base-dir",
+                        str(base_dir),
+                        "--network",
+                        "local-dev",
+                        "--stack-dir",
+                        str(stack_dir),
+                        "--output",
+                        str(base_dir / "nodes" / "validator-1.json"),
+                    ]
+                )
+
+            stdout = io.StringIO()
+            with patch(
+                "xian_cli.cli.fetch_json",
+                return_value={"result": {"node_info": {"network": "xian"}}},
+            ):
+                with redirect_stdout(stdout):
+                    exit_code = main(
+                        [
+                            "node",
+                            "status",
+                            "validator-1",
+                            "--base-dir",
+                            str(base_dir),
+                        ]
+                    )
+
+            self.assertEqual(exit_code, 0)
+            result = json.loads(stdout.getvalue())
+            self.assertTrue(result["initialized"])
+            self.assertTrue(result["rpc_reachable"])
+            self.assertEqual(result["node_id"], "node-123")
+            self.assertEqual(result["stack_dir"], str(stack_dir.resolve()))
+
+
+class DoctorTests(unittest.TestCase):
+    def test_doctor_reports_workspace_and_node_checks(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            base_dir = Path(tmp_dir)
+            configs_dir = base_dir / "xian-configs"
+            stack_dir = base_dir / "xian-stack"
+            configs_dir.mkdir()
+            stack_dir.mkdir()
+            (base_dir / "networks").mkdir()
+            (base_dir / "nodes").mkdir()
+            home = base_dir / ".cometbft"
+            config_dir = home / "config"
+            data_dir = home / "data"
+            config_dir.mkdir(parents=True)
+            data_dir.mkdir(parents=True)
+            (config_dir / "config.toml").write_text("", encoding="utf-8")
+            (config_dir / "genesis.json").write_text("{}", encoding="utf-8")
+            (config_dir / "node_key.json").write_text(
+                json.dumps({"node_id": "node-123"}),
+                encoding="utf-8",
+            )
+            (data_dir / "priv_validator_state.json").write_text(
+                "{}",
+                encoding="utf-8",
+            )
+
+            with redirect_stdout(io.StringIO()):
+                main(
+                    [
+                        "network",
+                        "create",
+                        "local-dev",
+                        "--chain-id",
+                        "xian-local-1",
+                        "--output",
+                        str(base_dir / "networks" / "local-dev.json"),
+                    ]
+                )
+                main(
+                    [
+                        "keys",
+                        "validator",
+                        "generate",
+                        "--out-dir",
+                        str(base_dir / "keys" / "validator-1"),
+                    ]
+                )
+                main(
+                    [
+                        "network",
+                        "join",
+                        "validator-1",
+                        "--base-dir",
+                        str(base_dir),
+                        "--network",
+                        "local-dev",
+                        "--stack-dir",
+                        str(stack_dir),
+                        "--home",
+                        str(home),
+                        "--validator-key-ref",
+                        str(
+                            base_dir
+                            / "keys"
+                            / "validator-1"
+                            / "validator_key_info.json"
+                        ),
+                        "--output",
+                        str(base_dir / "nodes" / "validator-1.json"),
+                    ]
+                )
+
+            stdout = io.StringIO()
+            with patch(
+                "xian_cli.cli.get_node_setup_module",
+                return_value=type(
+                    "NodeSetup", (), {"__name__": "node_setup"}
+                )(),
+            ):
+                with patch(
+                    "xian_cli.cli.get_node_admin_module",
+                    return_value=type(
+                        "NodeAdmin", (), {"__name__": "node_admin"}
+                    )(),
+                ):
+                    with patch(
+                        "xian_cli.cli.get_genesis_builder_module",
+                        return_value=type(
+                            "GenesisBuilder",
+                            (),
+                            {"__name__": "genesis_builder"},
+                        )(),
+                    ):
+                        with redirect_stdout(stdout):
+                            exit_code = main(
+                                [
+                                    "doctor",
+                                    "validator-1",
+                                    "--base-dir",
+                                    str(base_dir),
+                                    "--configs-dir",
+                                    str(configs_dir),
+                                    "--stack-dir",
+                                    str(stack_dir),
+                                ]
+                            )
+
+            self.assertEqual(exit_code, 0)
+            result = json.loads(stdout.getvalue())
+            self.assertTrue(result["ok"])
+            check_names = {check["name"] for check in result["checks"]}
+            self.assertIn("configs_dir", check_names)
+            self.assertIn("stack_dir", check_names)
+            self.assertIn("node_status", check_names)
+
 
 class SnapshotCommandTests(unittest.TestCase):
     def test_snapshot_restore_uses_effective_snapshot_url(self) -> None:
@@ -1415,6 +1723,20 @@ class ConfigRepoTests(unittest.TestCase):
 
         expected = (WORKSPACE_ROOT / "xian-configs").resolve()
         self.assertEqual(resolved, expected)
+
+    def test_resolve_network_manifest_path_prefers_local_network_dir(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            base_dir = Path(tmp_dir)
+            manifest_path = base_dir / "networks" / "mainnet" / "manifest.json"
+            manifest_path.parent.mkdir(parents=True)
+            manifest_path.write_text("{}", encoding="utf-8")
+
+            resolved = resolve_network_manifest_path(
+                base_dir=base_dir,
+                network_name="mainnet",
+            )
+
+        self.assertEqual(resolved, manifest_path.resolve())
 
     def test_resolve_network_manifest_path_prefers_canonical_configs_repo(
         self,

@@ -22,12 +22,15 @@ Planned primary commands:
 
 Command intent:
 
-- `network create` defines a new network manifest.
+- `network create` defines a new network manifest and may bootstrap the first
+  local node for that network.
 - `network join` defines a local node profile for an existing network and may
   initialize the node immediately.
 - `node init` performs all preparation stages needed before startup.
+- `node status` reports local bootstrap state and optional live RPC status.
 - `snapshot restore` applies the effective snapshot source to an initialized
   node home.
+- `doctor` checks workspace prerequisites and optional node prerequisites.
 - `node start` launches the runtime and verifies health.
 
 `node init` should hide most of the current manual steps. It is the boundary between persisted intent and generated runtime state.
@@ -63,11 +66,13 @@ This stage defines machine-local choices. It should reference keys and networks,
 
 Resolution policy:
 
+- local manifests should be written at `./networks/<name>/manifest.json`
 - `network join` should resolve the referenced network manifest immediately
 - effective defaults such as `runtime_backend` come from the network manifest
   unless the operator passes a node-local override
 - node-local overrides such as extra seeds, snapshot URL overrides, and genesis
   URL overrides belong in the node profile
+- `network create` may write a colocated `genesis.json` beside the manifest
 - `network join --init-node` should immediately hand the new profile into the
   same node initialization path used by `node init`
 
@@ -157,7 +162,8 @@ The network manifest is the network-level source of truth. Target fields:
 
 Resolution policy:
 
-- prefer a local `./networks/<name>.json` manifest when present
+- prefer a local `./networks/<name>/manifest.json` manifest when present
+- accept `./networks/<name>.json` only as a temporary legacy fallback
 - otherwise resolve the canonical manifest from the sibling
   `xian-configs/networks/<name>/manifest.json`
 
@@ -185,6 +191,8 @@ Rules:
 
 - network manifests do not contain private keys
 - node profiles reference keys; they do not inline them
+- `network create` may generate a local `genesis.json`, but that file remains a
+  derived network artifact rather than a place to hide node-local state
 - `network join` may generate validator key material, but it should still write
   files under the workspace and store only a reference in the profile
 - node profiles should not duplicate network-owned seeds, snapshot URLs, or
@@ -236,9 +244,11 @@ The current implementation already supports:
 2. validator key generation during `network join`
 3. optional node initialization during `network join`
 4. explicit snapshot restore as a separate command or as part of `node init`
+5. creation-side bootstrap through `network create --bootstrap-node`
+6. explicit `node status` and `doctor` inspection flows
 
 The next implementation pass should therefore focus on:
 
-1. extending `network create` into a full creation-side bootstrap flow
-2. adding `node status` and `doctor` so runtime inspection is explicit
+1. expanding creation flows beyond the single-node bootstrap case
+2. teaching `xian-stack` and `xian-cli` a stable backend `status` operation
 3. keeping `xian-stack` as the first runtime backend without exposing its Makefile as the long-term public interface

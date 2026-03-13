@@ -1,14 +1,22 @@
 from __future__ import annotations
 
 import argparse
+import base64
 import json
 import sys
 from pathlib import Path
 from urllib.parse import urlparse
 
-from xian_cli.abci_bridge import get_node_admin_module, get_node_setup_module
+from xian_cli.abci_bridge import (
+    get_genesis_builder_module,
+    get_node_admin_module,
+    get_node_setup_module,
+)
 from xian_cli.cometbft import generate_validator_material
-from xian_cli.config_repo import resolve_network_manifest_path
+from xian_cli.config_repo import (
+    resolve_configs_dir,
+    resolve_network_manifest_path,
+)
 from xian_cli.models import NetworkManifest, NodeProfile, read_json, write_json
 from xian_cli.runtime import (
     default_home_for_backend,
@@ -48,6 +56,22 @@ def _stringify_path_for_profile(path: Path, *, base_dir: Path) -> str:
         return str(resolved_path)
 
 
+def _default_network_manifest_path(base_dir: Path, network_name: str) -> Path:
+    return base_dir / "networks" / network_name / "manifest.json"
+
+
+def _resolve_output_path(
+    *,
+    base_dir: Path,
+    explicit_output: Path | None,
+    default_path: Path,
+) -> Path:
+    target = explicit_output or default_path
+    if not target.is_absolute():
+        target = (base_dir / target).resolve()
+    return target
+
+
 def _handle_keys_validator_generate(args: argparse.Namespace) -> int:
     if args.out_dir is not None:
         metadata_path = _write_validator_material_files(
@@ -65,18 +89,161 @@ def _handle_keys_validator_generate(args: argparse.Namespace) -> int:
 
 
 def _handle_network_create(args: argparse.Namespace) -> int:
+    base_dir = args.base_dir.resolve()
+    target = _resolve_output_path(
+        base_dir=base_dir,
+        explicit_output=args.output,
+        default_path=_default_network_manifest_path(base_dir, args.name),
+    )
+    network_dir = target.parent
+
+    if args.generate_validator_key and args.validator_key_ref is not None:
+        raise ValueError(
+            "pass either --validator-key-ref or --generate-validator-key, "
+            "not both"
+        )
+    if args.validator_key_dir is not None and not args.generate_validator_key:
+        raise ValueError(
+            "--validator-key-dir requires --generate-validator-key"
+        )
+    if args.init_node and args.bootstrap_node is None:
+        raise ValueError("--init-node requires --bootstrap-node")
+
+    validator_key_ref: str | None = None
+    validator_key_payload: dict | None = None
+    if args.validator_key_ref is not None:
+        validator_key_path = _resolve_output_path(
+            base_dir=base_dir,
+            explicit_output=args.validator_key_ref,
+            default_path=args.validator_key_ref,
+        )
+        validator_key_ref = _stringify_path_for_profile(
+            validator_key_path,
+            base_dir=base_dir,
+        )
+        validator_key_payload = read_json(validator_key_path)
+    elif args.generate_validator_key:
+        key_dir = args.validator_key_dir or base_dir / "keys" / (
+            args.bootstrap_node or args.name
+        )
+        if not key_dir.is_absolute():
+            key_dir = (base_dir / key_dir).resolve()
+        metadata_path = _write_validator_material_files(
+            out_dir=key_dir,
+            force=args.force,
+        )
+        validator_key_ref = _stringify_path_for_profile(
+            metadata_path,
+            base_dir=base_dir,
+        )
+        validator_key_payload = read_json(metadata_path)
+
+    genesis_source = args.genesis_source
+    generated_genesis_path: Path | None = None
+    if genesis_source is None:
+        if validator_key_payload is None:
+            if args.bootstrap_node is not None:
+                raise ValueError(
+                    "bootstrap network creation without --genesis-source "
+                    "requires validator key material; pass "
+                    "--generate-validator-key or --validator-key-ref"
+                )
+        else:
+            founder_private_key = (
+                args.founder_private_key
+                or _extract_validator_private_key_hex(validator_key_payload)
+            )
+            generated_genesis_path = network_dir / "genesis.json"
+            genesis = _build_creation_genesis(
+                chain_id=args.chain_id,
+                founder_private_key=founder_private_key,
+                validator_key_payload=validator_key_payload,
+                genesis_preset=args.genesis_preset,
+                validator_name=args.bootstrap_node or args.name,
+                validator_power=args.validator_power,
+            )
+            write_json(generated_genesis_path, genesis, force=args.force)
+            genesis_source = "./genesis.json"
+    if (
+        args.bootstrap_node is not None
+        and genesis_source is None
+        and validator_key_payload is None
+    ):
+        raise ValueError(
+            "--bootstrap-node requires either --genesis-source or local "
+            "genesis generation via validator key material"
+        )
+
     manifest = NetworkManifest(
         name=args.name,
         chain_id=args.chain_id,
         mode=args.mode,
         runtime_backend=args.runtime_backend,
-        genesis_source=args.genesis_source,
+        genesis_source=genesis_source,
         snapshot_url=args.snapshot_url,
         seed_nodes=args.seed or [],
     )
-    target = args.output or Path("networks") / f"{args.name}.json"
     write_json(target, manifest.to_dict(), force=args.force)
-    print(f"wrote network manifest to {target}")
+
+    result: dict[str, object] = {
+        "manifest_path": str(target),
+        "mode": args.mode,
+        "genesis_source": genesis_source,
+    }
+    if generated_genesis_path is not None:
+        result["generated_genesis_path"] = str(generated_genesis_path)
+    if validator_key_ref is not None:
+        result["validator_key_ref"] = validator_key_ref
+
+    if args.bootstrap_node is not None:
+        if validator_key_ref is None:
+            raise ValueError(
+                "--bootstrap-node requires validator key material; "
+                "pass --generate-validator-key or --validator-key-ref"
+            )
+        profile_path = _resolve_output_path(
+            base_dir=base_dir,
+            explicit_output=args.node_output,
+            default_path=base_dir / "nodes" / f"{args.bootstrap_node}.json",
+        )
+        profile = NodeProfile(
+            name=args.bootstrap_node,
+            network=args.name,
+            moniker=args.moniker or args.bootstrap_node,
+            validator_key_ref=validator_key_ref,
+            runtime_backend=args.runtime_backend,
+            stack_dir=(
+                str(args.stack_dir) if args.stack_dir is not None else None
+            ),
+            seeds=[],
+            genesis_url=None,
+            snapshot_url=args.snapshot_url,
+            service_node=args.service_node,
+            home=str(args.home) if args.home is not None else None,
+            pruning_enabled=args.enable_pruning,
+            blocks_to_keep=args.blocks_to_keep,
+        )
+        write_json(profile_path, profile.to_dict(), force=args.force)
+        result["profile_path"] = str(profile_path)
+
+        if args.init_node:
+            init_args = argparse.Namespace(
+                name=args.bootstrap_node,
+                base_dir=base_dir,
+                profile=profile_path,
+                network=target,
+                validator_key=None,
+                stack_dir=args.stack_dir,
+                configs_dir=args.configs_dir,
+                home=args.home,
+                force=args.force,
+                restore_snapshot=False,
+                snapshot_url=None,
+            )
+            result["node_initialized"] = True
+            result["node_init"] = _initialize_node_from_args(init_args)
+
+    print(json.dumps(result, indent=2))
     return 0
 
 
@@ -241,6 +408,48 @@ def _extract_priv_validator_key(payload: dict) -> dict:
     raise ValueError(
         "validator key file must contain either priv_validator_key or a raw "
         "priv_validator_key.json payload"
+    )
+
+
+def _extract_validator_private_key_hex(payload: dict) -> str:
+    private_key_hex = payload.get("validator_private_key_hex")
+    if private_key_hex is not None:
+        return private_key_hex
+
+    priv_validator_key = _extract_priv_validator_key(payload)
+    try:
+        raw_private_key = base64.b64decode(
+            priv_validator_key["priv_key"]["value"].encode("ascii")
+        )
+    except (KeyError, ValueError) as exc:
+        raise ValueError(
+            "validator key file does not contain a usable private key"
+        ) from exc
+
+    if len(raw_private_key) < 32:
+        raise ValueError(
+            "validator key file does not contain a usable private key"
+        )
+    return raw_private_key[:32].hex()
+
+
+def _build_creation_genesis(
+    *,
+    chain_id: str,
+    founder_private_key: str,
+    validator_key_payload: dict,
+    genesis_preset: str,
+    validator_name: str,
+    validator_power: int,
+) -> dict:
+    genesis_builder = get_genesis_builder_module()
+    return genesis_builder.build_single_validator_genesis(
+        chain_id=chain_id,
+        founder_private_key=founder_private_key,
+        priv_validator_key=_extract_priv_validator_key(validator_key_payload),
+        network=genesis_preset,
+        validator_name=validator_name,
+        validator_power=validator_power,
     )
 
 
@@ -557,6 +766,84 @@ def _handle_node_stop(args: argparse.Namespace) -> int:
     return 0
 
 
+def _collect_node_status(
+    args: argparse.Namespace,
+    *,
+    check_rpc: bool,
+) -> dict:
+    base_dir = args.base_dir.resolve()
+    profile_path, profile, network_path, network = _load_profile_and_network(
+        base_dir=base_dir,
+        name=args.name,
+        profile_arg=args.profile,
+        network_arg=args.network,
+        configs_dir=args.configs_dir,
+    )
+    runtime_backend = _resolve_runtime_backend(profile, network)
+
+    stack_dir = _resolve_stack_dir_from_profile(
+        base_dir=base_dir,
+        profile=profile,
+        explicit_stack_dir=args.stack_dir,
+    )
+    home = _resolve_home(
+        base_dir=base_dir,
+        profile=profile,
+        profile_path=profile_path,
+        runtime_backend=runtime_backend,
+        stack_dir=stack_dir,
+        explicit_home=getattr(args, "home", None),
+    )
+    config_path = home / "config" / "config.toml"
+    genesis_path = home / "config" / "genesis.json"
+    node_key_path = home / "config" / "node_key.json"
+    validator_state_path = home / "data" / "priv_validator_state.json"
+
+    result: dict[str, object] = {
+        "profile_path": str(profile_path),
+        "network_path": str(network_path),
+        "runtime_backend": runtime_backend,
+        "home": str(home),
+        "initialized": config_path.exists(),
+        "config_present": config_path.exists(),
+        "genesis_present": genesis_path.exists(),
+        "node_key_present": node_key_path.exists(),
+        "priv_validator_state_present": validator_state_path.exists(),
+        "effective_genesis_source": (
+            profile.get("genesis_url") or network.get("genesis_source")
+        ),
+        "effective_snapshot_url": _resolve_effective_snapshot_url(
+            profile=profile,
+            network=network,
+        ),
+        "rpc_checked": check_rpc,
+    }
+    if stack_dir is not None:
+        result["stack_dir"] = str(stack_dir)
+
+    if node_key_path.exists():
+        try:
+            result["node_id"] = read_json(node_key_path).get("node_id")
+        except json.JSONDecodeError:
+            result["node_id"] = None
+
+    if check_rpc:
+        try:
+            result["rpc_status"] = fetch_json(args.rpc_url)
+            result["rpc_reachable"] = True
+        except Exception as exc:
+            result["rpc_reachable"] = False
+            result["rpc_error"] = str(exc)
+
+    return result
+
+
+def _handle_node_status(args: argparse.Namespace) -> int:
+    result = _collect_node_status(args, check_rpc=not args.skip_rpc)
+    print(json.dumps(result, indent=2))
+    return 0
+
+
 def _handle_snapshot_restore(args: argparse.Namespace) -> int:
     base_dir = args.base_dir.resolve()
     profile_path, profile, _, network = _load_profile_and_network(
@@ -582,6 +869,71 @@ def _handle_snapshot_restore(args: argparse.Namespace) -> int:
         explicit_home=args.home,
         explicit_snapshot_url=args.snapshot_url,
     )
+    print(json.dumps(result, indent=2))
+    return 0
+
+
+def _run_check(name: str, fn) -> dict[str, object]:
+    try:
+        detail = fn()
+    except Exception as exc:
+        return {
+            "name": name,
+            "ok": False,
+            "detail": str(exc),
+        }
+
+    return {
+        "name": name,
+        "ok": True,
+        "detail": detail,
+    }
+
+
+def _handle_doctor(args: argparse.Namespace) -> int:
+    base_dir = args.base_dir.resolve()
+    checks = [
+        _run_check(
+            "configs_dir",
+            lambda: str(
+                resolve_configs_dir(base_dir, explicit=args.configs_dir)
+            ),
+        ),
+        _run_check(
+            "stack_dir",
+            lambda: str(resolve_stack_dir(base_dir, explicit=args.stack_dir)),
+        ),
+        _run_check("node_setup", lambda: get_node_setup_module().__name__),
+        _run_check("node_admin", lambda: get_node_admin_module().__name__),
+        _run_check(
+            "genesis_builder",
+            lambda: get_genesis_builder_module().__name__,
+        ),
+    ]
+
+    if args.name is not None:
+        status_args = argparse.Namespace(
+            name=args.name,
+            base_dir=base_dir,
+            profile=args.profile,
+            network=args.network,
+            stack_dir=args.stack_dir,
+            configs_dir=args.configs_dir,
+            home=args.home,
+            rpc_url=args.rpc_url,
+            skip_rpc=True,
+        )
+        checks.append(
+            _run_check(
+                "node_status",
+                lambda: _collect_node_status(status_args, check_rpc=False),
+            )
+        )
+
+    result = {
+        "ok": all(check["ok"] for check in checks),
+        "checks": checks,
+    }
     print(json.dumps(result, indent=2))
     return 0
 
@@ -636,11 +988,20 @@ def build_parser() -> argparse.ArgumentParser:
     )
     create_parser.add_argument("name", help="network name")
     create_parser.add_argument(
+        "--base-dir",
+        type=Path,
+        default=Path.cwd(),
+        help=(
+            "workspace directory that contains ./networks, ./nodes, "
+            "./keys, and optionally sibling repos"
+        ),
+    )
+    create_parser.add_argument(
         "--chain-id", required=True, help="chain identifier"
     )
     create_parser.add_argument(
         "--mode",
-        default="join",
+        default="create",
         choices=["join", "create"],
         help=(
             "whether this manifest describes joining an existing network "
@@ -656,6 +1017,48 @@ def build_parser() -> argparse.ArgumentParser:
         "--genesis-source",
         help="path or URL for the genesis source used to bootstrap the network",
     )
+    create_parser.add_argument(
+        "--genesis-preset",
+        default="local",
+        help=(
+            "genesis contract preset used when generating a local genesis "
+            "file; defaults to the universal local preset"
+        ),
+    )
+    create_parser.add_argument(
+        "--founder-private-key",
+        help=(
+            "64-character hex private key for the founder account; defaults "
+            "to the validator private key when a validator key is available"
+        ),
+    )
+    create_parser.add_argument(
+        "--validator-key-ref",
+        type=Path,
+        help=(
+            "path to validator_key_info.json or priv_validator_key.json for "
+            "the initial validator"
+        ),
+    )
+    create_parser.add_argument(
+        "--generate-validator-key",
+        action="store_true",
+        help="generate validator key material for the initial validator",
+    )
+    create_parser.add_argument(
+        "--validator-key-dir",
+        type=Path,
+        help=(
+            "output directory for generated validator key material; defaults "
+            "to ./keys/<bootstrap-node-or-network-name>"
+        ),
+    )
+    create_parser.add_argument(
+        "--validator-power",
+        type=int,
+        default=10,
+        help="voting power for the generated initial validator entry",
+    )
     create_parser.add_argument("--snapshot-url", help="optional snapshot URL")
     create_parser.add_argument(
         "--seed",
@@ -663,9 +1066,63 @@ def build_parser() -> argparse.ArgumentParser:
         help="seed in <node_id>@<host>:26656 format; may be repeated",
     )
     create_parser.add_argument(
+        "--bootstrap-node",
+        help=(
+            "create an initial node profile for this network using the "
+            "generated or referenced validator key"
+        ),
+    )
+    create_parser.add_argument(
+        "--node-output",
+        type=Path,
+        help="output file path for the bootstrap node profile",
+    )
+    create_parser.add_argument("--moniker", help="bootstrap node moniker")
+    create_parser.add_argument(
+        "--init-node",
+        action="store_true",
+        help="run node initialization immediately after writing the profile",
+    )
+    create_parser.add_argument(
+        "--stack-dir",
+        type=Path,
+        help="path to the xian-stack checkout for the xian-stack backend",
+    )
+    create_parser.add_argument(
+        "--configs-dir",
+        type=Path,
+        help=(
+            "explicit xian-configs checkout path; defaults to XIAN_CONFIGS_DIR "
+            "or the sibling workspace layout"
+        ),
+    )
+    create_parser.add_argument(
+        "--home",
+        type=Path,
+        help="bootstrap node home directory, for example ~/.cometbft",
+    )
+    create_parser.add_argument(
+        "--service-node",
+        action="store_true",
+        help="mark the bootstrap node profile as a service node",
+    )
+    create_parser.add_argument(
+        "--enable-pruning",
+        action="store_true",
+        help="enable pruning for the bootstrap node",
+    )
+    create_parser.add_argument(
+        "--blocks-to-keep",
+        type=int,
+        default=100000,
+        help="number of blocks to retain when pruning is enabled",
+    )
+    create_parser.add_argument(
         "--output",
         type=Path,
-        help="output file path; defaults to ./networks/<name>.json",
+        help=(
+            "manifest output path; defaults to ./networks/<name>/manifest.json"
+        ),
     )
     create_parser.add_argument("--force", action="store_true")
     create_parser.set_defaults(handler=_handle_network_create)
@@ -970,6 +1427,65 @@ def build_parser() -> argparse.ArgumentParser:
     )
     stop_parser.set_defaults(handler=_handle_node_stop)
 
+    status_parser = node_subparsers.add_parser(
+        "status", help="inspect node bootstrap and RPC status"
+    )
+    status_parser.add_argument("name", help="node profile name")
+    status_parser.add_argument(
+        "--base-dir",
+        type=Path,
+        default=Path.cwd(),
+        help=(
+            "workspace directory that contains ./nodes, ./networks, "
+            "and optionally sibling repos"
+        ),
+    )
+    status_parser.add_argument(
+        "--profile",
+        type=Path,
+        help="explicit node profile path; defaults to ./nodes/<name>.json",
+    )
+    status_parser.add_argument(
+        "--network",
+        type=Path,
+        help=(
+            "explicit network manifest path; defaults to "
+            "./networks/<profile.network>/manifest.json"
+        ),
+    )
+    status_parser.add_argument(
+        "--stack-dir",
+        type=Path,
+        help=(
+            "explicit xian-stack checkout path; "
+            "overrides stack_dir in the profile"
+        ),
+    )
+    status_parser.add_argument(
+        "--configs-dir",
+        type=Path,
+        help=(
+            "explicit xian-configs checkout path; defaults to XIAN_CONFIGS_DIR "
+            "or the sibling workspace layout"
+        ),
+    )
+    status_parser.add_argument(
+        "--home",
+        type=Path,
+        help="explicit CometBFT home path; overrides the profile home",
+    )
+    status_parser.add_argument(
+        "--rpc-url",
+        default="http://127.0.0.1:26657/status",
+        help="RPC status endpoint used for readiness inspection",
+    )
+    status_parser.add_argument(
+        "--skip-rpc",
+        action="store_true",
+        help="skip the live RPC status probe",
+    )
+    status_parser.set_defaults(handler=_handle_node_status)
+
     snapshot_parser = subparsers.add_parser("snapshot", help="snapshot tools")
     snapshot_subparsers = snapshot_parser.add_subparsers(
         dest="snapshot_command", required=True
@@ -1028,6 +1544,62 @@ def build_parser() -> argparse.ArgumentParser:
         help="explicit snapshot URL override",
     )
     restore_parser.set_defaults(handler=_handle_snapshot_restore)
+
+    doctor_parser = subparsers.add_parser(
+        "doctor",
+        help="check workspace and optional node prerequisites",
+    )
+    doctor_parser.add_argument(
+        "name",
+        nargs="?",
+        help=(
+            "optional node profile name to inspect in addition to "
+            "workspace checks"
+        ),
+    )
+    doctor_parser.add_argument(
+        "--base-dir",
+        type=Path,
+        default=Path.cwd(),
+        help=(
+            "workspace directory that contains ./nodes, ./networks, "
+            "and optionally sibling repos"
+        ),
+    )
+    doctor_parser.add_argument(
+        "--profile",
+        type=Path,
+        help="explicit node profile path; defaults to ./nodes/<name>.json",
+    )
+    doctor_parser.add_argument(
+        "--network",
+        type=Path,
+        help=(
+            "explicit network manifest path; defaults to "
+            "./networks/<profile.network>/manifest.json"
+        ),
+    )
+    doctor_parser.add_argument(
+        "--stack-dir",
+        type=Path,
+        help="explicit xian-stack checkout path",
+    )
+    doctor_parser.add_argument(
+        "--configs-dir",
+        type=Path,
+        help="explicit xian-configs checkout path",
+    )
+    doctor_parser.add_argument(
+        "--home",
+        type=Path,
+        help="explicit CometBFT home path; overrides the profile home",
+    )
+    doctor_parser.add_argument(
+        "--rpc-url",
+        default="http://127.0.0.1:26657/status",
+        help="RPC status endpoint for node inspection",
+    )
+    doctor_parser.set_defaults(handler=_handle_doctor)
 
     return parser
 

@@ -15,13 +15,16 @@ def _load_xian_module(module_name: str):
         return getattr(module, module_name)
     except ModuleNotFoundError as exc:
         if not exc.name.startswith("xian"):
-            raise
+            raise RuntimeError from exc
 
     workspace_src = _get_workspace_src()
     if workspace_src.exists():
         sys.path.insert(0, str(workspace_src))
-        module = __import__("xian", fromlist=[module_name])
-        return getattr(module, module_name)
+        try:
+            module = __import__("xian", fromlist=[module_name])
+            return getattr(module, module_name)
+        except ModuleNotFoundError as exc:
+            raise RuntimeError from exc
 
     raise RuntimeError
 
@@ -44,5 +47,16 @@ def get_node_admin_module():
     except RuntimeError as exc:
         raise RuntimeError(
             "xian-abci helpers are required for snapshot restore; "
+            "install xian-abci or run xian-cli from the shared workspace"
+        ) from exc
+
+
+@lru_cache(maxsize=1)
+def get_genesis_builder_module():
+    try:
+        return _load_xian_module("genesis_builder")
+    except RuntimeError as exc:
+        raise RuntimeError(
+            "xian-abci helpers are required for network creation; "
             "install xian-abci or run xian-cli from the shared workspace"
         ) from exc
