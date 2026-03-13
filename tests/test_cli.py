@@ -2,14 +2,23 @@ from __future__ import annotations
 
 import io
 import json
+import sys
 import tempfile
 import unittest
 from contextlib import redirect_stdout
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import call, patch
+from urllib.error import URLError
 
+import xian_cli.abci_bridge as abci_bridge
 from xian_cli.cli import main
 from xian_cli.cometbft import generate_validator_material
+from xian_cli.runtime import (
+    resolve_stack_dir,
+    start_xian_stack_node,
+    stop_xian_stack_node,
+    wait_for_rpc_ready,
+)
 
 
 class ValidatorKeyTests(unittest.TestCase):
@@ -97,6 +106,56 @@ class NetworkManifestTests(unittest.TestCase):
             self.assertEqual(profile["moniker"], "validator-1")
             self.assertEqual(profile["seeds"], ["abc@127.0.0.1:26656"])
             self.assertTrue(profile["service_node"])
+
+
+class AbciBridgeTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.original_sys_path = list(sys.path)
+        self.original_modules = {
+            name: sys.modules.pop(name, None)
+            for name in ("xian", "xian.node_setup")
+        }
+        self.workspace_src = (
+            Path(__file__).resolve().parents[2] / "xian-abci" / "src"
+        ).resolve()
+        sys.path[:] = [
+            path
+            for path in self.original_sys_path
+            if Path(path).resolve() != self.workspace_src
+        ]
+        abci_bridge.get_node_setup_module.cache_clear()
+
+    def tearDown(self) -> None:
+        abci_bridge.get_node_setup_module.cache_clear()
+        for name in ("xian", "xian.node_setup"):
+            sys.modules.pop(name, None)
+        for name, module in self.original_modules.items():
+            if module is not None:
+                sys.modules[name] = module
+        sys.path[:] = self.original_sys_path
+
+    def test_bridge_uses_workspace_fallback(self) -> None:
+        module = abci_bridge.get_node_setup_module()
+
+        self.assertEqual(module.__name__, "xian.node_setup")
+        self.assertEqual(Path(sys.path[0]).resolve(), self.workspace_src)
+
+    def test_bridge_errors_when_helpers_are_unavailable(self) -> None:
+        original_exists = Path.exists
+
+        def fake_exists(path: Path) -> bool:
+            if path.resolve() == self.workspace_src:
+                return False
+            return original_exists(path)
+
+        with patch.object(
+            Path,
+            "exists",
+            autospec=True,
+            side_effect=fake_exists,
+        ):
+            with self.assertRaisesRegex(RuntimeError, "xian-abci helpers"):
+                abci_bridge.get_node_setup_module()
 
 
 class NodeInitTests(unittest.TestCase):
@@ -266,6 +325,152 @@ class NodeInitTests(unittest.TestCase):
             self.assertEqual(rendered_genesis["chain_id"], "xian-remote-1")
             self.assertEqual(home, (base_dir / "xian-stack" / ".cometbft"))
 
+    def test_node_init_accepts_raw_priv_validator_key_payload(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            base_dir = Path(tmp_dir)
+            (base_dir / "networks").mkdir()
+            (base_dir / "nodes").mkdir()
+            key_dir = base_dir / "keys" / "validator-1"
+            key_dir.mkdir(parents=True)
+
+            genesis_source = (
+                Path(__file__).resolve().parents[2]
+                / "xian-abci"
+                / "src"
+                / "xian"
+                / "tools"
+                / "genesis"
+                / "genesis-devnet.json"
+            )
+
+            with redirect_stdout(io.StringIO()):
+                main(
+                    [
+                        "network",
+                        "create",
+                        "local-dev",
+                        "--chain-id",
+                        "xian-testnet-12",
+                        "--genesis-source",
+                        str(genesis_source),
+                        "--output",
+                        str(base_dir / "networks" / "local-dev.json"),
+                    ]
+                )
+                main(
+                    [
+                        "keys",
+                        "validator",
+                        "generate",
+                        "--out-dir",
+                        str(key_dir),
+                    ]
+                )
+                main(
+                    [
+                        "network",
+                        "join",
+                        "validator-1",
+                        "--network",
+                        "local-dev",
+                        "--validator-key-ref",
+                        str(key_dir / "priv_validator_key.json"),
+                        "--home",
+                        str(base_dir / ".cometbft"),
+                        "--output",
+                        str(base_dir / "nodes" / "validator-1.json"),
+                    ]
+                )
+
+            stdout = io.StringIO()
+            with redirect_stdout(stdout):
+                exit_code = main(
+                    [
+                        "node",
+                        "init",
+                        "validator-1",
+                        "--base-dir",
+                        str(base_dir),
+                    ]
+                )
+
+            self.assertEqual(exit_code, 0)
+            result = json.loads(stdout.getvalue())
+            home = Path(result["home"])
+            self.assertTrue(
+                (home / "config" / "priv_validator_key.json").exists()
+            )
+
+    def test_node_init_rejects_chain_id_mismatch(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            base_dir = Path(tmp_dir)
+            (base_dir / "networks").mkdir()
+            (base_dir / "nodes").mkdir()
+            (base_dir / "keys" / "validator-1").mkdir(parents=True)
+
+            genesis_source = (
+                Path(__file__).resolve().parents[2]
+                / "xian-abci"
+                / "src"
+                / "xian"
+                / "tools"
+                / "genesis"
+                / "genesis-devnet.json"
+            )
+
+            with redirect_stdout(io.StringIO()):
+                main(
+                    [
+                        "network",
+                        "create",
+                        "bad-chain",
+                        "--chain-id",
+                        "xian-does-not-match",
+                        "--genesis-source",
+                        str(genesis_source),
+                        "--output",
+                        str(base_dir / "networks" / "bad-chain.json"),
+                    ]
+                )
+                main(
+                    [
+                        "keys",
+                        "validator",
+                        "generate",
+                        "--out-dir",
+                        str(base_dir / "keys" / "validator-1"),
+                    ]
+                )
+                main(
+                    [
+                        "network",
+                        "join",
+                        "validator-1",
+                        "--network",
+                        "bad-chain",
+                        "--validator-key-ref",
+                        str(
+                            base_dir
+                            / "keys"
+                            / "validator-1"
+                            / "validator_key_info.json"
+                        ),
+                        "--output",
+                        str(base_dir / "nodes" / "validator-1.json"),
+                    ]
+                )
+
+            with self.assertRaisesRegex(ValueError, "does not match manifest"):
+                main(
+                    [
+                        "node",
+                        "init",
+                        "validator-1",
+                        "--base-dir",
+                        str(base_dir),
+                    ]
+                )
+
 
 class NodeRuntimeTests(unittest.TestCase):
     def test_node_start_uses_xian_stack_backend(self) -> None:
@@ -389,6 +594,126 @@ class NodeRuntimeTests(unittest.TestCase):
             kwargs = stop_node.call_args.kwargs
             self.assertEqual(kwargs["stack_dir"], stack_dir.resolve())
             self.assertTrue(kwargs["service_node"])
+
+    def test_node_start_requires_initialized_home(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            base_dir = Path(tmp_dir)
+            (base_dir / "networks").mkdir()
+            (base_dir / "nodes").mkdir()
+            stack_dir = base_dir / "xian-stack"
+            stack_dir.mkdir()
+
+            with redirect_stdout(io.StringIO()):
+                main(
+                    [
+                        "network",
+                        "create",
+                        "local-dev",
+                        "--chain-id",
+                        "xian-local-1",
+                        "--output",
+                        str(base_dir / "networks" / "local-dev.json"),
+                    ]
+                )
+                main(
+                    [
+                        "network",
+                        "join",
+                        "validator-1",
+                        "--network",
+                        "local-dev",
+                        "--stack-dir",
+                        str(stack_dir),
+                        "--output",
+                        str(base_dir / "nodes" / "validator-1.json"),
+                    ]
+                )
+
+            with self.assertRaisesRegex(
+                FileNotFoundError,
+                "run `xian node init",
+            ):
+                main(
+                    [
+                        "node",
+                        "start",
+                        "validator-1",
+                        "--base-dir",
+                        str(base_dir),
+                    ]
+                )
+
+
+class RuntimeHelperTests(unittest.TestCase):
+    def test_resolve_stack_dir_uses_workspace_fallback(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            resolved = resolve_stack_dir(Path(tmp_dir))
+
+        expected = (
+            Path(__file__).resolve().parents[2] / "xian-stack"
+        ).resolve()
+        self.assertEqual(resolved, expected)
+
+    def test_wait_for_rpc_ready_retries_until_result_is_available(self) -> None:
+        expected_payload = {"result": {"node_info": {"network": "xian"}}}
+
+        with patch(
+            "xian_cli.runtime.fetch_json",
+            side_effect=[URLError("down"), expected_payload],
+        ) as fetch_json_mock:
+            with patch("xian_cli.runtime.time.sleep") as sleep_mock:
+                payload = wait_for_rpc_ready(
+                    timeout_seconds=1.0,
+                    poll_interval=0.01,
+                )
+
+        self.assertEqual(payload, expected_payload)
+        self.assertEqual(fetch_json_mock.call_count, 2)
+        self.assertEqual(sleep_mock.call_count, 1)
+
+    def test_start_xian_stack_node_runs_expected_make_targets(self) -> None:
+        stack_dir = Path("/tmp/xian-stack")
+        rpc_status = {"result": {"sync_info": {"catching_up": False}}}
+
+        with patch("xian_cli.runtime.run_make_target") as run_make_target:
+            with patch(
+                "xian_cli.runtime.wait_for_rpc_ready",
+                return_value=rpc_status,
+            ) as wait_for_rpc:
+                result = start_xian_stack_node(
+                    stack_dir=stack_dir,
+                    service_node=True,
+                    wait_for_rpc=True,
+                    rpc_timeout_seconds=12.5,
+                )
+
+        self.assertEqual(
+            run_make_target.call_args_list,
+            [
+                call(stack_dir, "abci-bds-up"),
+                call(stack_dir, "up-bds"),
+            ],
+        )
+        wait_for_rpc.assert_called_once_with(timeout_seconds=12.5)
+        self.assertEqual(result["rpc_status"], rpc_status)
+
+    def test_stop_xian_stack_node_runs_expected_make_targets(self) -> None:
+        stack_dir = Path("/tmp/xian-stack")
+
+        with patch("xian_cli.runtime.run_make_target") as run_make_target:
+            result = stop_xian_stack_node(
+                stack_dir=stack_dir,
+                service_node=False,
+            )
+
+        self.assertEqual(
+            run_make_target.call_args_list,
+            [
+                call(stack_dir, "down"),
+                call(stack_dir, "abci-down"),
+            ],
+        )
+        self.assertEqual(result["container_target"], "abci-down")
 
 
 if __name__ == "__main__":
