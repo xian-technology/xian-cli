@@ -55,6 +55,18 @@ def _handle_network_create(args: argparse.Namespace) -> int:
 
 
 def _handle_network_join(args: argparse.Namespace) -> int:
+    base_dir = args.base_dir.resolve()
+    network_path = resolve_network_manifest_path(
+        base_dir=base_dir,
+        network_name=args.network,
+        explicit_manifest=args.network_manifest,
+        configs_dir=args.configs_dir,
+    )
+    network = read_json(network_path)
+    runtime_backend = (
+        args.runtime_backend or network.get("runtime_backend") or "xian-stack"
+    )
+
     profile = NodeProfile(
         name=args.name,
         network=args.network,
@@ -64,7 +76,7 @@ def _handle_network_join(args: argparse.Namespace) -> int:
             if args.validator_key_ref is not None
             else None
         ),
-        runtime_backend=args.runtime_backend,
+        runtime_backend=runtime_backend,
         stack_dir=str(args.stack_dir) if args.stack_dir is not None else None,
         seeds=args.seed or [],
         genesis_url=args.genesis_url,
@@ -74,9 +86,11 @@ def _handle_network_join(args: argparse.Namespace) -> int:
         pruning_enabled=args.enable_pruning,
         blocks_to_keep=args.blocks_to_keep,
     )
-    target = args.output or Path("nodes") / f"{args.name}.json"
+    target = args.output or base_dir / "nodes" / f"{args.name}.json"
+    if not target.is_absolute():
+        target = (base_dir / target).resolve()
     write_json(target, profile.to_dict(), force=args.force)
-    print(f"wrote node profile to {target}")
+    print(f"wrote node profile to {target} using {network_path}")
     return 0
 
 
@@ -225,7 +239,7 @@ def _handle_node_init(args: argparse.Namespace) -> int:
     validator_key_payload = _extract_priv_validator_key(
         read_json(validator_key_ref)
     )
-    genesis_source = network.get("genesis_source") or profile.get("genesis_url")
+    genesis_source = profile.get("genesis_url") or network.get("genesis_source")
     if not genesis_source:
         raise ValueError(
             "no genesis source configured; "
@@ -455,9 +469,26 @@ def build_parser() -> argparse.ArgumentParser:
     )
     join_parser.add_argument("name", help="local profile name")
     join_parser.add_argument(
+        "--base-dir",
+        type=Path,
+        default=Path.cwd(),
+        help=(
+            "workspace directory that contains ./nodes, ./networks, "
+            "and optionally ./xian-configs"
+        ),
+    )
+    join_parser.add_argument(
         "--network",
         required=True,
         help="network manifest name, for example mainnet",
+    )
+    join_parser.add_argument(
+        "--network-manifest",
+        type=Path,
+        help=(
+            "explicit network manifest path; overrides local and canonical "
+            "lookup"
+        ),
     )
     join_parser.add_argument("--moniker", help="node moniker")
     join_parser.add_argument(
@@ -467,8 +498,10 @@ def build_parser() -> argparse.ArgumentParser:
     )
     join_parser.add_argument(
         "--runtime-backend",
-        default="xian-stack",
-        help="runtime backend used for this node",
+        help=(
+            "node-local runtime backend override; defaults to the network "
+            "manifest value"
+        ),
     )
     join_parser.add_argument(
         "--stack-dir",
@@ -483,8 +516,25 @@ def build_parser() -> argparse.ArgumentParser:
             "<node_id>@<host>:26656 format; may be repeated"
         ),
     )
-    join_parser.add_argument("--genesis-url", help="URL to fetch genesis from")
-    join_parser.add_argument("--snapshot-url", help="optional snapshot URL")
+    join_parser.add_argument(
+        "--genesis-url",
+        help=(
+            "node-local genesis URL override; when set it takes precedence "
+            "over the network manifest genesis_source"
+        ),
+    )
+    join_parser.add_argument(
+        "--snapshot-url",
+        help="node-local snapshot URL override",
+    )
+    join_parser.add_argument(
+        "--configs-dir",
+        type=Path,
+        help=(
+            "explicit xian-configs checkout path; defaults to XIAN_CONFIGS_DIR "
+            "or the sibling workspace layout"
+        ),
+    )
     join_parser.add_argument(
         "--home",
         type=Path,

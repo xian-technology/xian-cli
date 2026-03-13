@@ -58,6 +58,14 @@ This stage defines facts about a network, not about a specific node.
 
 This stage defines machine-local choices. It should reference keys and networks, not duplicate them.
 
+Resolution policy:
+
+- `network join` should resolve the referenced network manifest immediately
+- effective defaults such as `runtime_backend` come from the network manifest
+  unless the operator passes a node-local override
+- node-local overrides such as extra seeds, snapshot URL overrides, and genesis
+  URL overrides belong in the node profile
+
 ### 4. Runtime Preparation
 
 - Owner: `xian-cli`
@@ -157,6 +165,8 @@ Rules:
 
 - network manifests do not contain private keys
 - node profiles reference keys; they do not inline them
+- node profiles should not duplicate network-owned seeds, snapshot URLs, or
+  genesis sources unless the operator is intentionally applying a local override
 - generated runtime files are derived artifacts, not source-of-truth documents
 
 ## Cross-Repo Interface Contract

@@ -36,9 +36,15 @@ uv run xian node stop mainnet-node
 ```
 
 `--genesis-source` accepts either a local file path or an `http`/`https` URL.
-If `./networks/<name>.json` does not exist locally, `node init`, `node start`,
-and `node stop` fall back to the sibling `xian-configs/networks/<name>.json`
-manifest.
+`network join` now resolves the named network manifest immediately. It prefers a
+local `./networks/<name>.json` file and otherwise falls back to the sibling
+`xian-configs/networks/<name>.json` manifest. Canonical manifest data such as
+`runtime_backend` is used as the default, while node-local overrides such as
+`--seed`, `--snapshot-url`, and `--genesis-url` stay in the node profile.
+
+`node init`, `node start`, and `node stop` use the same local-then-canonical
+manifest resolution. A profile-level `--genesis-url` override takes precedence
+over the manifest `genesis_source`.
 
 ## Workspace Model
 

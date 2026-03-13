@@ -114,6 +114,124 @@ class NetworkManifestTests(unittest.TestCase):
             self.assertEqual(profile["seeds"], ["abc@127.0.0.1:26656"])
             self.assertTrue(profile["service_node"])
 
+    def test_network_join_uses_canonical_manifest_defaults(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            base_dir = Path(tmp_dir)
+            configs_dir = base_dir / "xian-configs"
+            (configs_dir / "networks").mkdir(parents=True)
+            (configs_dir / "networks" / "canonical.json").write_text(
+                json.dumps(
+                    {
+                        "name": "canonical",
+                        "chain_id": "xian-canonical-1",
+                        "mode": "join",
+                        "runtime_backend": "custom-backend",
+                        "genesis_source": (
+                            "../legacy/genesis/genesis-canonical.json"
+                        ),
+                        "snapshot_url": "https://example.invalid/snapshot",
+                        "seed_nodes": ["seed-1@127.0.0.1:26656"],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            output_path = base_dir / "nodes" / "validator-1.json"
+            with patch.dict(
+                "os.environ", {"XIAN_CONFIGS_DIR": str(configs_dir)}
+            ):
+                with redirect_stdout(io.StringIO()):
+                    exit_code = main(
+                        [
+                            "network",
+                            "join",
+                            "validator-1",
+                            "--base-dir",
+                            str(base_dir),
+                            "--network",
+                            "canonical",
+                            "--output",
+                            str(output_path),
+                        ]
+                    )
+
+            self.assertEqual(exit_code, 0)
+            profile = json.loads(output_path.read_text(encoding="utf-8"))
+            self.assertEqual(profile["runtime_backend"], "custom-backend")
+            self.assertEqual(profile["seeds"], [])
+            self.assertIsNone(profile["snapshot_url"])
+
+    def test_network_join_allows_node_local_overrides(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            base_dir = Path(tmp_dir)
+            configs_dir = base_dir / "xian-configs"
+            (configs_dir / "networks").mkdir(parents=True)
+            (configs_dir / "networks" / "canonical.json").write_text(
+                json.dumps(
+                    {
+                        "name": "canonical",
+                        "chain_id": "xian-canonical-1",
+                        "mode": "join",
+                        "runtime_backend": "xian-stack",
+                        "genesis_source": (
+                            "../legacy/genesis/genesis-canonical.json"
+                        ),
+                        "snapshot_url": None,
+                        "seed_nodes": ["seed-1@127.0.0.1:26656"],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            output_path = base_dir / "nodes" / "validator-1.json"
+            with patch.dict(
+                "os.environ", {"XIAN_CONFIGS_DIR": str(configs_dir)}
+            ):
+                with redirect_stdout(io.StringIO()):
+                    exit_code = main(
+                        [
+                            "network",
+                            "join",
+                            "validator-1",
+                            "--base-dir",
+                            str(base_dir),
+                            "--network",
+                            "canonical",
+                            "--runtime-backend",
+                            "custom-backend",
+                            "--seed",
+                            "local-seed@127.0.0.1:26656",
+                            "--snapshot-url",
+                            "https://example.invalid/node-snapshot",
+                            "--output",
+                            str(output_path),
+                        ]
+                    )
+
+            self.assertEqual(exit_code, 0)
+            profile = json.loads(output_path.read_text(encoding="utf-8"))
+            self.assertEqual(profile["runtime_backend"], "custom-backend")
+            self.assertEqual(profile["seeds"], ["local-seed@127.0.0.1:26656"])
+            self.assertEqual(
+                profile["snapshot_url"],
+                "https://example.invalid/node-snapshot",
+            )
+
+    def test_network_join_requires_known_manifest(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            with self.assertRaisesRegex(FileNotFoundError, "network manifest"):
+                main(
+                    [
+                        "network",
+                        "join",
+                        "validator-1",
+                        "--base-dir",
+                        tmp_dir,
+                        "--network",
+                        "does-not-exist",
+                    ]
+                )
+
 
 class AbciBridgeTests(unittest.TestCase):
     def setUp(self) -> None:
@@ -205,6 +323,8 @@ class NodeInitTests(unittest.TestCase):
                         "network",
                         "join",
                         "validator-1",
+                        "--base-dir",
+                        str(base_dir),
                         "--network",
                         "local-dev",
                         "--validator-key-ref",
@@ -288,6 +408,8 @@ class NodeInitTests(unittest.TestCase):
                         "network",
                         "join",
                         "validator-1",
+                        "--base-dir",
+                        str(base_dir),
                         "--network",
                         "remote-dev",
                         "--validator-key-ref",
@@ -323,6 +445,100 @@ class NodeInitTests(unittest.TestCase):
             )
             self.assertEqual(rendered_genesis["chain_id"], "xian-remote-1")
             self.assertEqual(home, (base_dir / "xian-stack" / ".cometbft"))
+
+    def test_node_init_prefers_profile_genesis_url_override(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            base_dir = Path(tmp_dir)
+            (base_dir / "networks").mkdir()
+            (base_dir / "nodes").mkdir()
+            (base_dir / "keys" / "validator-1").mkdir(parents=True)
+            (base_dir / "xian-stack").mkdir()
+
+            local_genesis_path = base_dir / "genesis-local.json"
+            local_genesis_path.write_text(
+                json.dumps(
+                    {
+                        "chain_id": "xian-wrong-1",
+                        "validators": [],
+                        "abci_genesis": {},
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            with redirect_stdout(io.StringIO()):
+                main(
+                    [
+                        "network",
+                        "create",
+                        "override-dev",
+                        "--chain-id",
+                        "xian-override-1",
+                        "--genesis-source",
+                        str(local_genesis_path),
+                        "--output",
+                        str(base_dir / "networks" / "override-dev.json"),
+                    ]
+                )
+                main(
+                    [
+                        "keys",
+                        "validator",
+                        "generate",
+                        "--out-dir",
+                        str(base_dir / "keys" / "validator-1"),
+                    ]
+                )
+                main(
+                    [
+                        "network",
+                        "join",
+                        "validator-1",
+                        "--base-dir",
+                        str(base_dir),
+                        "--network",
+                        "override-dev",
+                        "--validator-key-ref",
+                        str(
+                            base_dir
+                            / "keys"
+                            / "validator-1"
+                            / "validator_key_info.json"
+                        ),
+                        "--genesis-url",
+                        "https://example.invalid/override-genesis.json",
+                        "--output",
+                        str(base_dir / "nodes" / "validator-1.json"),
+                    ]
+                )
+
+            stdout = io.StringIO()
+            with patch(
+                "xian_cli.cli.fetch_json",
+                return_value={
+                    "chain_id": "xian-override-1",
+                    "validators": [],
+                    "abci_genesis": {},
+                },
+            ):
+                with redirect_stdout(stdout):
+                    exit_code = main(
+                        [
+                            "node",
+                            "init",
+                            "validator-1",
+                            "--base-dir",
+                            str(base_dir),
+                        ]
+                    )
+
+            self.assertEqual(exit_code, 0)
+            result = json.loads(stdout.getvalue())
+            home = Path(result["home"])
+            rendered_genesis = json.loads(
+                (home / "config" / "genesis.json").read_text(encoding="utf-8")
+            )
+            self.assertEqual(rendered_genesis["chain_id"], "xian-override-1")
 
     def test_node_init_accepts_raw_priv_validator_key_payload(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -362,6 +578,8 @@ class NodeInitTests(unittest.TestCase):
                         "network",
                         "join",
                         "validator-1",
+                        "--base-dir",
+                        str(base_dir),
                         "--network",
                         "local-dev",
                         "--validator-key-ref",
@@ -429,6 +647,8 @@ class NodeInitTests(unittest.TestCase):
                         "network",
                         "join",
                         "validator-1",
+                        "--base-dir",
+                        str(base_dir),
                         "--network",
                         "bad-chain",
                         "--validator-key-ref",
@@ -511,6 +731,8 @@ class NodeInitTests(unittest.TestCase):
                         "network",
                         "join",
                         "validator-1",
+                        "--base-dir",
+                        str(base_dir),
                         "--network",
                         "canonical",
                         "--validator-key-ref",
@@ -580,6 +802,8 @@ class NodeRuntimeTests(unittest.TestCase):
                         "network",
                         "join",
                         "validator-1",
+                        "--base-dir",
+                        str(base_dir),
                         "--network",
                         "local-dev",
                         "--stack-dir",
@@ -641,6 +865,8 @@ class NodeRuntimeTests(unittest.TestCase):
                         "network",
                         "join",
                         "validator-1",
+                        "--base-dir",
+                        str(base_dir),
                         "--network",
                         "local-dev",
                         "--stack-dir",
@@ -699,6 +925,8 @@ class NodeRuntimeTests(unittest.TestCase):
                         "network",
                         "join",
                         "validator-1",
+                        "--base-dir",
+                        str(base_dir),
                         "--network",
                         "local-dev",
                         "--stack-dir",

@@ -23,6 +23,9 @@
 - If you change manifest or profile formats, update `docs/LIFECYCLE_CONTRACT.md` and `README.md` in the same change.
 - If a feature needs canonical network definitions, keep those in
   `xian-configs` and consume them here.
+- `network join` must resolve the referenced network manifest up front. Keep
+  network-owned metadata in the manifest and node-local overrides in the
+  profile.
 
 ## Validation
 - Preferred setup: `uv sync --group dev`
@@ -34,4 +37,7 @@
 - The reference workspace is `~/xian` with sibling repos beside this one.
 - `xian-cli` should prefer local `./networks` manifests when present, but fall
   back cleanly to canonical manifests from the sibling `xian-configs` repo.
+- Keep precedence rules explicit: local node overrides win over network
+  defaults, but the CLI should not duplicate canonical network metadata into
+  node profiles without a clear reason.
 - Keep this repo small and orchestration-focused. Long operator flows should compose lower-level helpers rather than re-implement them.
