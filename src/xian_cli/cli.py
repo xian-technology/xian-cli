@@ -6,7 +6,7 @@ import sys
 from pathlib import Path
 from urllib.parse import urlparse
 
-from xian_cli.abci_bridge import get_node_setup_module
+from xian_cli.abci_bridge import get_node_admin_module, get_node_setup_module
 from xian_cli.cometbft import generate_validator_material
 from xian_cli.config_repo import resolve_network_manifest_path
 from xian_cli.models import NetworkManifest, NodeProfile, read_json, write_json
@@ -101,6 +101,8 @@ def _handle_network_join(args: argparse.Namespace) -> int:
         raise ValueError(
             "--validator-key-dir requires --generate-validator-key"
         )
+    if args.restore_snapshot and not args.init_node:
+        raise ValueError("--restore-snapshot requires --init-node")
 
     validator_key_ref: str | None = None
     if args.validator_key_ref is not None:
@@ -140,7 +142,36 @@ def _handle_network_join(args: argparse.Namespace) -> int:
     if not target.is_absolute():
         target = (base_dir / target).resolve()
     write_json(target, profile.to_dict(), force=args.force)
-    print(f"wrote node profile to {target} using {network_path}")
+    if not args.init_node:
+        print(f"wrote node profile to {target} using {network_path}")
+        return 0
+
+    init_args = argparse.Namespace(
+        name=args.name,
+        base_dir=base_dir,
+        profile=target,
+        network=network_path,
+        validator_key=None,
+        stack_dir=args.stack_dir,
+        configs_dir=args.configs_dir,
+        home=args.home,
+        force=args.force,
+        restore_snapshot=args.restore_snapshot,
+        snapshot_url=args.snapshot_url,
+    )
+    init_result = _initialize_node_from_args(init_args)
+    print(
+        json.dumps(
+            {
+                "profile_path": str(target),
+                "network_path": str(network_path),
+                "validator_key_ref": validator_key_ref,
+                "node_initialized": True,
+                "node_init": init_result,
+            },
+            indent=2,
+        )
+    )
     return 0
 
 
@@ -213,6 +244,103 @@ def _extract_priv_validator_key(payload: dict) -> dict:
     )
 
 
+def _resolve_runtime_backend(profile: dict, network: dict) -> str:
+    runtime_backend = profile.get("runtime_backend") or network.get(
+        "runtime_backend"
+    )
+    if runtime_backend != "xian-stack":
+        raise ValueError(f"unsupported runtime backend: {runtime_backend}")
+    return runtime_backend
+
+
+def _resolve_home(
+    *,
+    base_dir: Path,
+    profile: dict,
+    profile_path: Path,
+    runtime_backend: str,
+    stack_dir: Path | None,
+    explicit_home: Path | None = None,
+) -> Path:
+    resolved_home = explicit_home
+    if resolved_home is not None and not resolved_home.is_absolute():
+        resolved_home = (base_dir / resolved_home).resolve()
+
+    home = resolved_home or _resolve_path(
+        profile.get("home"),
+        base_dir=base_dir,
+        fallback_dir=profile_path.parent,
+    )
+    if home is None:
+        home = default_home_for_backend(
+            base_dir=base_dir,
+            runtime_backend=runtime_backend,
+            stack_dir=stack_dir,
+        )
+    return home
+
+
+def _resolve_effective_snapshot_url(
+    *,
+    profile: dict,
+    network: dict,
+    explicit_snapshot_url: str | None = None,
+) -> str | None:
+    return (
+        explicit_snapshot_url
+        or profile.get("snapshot_url")
+        or network.get("snapshot_url")
+    )
+
+
+def _restore_snapshot(
+    *,
+    base_dir: Path,
+    profile: dict,
+    profile_path: Path,
+    network: dict,
+    runtime_backend: str,
+    stack_dir: Path | None,
+    explicit_home: Path | None = None,
+    explicit_snapshot_url: str | None = None,
+) -> dict:
+    home = _resolve_home(
+        base_dir=base_dir,
+        profile=profile,
+        profile_path=profile_path,
+        runtime_backend=runtime_backend,
+        stack_dir=stack_dir,
+        explicit_home=explicit_home,
+    )
+    config_path = home / "config" / "config.toml"
+    if not config_path.exists():
+        raise FileNotFoundError(
+            f"{config_path} does not exist; "
+            f"run `xian node init {profile['name']}` first"
+        )
+
+    snapshot_url = _resolve_effective_snapshot_url(
+        profile=profile,
+        network=network,
+        explicit_snapshot_url=explicit_snapshot_url,
+    )
+    if not snapshot_url:
+        raise ValueError(
+            "no snapshot source configured; "
+            "set snapshot_url in the network manifest or node profile"
+        )
+
+    node_admin = get_node_admin_module()
+    snapshot_archive_name = node_admin.apply_snapshot_archive(
+        snapshot_url, home
+    )
+    return {
+        "home": str(home),
+        "snapshot_url": snapshot_url,
+        "snapshot_archive_name": snapshot_archive_name,
+    }
+
+
 def _load_profile_and_network(
     *,
     base_dir: Path,
@@ -245,7 +373,7 @@ def _load_profile_and_network(
     return profile_path, profile, network_path, network
 
 
-def _handle_node_init(args: argparse.Namespace) -> int:
+def _initialize_node_from_args(args: argparse.Namespace) -> dict:
     node_setup = get_node_setup_module()
 
     base_dir = args.base_dir.resolve()
@@ -256,11 +384,7 @@ def _handle_node_init(args: argparse.Namespace) -> int:
         network_arg=args.network,
         configs_dir=args.configs_dir,
     )
-    runtime_backend = profile.get("runtime_backend") or network.get(
-        "runtime_backend"
-    )
-    if runtime_backend != "xian-stack":
-        raise ValueError(f"unsupported runtime backend: {runtime_backend}")
+    runtime_backend = _resolve_runtime_backend(profile, network)
 
     stack_dir = _resolve_stack_dir_from_profile(
         base_dir=base_dir,
@@ -308,21 +432,14 @@ def _handle_node_init(args: argparse.Namespace) -> int:
             f"chain_id {network['chain_id']}"
         )
 
-    explicit_home = args.home
-    if explicit_home is not None and not explicit_home.is_absolute():
-        explicit_home = (base_dir / explicit_home).resolve()
-
-    home = explicit_home or _resolve_path(
-        profile.get("home"),
+    home = _resolve_home(
         base_dir=base_dir,
-        fallback_dir=profile_path.parent,
+        profile=profile,
+        profile_path=profile_path,
+        runtime_backend=runtime_backend,
+        stack_dir=stack_dir,
+        explicit_home=args.home,
     )
-    if home is None:
-        home = default_home_for_backend(
-            base_dir=base_dir,
-            runtime_backend=runtime_backend,
-            stack_dir=stack_dir,
-        )
 
     seed_nodes = list(network.get("seed_nodes") or [])
     seed_nodes.extend(profile.get("seeds") or [])
@@ -342,6 +459,31 @@ def _handle_node_init(args: argparse.Namespace) -> int:
         priv_validator_key=validator_key_payload,
         overwrite=args.force,
     )
+    effective_snapshot_url = _resolve_effective_snapshot_url(
+        profile=profile,
+        network=network,
+        explicit_snapshot_url=getattr(args, "snapshot_url", None),
+    )
+    result["effective_snapshot_url"] = effective_snapshot_url
+    result["snapshot_restored"] = False
+    if getattr(args, "restore_snapshot", False):
+        snapshot_result = _restore_snapshot(
+            base_dir=base_dir,
+            profile=profile,
+            profile_path=profile_path,
+            network=network,
+            runtime_backend=runtime_backend,
+            stack_dir=stack_dir,
+            explicit_home=home,
+            explicit_snapshot_url=getattr(args, "snapshot_url", None),
+        )
+        result["snapshot_restored"] = True
+        result["snapshot"] = snapshot_result
+    return result
+
+
+def _handle_node_init(args: argparse.Namespace) -> int:
+    result = _initialize_node_from_args(args)
     print(json.dumps(result, indent=2))
     return 0
 
@@ -355,12 +497,7 @@ def _handle_node_start(args: argparse.Namespace) -> int:
         network_arg=args.network,
         configs_dir=args.configs_dir,
     )
-
-    runtime_backend = profile.get("runtime_backend") or network.get(
-        "runtime_backend"
-    )
-    if runtime_backend != "xian-stack":
-        raise ValueError(f"unsupported runtime backend: {runtime_backend}")
+    runtime_backend = _resolve_runtime_backend(profile, network)
 
     stack_dir = resolve_stack_dir(
         base_dir,
@@ -370,17 +507,13 @@ def _handle_node_start(args: argparse.Namespace) -> int:
             explicit_stack_dir=args.stack_dir,
         ),
     )
-    home = _resolve_path(
-        profile.get("home"),
+    home = _resolve_home(
         base_dir=base_dir,
-        fallback_dir=profile_path.parent,
+        profile=profile,
+        profile_path=profile_path,
+        runtime_backend=runtime_backend,
+        stack_dir=stack_dir,
     )
-    if home is None:
-        home = default_home_for_backend(
-            base_dir=base_dir,
-            runtime_backend=runtime_backend,
-            stack_dir=stack_dir,
-        )
     config_path = home / "config" / "config.toml"
     if not config_path.exists():
         raise FileNotFoundError(
@@ -408,12 +541,6 @@ def _handle_node_stop(args: argparse.Namespace) -> int:
         configs_dir=args.configs_dir,
     )
 
-    runtime_backend = profile.get("runtime_backend") or network.get(
-        "runtime_backend"
-    )
-    if runtime_backend != "xian-stack":
-        raise ValueError(f"unsupported runtime backend: {runtime_backend}")
-
     stack_dir = resolve_stack_dir(
         base_dir,
         explicit=_resolve_stack_dir_from_profile(
@@ -425,6 +552,35 @@ def _handle_node_stop(args: argparse.Namespace) -> int:
     result = stop_xian_stack_node(
         stack_dir=stack_dir,
         service_node=bool(profile.get("service_node")),
+    )
+    print(json.dumps(result, indent=2))
+    return 0
+
+
+def _handle_snapshot_restore(args: argparse.Namespace) -> int:
+    base_dir = args.base_dir.resolve()
+    profile_path, profile, _, network = _load_profile_and_network(
+        base_dir=base_dir,
+        name=args.name,
+        profile_arg=args.profile,
+        network_arg=args.network,
+        configs_dir=args.configs_dir,
+    )
+    runtime_backend = _resolve_runtime_backend(profile, network)
+    stack_dir = _resolve_stack_dir_from_profile(
+        base_dir=base_dir,
+        profile=profile,
+        explicit_stack_dir=args.stack_dir,
+    )
+    result = _restore_snapshot(
+        base_dir=base_dir,
+        profile=profile,
+        profile_path=profile_path,
+        network=network,
+        runtime_backend=runtime_backend,
+        stack_dir=stack_dir,
+        explicit_home=args.home,
+        explicit_snapshot_url=args.snapshot_url,
     )
     print(json.dumps(result, indent=2))
     return 0
@@ -594,6 +750,19 @@ def build_parser() -> argparse.ArgumentParser:
         help="node-local snapshot URL override",
     )
     join_parser.add_argument(
+        "--init-node",
+        action="store_true",
+        help="run node initialization immediately after writing the profile",
+    )
+    join_parser.add_argument(
+        "--restore-snapshot",
+        action="store_true",
+        help=(
+            "when used with --init-node, restore the effective snapshot URL "
+            "after initializing the node home"
+        ),
+    )
+    join_parser.add_argument(
         "--configs-dir",
         type=Path,
         help=(
@@ -686,6 +855,15 @@ def build_parser() -> argparse.ArgumentParser:
         "--home",
         type=Path,
         help="explicit CometBFT home path; overrides the profile home",
+    )
+    init_parser.add_argument(
+        "--snapshot-url",
+        help="explicit snapshot URL override",
+    )
+    init_parser.add_argument(
+        "--restore-snapshot",
+        action="store_true",
+        help="restore the effective snapshot URL after node initialization",
     )
     init_parser.add_argument(
         "--force",
@@ -791,6 +969,65 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     stop_parser.set_defaults(handler=_handle_node_stop)
+
+    snapshot_parser = subparsers.add_parser("snapshot", help="snapshot tools")
+    snapshot_subparsers = snapshot_parser.add_subparsers(
+        dest="snapshot_command", required=True
+    )
+
+    restore_parser = snapshot_subparsers.add_parser(
+        "restore",
+        help="restore a node snapshot into an initialized home",
+    )
+    restore_parser.add_argument("name", help="node profile name")
+    restore_parser.add_argument(
+        "--base-dir",
+        type=Path,
+        default=Path.cwd(),
+        help=(
+            "workspace directory that contains ./nodes, ./networks, "
+            "and optionally ./xian-configs"
+        ),
+    )
+    restore_parser.add_argument(
+        "--profile",
+        type=Path,
+        help="explicit node profile path; defaults to ./nodes/<name>.json",
+    )
+    restore_parser.add_argument(
+        "--network",
+        type=Path,
+        help=(
+            "explicit network manifest path; defaults to "
+            "./networks/<profile.network>.json"
+        ),
+    )
+    restore_parser.add_argument(
+        "--stack-dir",
+        type=Path,
+        help=(
+            "explicit xian-stack checkout path; "
+            "overrides stack_dir in the profile"
+        ),
+    )
+    restore_parser.add_argument(
+        "--configs-dir",
+        type=Path,
+        help=(
+            "explicit xian-configs checkout path; defaults to XIAN_CONFIGS_DIR "
+            "or the sibling workspace layout"
+        ),
+    )
+    restore_parser.add_argument(
+        "--home",
+        type=Path,
+        help="explicit CometBFT home path; overrides the profile home",
+    )
+    restore_parser.add_argument(
+        "--snapshot-url",
+        help="explicit snapshot URL override",
+    )
+    restore_parser.set_defaults(handler=_handle_snapshot_restore)
 
     return parser
 

@@ -5,24 +5,44 @@ from functools import lru_cache
 from pathlib import Path
 
 
-@lru_cache(maxsize=1)
-def get_node_setup_module():
-    try:
-        from xian import node_setup  # type: ignore
+def _get_workspace_src() -> Path:
+    return Path(__file__).resolve().parents[3] / "xian-abci" / "src"
 
-        return node_setup
+
+def _load_xian_module(module_name: str):
+    try:
+        module = __import__("xian", fromlist=[module_name])
+        return getattr(module, module_name)
     except ModuleNotFoundError as exc:
         if not exc.name.startswith("xian"):
             raise
 
-    workspace_src = Path(__file__).resolve().parents[3] / "xian-abci" / "src"
+    workspace_src = _get_workspace_src()
     if workspace_src.exists():
         sys.path.insert(0, str(workspace_src))
-        from xian import node_setup  # type: ignore
+        module = __import__("xian", fromlist=[module_name])
+        return getattr(module, module_name)
 
-        return node_setup
+    raise RuntimeError
 
-    raise RuntimeError(
-        "xian-abci helpers are required for node init; "
-        "install xian-abci or run xian-cli from the shared workspace"
-    )
+
+@lru_cache(maxsize=1)
+def get_node_setup_module():
+    try:
+        return _load_xian_module("node_setup")
+    except RuntimeError as exc:
+        raise RuntimeError(
+            "xian-abci helpers are required for node init; "
+            "install xian-abci or run xian-cli from the shared workspace"
+        ) from exc
+
+
+@lru_cache(maxsize=1)
+def get_node_admin_module():
+    try:
+        return _load_xian_module("node_admin")
+    except RuntimeError as exc:
+        raise RuntimeError(
+            "xian-abci helpers are required for snapshot restore; "
+            "install xian-abci or run xian-cli from the shared workspace"
+        ) from exc

@@ -23,8 +23,11 @@ Planned primary commands:
 Command intent:
 
 - `network create` defines a new network manifest.
-- `network join` defines a local node profile for an existing network.
+- `network join` defines a local node profile for an existing network and may
+  initialize the node immediately.
 - `node init` performs all preparation stages needed before startup.
+- `snapshot restore` applies the effective snapshot source to an initialized
+  node home.
 - `node start` launches the runtime and verifies health.
 
 `node init` should hide most of the current manual steps. It is the boundary between persisted intent and generated runtime state.
@@ -65,6 +68,8 @@ Resolution policy:
   unless the operator passes a node-local override
 - node-local overrides such as extra seeds, snapshot URL overrides, and genesis
   URL overrides belong in the node profile
+- `network join --init-node` should immediately hand the new profile into the
+  same node initialization path used by `node init`
 
 ### 4. Runtime Preparation
 
@@ -108,7 +113,22 @@ This stage creates the default CometBFT files such as `config.toml`, `genesis.js
 
 This replaces the current manual `configure.py`-driven step with a manifest-driven render phase.
 
-### 8. Process Start and Health Checks
+### 8. Snapshot Restore
+
+- Owner: `xian-cli`
+- Helpers: `xian-abci`
+- Inputs: initialized node home and effective snapshot source
+- Outputs: restored chain state files inside the node home
+
+Snapshot restore is a distinct stage because it depends on an initialized home
+but happens before process startup. Snapshot source precedence should stay
+explicit and stable:
+
+1. explicit CLI override
+2. node profile `snapshot_url`
+3. network manifest `snapshot_url`
+
+### 9. Process Start and Health Checks
 
 - Owner: `xian-cli`
 - Backend: `xian-stack`
@@ -170,6 +190,8 @@ Rules:
 - node profiles should not duplicate network-owned seeds, snapshot URLs, or
   genesis sources unless the operator is intentionally applying a local override
 - generated runtime files are derived artifacts, not source-of-truth documents
+- `network join` may optionally execute node initialization immediately, but it
+  must still persist the profile before derived runtime files are created
 
 ## Cross-Repo Interface Contract
 
@@ -206,17 +228,17 @@ Short term, these can still be backed by `docker compose` and Make targets. Long
 - no direct node startup ownership
 - acceptable dependency for wallet/key utilities where appropriate
 
-## Immediate Refactor Targets
+## Current Refactor Targets
 
-The current blocking gaps are:
+The current implementation already supports:
 
-1. `xian-abci` tooling is script-shaped instead of importable.
-2. `configure.py` combines too many responsibilities.
-3. the genesis-generation path is inconsistent today.
-4. `xian-stack` is acting as both runtime backend and operator UX.
+1. canonical manifest resolution from `xian-configs`
+2. validator key generation during `network join`
+3. optional node initialization during `network join`
+4. explicit snapshot restore as a separate command or as part of `node init`
 
-The first implementation pass should therefore focus on:
+The next implementation pass should therefore focus on:
 
-1. extracting importable helpers from `xian-abci`
-2. teaching `xian-cli node init` to execute stages 4 through 7
+1. extending `network create` into a full creation-side bootstrap flow
+2. adding `node status` and `doctor` so runtime inspection is explicit
 3. keeping `xian-stack` as the first runtime backend without exposing its Makefile as the long-term public interface

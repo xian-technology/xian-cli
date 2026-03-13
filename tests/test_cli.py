@@ -314,13 +314,90 @@ class NetworkManifestTests(unittest.TestCase):
                     ]
                 )
 
+    def test_network_join_rejects_restore_snapshot_without_init_node(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            with self.assertRaisesRegex(
+                ValueError,
+                "--restore-snapshot requires --init-node",
+            ):
+                main(
+                    [
+                        "network",
+                        "join",
+                        "validator-1",
+                        "--base-dir",
+                        tmp_dir,
+                        "--network",
+                        "mainnet",
+                        "--restore-snapshot",
+                    ]
+                )
+
+    def test_network_join_can_initialize_node_immediately(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            base_dir = Path(tmp_dir)
+            (base_dir / "networks").mkdir()
+
+            genesis_source = LEGACY_GENESIS_DIR / "genesis-devnet.json"
+
+            with redirect_stdout(io.StringIO()):
+                main(
+                    [
+                        "network",
+                        "create",
+                        "local-dev",
+                        "--chain-id",
+                        "xian-testnet-12",
+                        "--genesis-source",
+                        str(genesis_source),
+                        "--output",
+                        str(base_dir / "networks" / "local-dev.json"),
+                    ]
+                )
+
+            stdout = io.StringIO()
+            with redirect_stdout(stdout):
+                exit_code = main(
+                    [
+                        "network",
+                        "join",
+                        "validator-1",
+                        "--base-dir",
+                        str(base_dir),
+                        "--network",
+                        "local-dev",
+                        "--generate-validator-key",
+                        "--init-node",
+                        "--home",
+                        str(base_dir / ".cometbft"),
+                        "--output",
+                        str(base_dir / "nodes" / "validator-1.json"),
+                    ]
+                )
+
+            self.assertEqual(exit_code, 0)
+            result = json.loads(stdout.getvalue())
+            self.assertTrue(result["node_initialized"])
+            home = Path(result["node_init"]["home"])
+            self.assertTrue((home / "config" / "config.toml").exists())
+            self.assertTrue((home / "config" / "genesis.json").exists())
+            profile = json.loads(
+                (base_dir / "nodes" / "validator-1.json").read_text(
+                    encoding="utf-8"
+                )
+            )
+            self.assertEqual(
+                profile["validator_key_ref"],
+                "keys/validator-1/validator_key_info.json",
+            )
+
 
 class AbciBridgeTests(unittest.TestCase):
     def setUp(self) -> None:
         self.original_sys_path = list(sys.path)
         self.original_modules = {
             name: sys.modules.pop(name, None)
-            for name in ("xian", "xian.node_setup")
+            for name in ("xian", "xian.node_setup", "xian.node_admin")
         }
         self.workspace_src = (
             Path(__file__).resolve().parents[2] / "xian-abci" / "src"
@@ -331,10 +408,12 @@ class AbciBridgeTests(unittest.TestCase):
             if Path(path).resolve() != self.workspace_src
         ]
         abci_bridge.get_node_setup_module.cache_clear()
+        abci_bridge.get_node_admin_module.cache_clear()
 
     def tearDown(self) -> None:
         abci_bridge.get_node_setup_module.cache_clear()
-        for name in ("xian", "xian.node_setup"):
+        abci_bridge.get_node_admin_module.cache_clear()
+        for name in ("xian", "xian.node_setup", "xian.node_admin"):
             sys.modules.pop(name, None)
         for name, module in self.original_modules.items():
             if module is not None:
@@ -342,9 +421,11 @@ class AbciBridgeTests(unittest.TestCase):
         sys.path[:] = self.original_sys_path
 
     def test_bridge_uses_workspace_fallback(self) -> None:
-        module = abci_bridge.get_node_setup_module()
+        node_setup_module = abci_bridge.get_node_setup_module()
+        node_admin_module = abci_bridge.get_node_admin_module()
 
-        self.assertEqual(module.__name__, "xian.node_setup")
+        self.assertEqual(node_setup_module.__name__, "xian.node_setup")
+        self.assertEqual(node_admin_module.__name__, "xian.node_admin")
         self.assertEqual(Path(sys.path[0]).resolve(), self.workspace_src)
 
     def test_bridge_errors_when_helpers_are_unavailable(self) -> None:
@@ -363,6 +444,8 @@ class AbciBridgeTests(unittest.TestCase):
         ):
             with self.assertRaisesRegex(RuntimeError, "xian-abci helpers"):
                 abci_bridge.get_node_setup_module()
+            with self.assertRaisesRegex(RuntimeError, "xian-abci helpers"):
+                abci_bridge.get_node_admin_module()
 
 
 class NodeInitTests(unittest.TestCase):
@@ -851,6 +934,99 @@ class NodeInitTests(unittest.TestCase):
             self.assertEqual(rendered_genesis["chain_id"], "xian-canonical-1")
             self.assertIn("seed-1@127.0.0.1:26656", rendered_config)
 
+    def test_node_init_can_restore_snapshot_from_manifest(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            base_dir = Path(tmp_dir)
+            (base_dir / "networks").mkdir()
+            (base_dir / "nodes").mkdir()
+            key_dir = base_dir / "keys" / "validator-1"
+            key_dir.mkdir(parents=True)
+            home = base_dir / ".cometbft"
+
+            genesis_source = LEGACY_GENESIS_DIR / "genesis-devnet.json"
+
+            with redirect_stdout(io.StringIO()):
+                main(
+                    [
+                        "network",
+                        "create",
+                        "local-dev",
+                        "--chain-id",
+                        "xian-testnet-12",
+                        "--genesis-source",
+                        str(genesis_source),
+                        "--snapshot-url",
+                        "https://example.invalid/snapshot.tar.gz",
+                        "--output",
+                        str(base_dir / "networks" / "local-dev.json"),
+                    ]
+                )
+                main(
+                    [
+                        "keys",
+                        "validator",
+                        "generate",
+                        "--out-dir",
+                        str(key_dir),
+                    ]
+                )
+                main(
+                    [
+                        "network",
+                        "join",
+                        "validator-1",
+                        "--base-dir",
+                        str(base_dir),
+                        "--network",
+                        "local-dev",
+                        "--validator-key-ref",
+                        str(key_dir / "validator_key_info.json"),
+                        "--home",
+                        str(home),
+                        "--output",
+                        str(base_dir / "nodes" / "validator-1.json"),
+                    ]
+                )
+
+            snapshot_mock = unittest.mock.Mock(return_value="snapshot.tar.gz")
+            node_admin = type(
+                "NodeAdmin",
+                (),
+                {"apply_snapshot_archive": staticmethod(snapshot_mock)},
+            )()
+            stdout = io.StringIO()
+            with patch(
+                "xian_cli.cli.get_node_admin_module",
+                return_value=node_admin,
+            ):
+                with redirect_stdout(stdout):
+                    exit_code = main(
+                        [
+                            "node",
+                            "init",
+                            "validator-1",
+                            "--base-dir",
+                            str(base_dir),
+                            "--restore-snapshot",
+                        ]
+                    )
+
+            self.assertEqual(exit_code, 0)
+            snapshot_mock.assert_called_once_with(
+                "https://example.invalid/snapshot.tar.gz",
+                home,
+            )
+            result = json.loads(stdout.getvalue())
+            self.assertTrue(result["snapshot_restored"])
+            self.assertEqual(
+                result["effective_snapshot_url"],
+                "https://example.invalid/snapshot.tar.gz",
+            )
+            self.assertEqual(
+                result["snapshot"]["snapshot_archive_name"],
+                "snapshot.tar.gz",
+            )
+
 
 class NodeRuntimeTests(unittest.TestCase):
     def test_node_start_uses_xian_stack_backend(self) -> None:
@@ -1023,6 +1199,136 @@ class NodeRuntimeTests(unittest.TestCase):
                     [
                         "node",
                         "start",
+                        "validator-1",
+                        "--base-dir",
+                        str(base_dir),
+                    ]
+                )
+
+
+class SnapshotCommandTests(unittest.TestCase):
+    def test_snapshot_restore_uses_effective_snapshot_url(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            base_dir = Path(tmp_dir)
+            (base_dir / "networks").mkdir()
+            (base_dir / "nodes").mkdir()
+            home = base_dir / ".cometbft"
+            config_dir = home / "config"
+            config_dir.mkdir(parents=True)
+            (config_dir / "config.toml").write_text("", encoding="utf-8")
+
+            with redirect_stdout(io.StringIO()):
+                main(
+                    [
+                        "network",
+                        "create",
+                        "local-dev",
+                        "--chain-id",
+                        "xian-local-1",
+                        "--snapshot-url",
+                        "https://example.invalid/network-snapshot.tar.gz",
+                        "--output",
+                        str(base_dir / "networks" / "local-dev.json"),
+                    ]
+                )
+                main(
+                    [
+                        "network",
+                        "join",
+                        "validator-1",
+                        "--base-dir",
+                        str(base_dir),
+                        "--network",
+                        "local-dev",
+                        "--home",
+                        str(home),
+                        "--output",
+                        str(base_dir / "nodes" / "validator-1.json"),
+                    ]
+                )
+
+            snapshot_mock = unittest.mock.Mock(return_value="snapshot.tar.gz")
+            node_admin = type(
+                "NodeAdmin",
+                (),
+                {"apply_snapshot_archive": staticmethod(snapshot_mock)},
+            )()
+            stdout = io.StringIO()
+            with patch(
+                "xian_cli.cli.get_node_admin_module",
+                return_value=node_admin,
+            ):
+                with redirect_stdout(stdout):
+                    exit_code = main(
+                        [
+                            "snapshot",
+                            "restore",
+                            "validator-1",
+                            "--base-dir",
+                            str(base_dir),
+                        ]
+                    )
+
+            self.assertEqual(exit_code, 0)
+            snapshot_mock.assert_called_once_with(
+                "https://example.invalid/network-snapshot.tar.gz",
+                home,
+            )
+            result = json.loads(stdout.getvalue())
+            self.assertEqual(result["home"], str(home))
+            self.assertEqual(
+                result["snapshot_url"],
+                "https://example.invalid/network-snapshot.tar.gz",
+            )
+            self.assertEqual(
+                result["snapshot_archive_name"],
+                "snapshot.tar.gz",
+            )
+
+    def test_snapshot_restore_requires_initialized_home(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            base_dir = Path(tmp_dir)
+            (base_dir / "networks").mkdir()
+            (base_dir / "nodes").mkdir()
+            home = base_dir / ".cometbft"
+
+            with redirect_stdout(io.StringIO()):
+                main(
+                    [
+                        "network",
+                        "create",
+                        "local-dev",
+                        "--chain-id",
+                        "xian-local-1",
+                        "--snapshot-url",
+                        "https://example.invalid/network-snapshot.tar.gz",
+                        "--output",
+                        str(base_dir / "networks" / "local-dev.json"),
+                    ]
+                )
+                main(
+                    [
+                        "network",
+                        "join",
+                        "validator-1",
+                        "--base-dir",
+                        str(base_dir),
+                        "--network",
+                        "local-dev",
+                        "--home",
+                        str(home),
+                        "--output",
+                        str(base_dir / "nodes" / "validator-1.json"),
+                    ]
+                )
+
+            with self.assertRaisesRegex(
+                FileNotFoundError, "run `xian node init"
+            ):
+                main(
+                    [
+                        "snapshot",
+                        "restore",
                         "validator-1",
                         "--base-dir",
                         str(base_dir),

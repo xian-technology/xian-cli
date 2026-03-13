@@ -8,7 +8,7 @@ runtime backend operations instead of end-user workflows.
 
 This repo owns:
 
-- command-line flows such as `keys`, `network create`, `network join`, and `node init`
+- command-line flows such as `keys`, `network create`, `network join`, `node init`, and `snapshot restore`
 - local operator artifacts such as network manifests and node profiles
 - orchestration across `xian-abci` primitives and `xian-stack` backend actions
 
@@ -29,8 +29,9 @@ uv run xian --help
 uv run xian keys validator generate --out-dir ./keys
 uv run xian network create local-dev --chain-id xian-local-1
 uv run xian network join mainnet-node --network mainnet \
-  --generate-validator-key
-uv run xian node init mainnet-node
+  --generate-validator-key --init-node --restore-snapshot
+uv run xian node init mainnet-node --restore-snapshot
+uv run xian snapshot restore mainnet-node
 uv run xian node start mainnet-node
 uv run xian node stop mainnet-node
 ```
@@ -48,9 +49,16 @@ can generate it directly with `--generate-validator-key`. By default it writes
 to `./keys/<name>/validator_key_info.json` and stores that relative reference in
 the node profile.
 
-`node init`, `node start`, and `node stop` use the same local-then-canonical
-manifest resolution. A profile-level `--genesis-url` override takes precedence
-over the manifest `genesis_source`.
+`network join --init-node` now runs the same initialization flow as `node init`
+immediately after writing the node profile. When combined with
+`--restore-snapshot`, it restores the effective snapshot URL after the CometBFT
+home is materialized.
+
+`node init`, `node start`, `node stop`, and `snapshot restore` use the same
+local-then-canonical manifest resolution. A profile-level `--genesis-url`
+override takes precedence over the manifest `genesis_source`. Snapshot URL
+precedence is explicit: command-line override first, then node profile, then
+network manifest.
 
 ## Workspace Model
 

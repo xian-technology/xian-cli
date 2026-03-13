@@ -26,6 +26,10 @@
 - `network join` must resolve the referenced network manifest up front. Keep
   network-owned metadata in the manifest and node-local overrides in the
   profile.
+- `network join --init-node` should reuse the same initialization path as
+  `node init`, not fork a second bootstrap implementation.
+- Snapshot restore precedence must stay explicit: CLI override, then node
+  profile, then canonical manifest.
 - Canonical manifests from `xian-configs` now live at
   `networks/<name>/manifest.json` with colocated `genesis.json`.
 
@@ -45,4 +49,6 @@
 - `network join` may generate validator key material as part of the bootstrap
   flow, but the generated files should still be referenced from the profile
   rather than inlined into it.
+- If snapshot restore behavior changes, update both `README.md` and
+  `docs/LIFECYCLE_CONTRACT.md` in the same change.
 - Keep this repo small and orchestration-focused. Long operator flows should compose lower-level helpers rather than re-implement them.
