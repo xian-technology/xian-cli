@@ -21,6 +21,7 @@ from xian_cli.models import NetworkManifest, NodeProfile, read_json, write_json
 from xian_cli.runtime import (
     default_home_for_backend,
     fetch_json,
+    get_xian_stack_node_status,
     resolve_stack_dir,
     start_xian_stack_node,
     stop_xian_stack_node,
@@ -88,6 +89,99 @@ def _handle_keys_validator_generate(args: argparse.Namespace) -> int:
     return 0
 
 
+def _collect_creation_validator_names(
+    args: argparse.Namespace,
+) -> tuple[str | None, list[str]]:
+    bootstrap_name = args.bootstrap_node
+    validator_names: list[str] = []
+
+    if bootstrap_name is not None:
+        validator_names.append(bootstrap_name)
+
+    for validator_name in args.validator or []:
+        if validator_name in validator_names:
+            raise ValueError(
+                "duplicate validator name in network creation: "
+                f"{validator_name}"
+            )
+        validator_names.append(validator_name)
+
+    return bootstrap_name, validator_names
+
+
+def _collect_creation_validators(
+    *,
+    args: argparse.Namespace,
+    base_dir: Path,
+    validator_names: list[str],
+) -> list[dict[str, object]]:
+    validators: list[dict[str, object]] = []
+    if not validator_names:
+        if args.validator_key_ref is not None:
+            raise ValueError("--validator-key-ref requires --bootstrap-node")
+        return validators
+
+    if not args.generate_validator_key:
+        if len(validator_names) > 1:
+            raise ValueError(
+                "multi-validator network creation currently requires "
+                "--generate-validator-key"
+            )
+        if args.validator_key_ref is None:
+            return validators
+
+    for index, validator_name in enumerate(validator_names):
+        validator_key_ref: str | None = None
+        validator_key_payload: dict | None = None
+
+        if args.generate_validator_key:
+            key_dir = (
+                args.validator_key_dir or base_dir / "keys" / validator_name
+            )
+            if args.validator_key_dir is not None and len(validator_names) > 1:
+                key_dir = key_dir / validator_name
+            if not key_dir.is_absolute():
+                key_dir = (base_dir / key_dir).resolve()
+            metadata_path = _write_validator_material_files(
+                out_dir=key_dir,
+                force=args.force,
+            )
+            validator_key_ref = _stringify_path_for_profile(
+                metadata_path,
+                base_dir=base_dir,
+            )
+            validator_key_payload = read_json(metadata_path)
+        elif index == 0 and args.validator_key_ref is not None:
+            validator_key_path = _resolve_output_path(
+                base_dir=base_dir,
+                explicit_output=args.validator_key_ref,
+                default_path=args.validator_key_ref,
+            )
+            validator_key_ref = _stringify_path_for_profile(
+                validator_key_path,
+                base_dir=base_dir,
+            )
+            validator_key_payload = read_json(validator_key_path)
+
+        validators.append(
+            {
+                "name": validator_name,
+                "moniker": (
+                    args.moniker
+                    if validator_name == args.bootstrap_node
+                    and args.moniker is not None
+                    else validator_name
+                ),
+                "validator_key_ref": validator_key_ref,
+                "validator_key_payload": validator_key_payload,
+                "power": args.validator_power,
+                "is_bootstrap": validator_name == args.bootstrap_node,
+            }
+        )
+
+    return validators
+
+
 def _handle_network_create(args: argparse.Namespace) -> int:
     base_dir = args.base_dir.resolve()
     target = _resolve_output_path(
@@ -108,70 +202,53 @@ def _handle_network_create(args: argparse.Namespace) -> int:
         )
     if args.init_node and args.bootstrap_node is None:
         raise ValueError("--init-node requires --bootstrap-node")
-
-    validator_key_ref: str | None = None
-    validator_key_payload: dict | None = None
-    if args.validator_key_ref is not None:
-        validator_key_path = _resolve_output_path(
-            base_dir=base_dir,
-            explicit_output=args.validator_key_ref,
-            default_path=args.validator_key_ref,
-        )
-        validator_key_ref = _stringify_path_for_profile(
-            validator_key_path,
-            base_dir=base_dir,
-        )
-        validator_key_payload = read_json(validator_key_path)
-    elif args.generate_validator_key:
-        key_dir = args.validator_key_dir or base_dir / "keys" / (
-            args.bootstrap_node or args.name
-        )
-        if not key_dir.is_absolute():
-            key_dir = (base_dir / key_dir).resolve()
-        metadata_path = _write_validator_material_files(
-            out_dir=key_dir,
-            force=args.force,
-        )
-        validator_key_ref = _stringify_path_for_profile(
-            metadata_path,
-            base_dir=base_dir,
-        )
-        validator_key_payload = read_json(metadata_path)
+    bootstrap_name, validator_names = _collect_creation_validator_names(args)
+    validators = _collect_creation_validators(
+        args=args,
+        base_dir=base_dir,
+        validator_names=validator_names,
+    )
 
     genesis_source = args.genesis_source
     generated_genesis_path: Path | None = None
     if genesis_source is None:
-        if validator_key_payload is None:
-            if args.bootstrap_node is not None:
+        if not validators or any(
+            validator["validator_key_payload"] is None
+            for validator in validators
+        ):
+            if bootstrap_name is not None or validator_names:
                 raise ValueError(
-                    "bootstrap network creation without --genesis-source "
+                    "local network creation without --genesis-source "
                     "requires validator key material; pass "
                     "--generate-validator-key or --validator-key-ref"
                 )
         else:
             founder_private_key = (
                 args.founder_private_key
-                or _extract_validator_private_key_hex(validator_key_payload)
+                or _extract_validator_private_key_hex(
+                    validators[0]["validator_key_payload"]
+                )
             )
             generated_genesis_path = network_dir / "genesis.json"
             genesis = _build_creation_genesis(
                 chain_id=args.chain_id,
                 founder_private_key=founder_private_key,
-                validator_key_payload=validator_key_payload,
+                validators=validators,
                 genesis_preset=args.genesis_preset,
-                validator_name=args.bootstrap_node or args.name,
-                validator_power=args.validator_power,
             )
             write_json(generated_genesis_path, genesis, force=args.force)
             genesis_source = "./genesis.json"
-    if (
-        args.bootstrap_node is not None
-        and genesis_source is None
-        and validator_key_payload is None
-    ):
+    if bootstrap_name is not None and genesis_source is None and not validators:
         raise ValueError(
             "--bootstrap-node requires either --genesis-source or local "
             "genesis generation via validator key material"
+        )
+    if validators and any(
+        validator["validator_key_ref"] is None for validator in validators
+    ):
+        raise ValueError(
+            "initial validator profiles require validator key material; "
+            "pass --generate-validator-key"
         )
 
     manifest = NetworkManifest(
@@ -192,45 +269,85 @@ def _handle_network_create(args: argparse.Namespace) -> int:
     }
     if generated_genesis_path is not None:
         result["generated_genesis_path"] = str(generated_genesis_path)
-    if validator_key_ref is not None:
-        result["validator_key_ref"] = validator_key_ref
+    result["validators"] = []
 
-    if args.bootstrap_node is not None:
-        if validator_key_ref is None:
+    for validator in validators:
+        validator_result: dict[str, object] = {
+            "name": validator["name"],
+            "moniker": validator["moniker"],
+            "validator_key_ref": validator["validator_key_ref"],
+        }
+        profile_path = _resolve_output_path(
+            base_dir=base_dir,
+            explicit_output=(
+                args.node_output if validator["is_bootstrap"] else None
+            ),
+            default_path=base_dir / "nodes" / f"{validator['name']}.json",
+        )
+        profile = NodeProfile(
+            name=validator["name"],
+            network=args.name,
+            moniker=validator["moniker"],
+            validator_key_ref=validator["validator_key_ref"],
+            runtime_backend=args.runtime_backend,
+            stack_dir=(
+                str(args.stack_dir)
+                if validator["is_bootstrap"] and args.stack_dir is not None
+                else None
+            ),
+            seeds=[],
+            genesis_url=None,
+            snapshot_url=(
+                args.snapshot_url if validator["is_bootstrap"] else None
+            ),
+            service_node=(
+                args.service_node if validator["is_bootstrap"] else False
+            ),
+            home=(
+                str(args.home)
+                if validator["is_bootstrap"] and args.home is not None
+                else None
+            ),
+            pruning_enabled=(
+                args.enable_pruning if validator["is_bootstrap"] else False
+            ),
+            blocks_to_keep=(
+                args.blocks_to_keep if validator["is_bootstrap"] else 100000
+            ),
+        )
+        write_json(profile_path, profile.to_dict(), force=args.force)
+        validator_result["profile_path"] = str(profile_path)
+        result["validators"].append(validator_result)
+
+        if validator["is_bootstrap"]:
+            result["profile_path"] = str(profile_path)
+            if validator["validator_key_ref"] is not None:
+                result["validator_key_ref"] = validator["validator_key_ref"]
+
+    if bootstrap_name is not None:
+        bootstrap_validator = next(
+            (
+                validator
+                for validator in validators
+                if validator["name"] == bootstrap_name
+            ),
+            None,
+        )
+        if (
+            bootstrap_validator is None
+            or bootstrap_validator["validator_key_ref"] is None
+        ):
             raise ValueError(
                 "--bootstrap-node requires validator key material; "
                 "pass --generate-validator-key or --validator-key-ref"
             )
-        profile_path = _resolve_output_path(
-            base_dir=base_dir,
-            explicit_output=args.node_output,
-            default_path=base_dir / "nodes" / f"{args.bootstrap_node}.json",
-        )
-        profile = NodeProfile(
-            name=args.bootstrap_node,
-            network=args.name,
-            moniker=args.moniker or args.bootstrap_node,
-            validator_key_ref=validator_key_ref,
-            runtime_backend=args.runtime_backend,
-            stack_dir=(
-                str(args.stack_dir) if args.stack_dir is not None else None
-            ),
-            seeds=[],
-            genesis_url=None,
-            snapshot_url=args.snapshot_url,
-            service_node=args.service_node,
-            home=str(args.home) if args.home is not None else None,
-            pruning_enabled=args.enable_pruning,
-            blocks_to_keep=args.blocks_to_keep,
-        )
-        write_json(profile_path, profile.to_dict(), force=args.force)
-        result["profile_path"] = str(profile_path)
 
         if args.init_node:
+            bootstrap_profile_path = Path(result["profile_path"])
             init_args = argparse.Namespace(
-                name=args.bootstrap_node,
+                name=bootstrap_name,
                 base_dir=base_dir,
-                profile=profile_path,
+                profile=bootstrap_profile_path,
                 network=target,
                 validator_key=None,
                 stack_dir=args.stack_dir,
@@ -433,23 +550,60 @@ def _extract_validator_private_key_hex(payload: dict) -> str:
     return raw_private_key[:32].hex()
 
 
+def _extract_validator_public_key_hex(payload: dict) -> str:
+    public_key_hex = payload.get("validator_public_key_hex")
+    if public_key_hex is not None:
+        return public_key_hex
+
+    priv_validator_key = _extract_priv_validator_key(payload)
+    try:
+        raw_public_key = base64.b64decode(
+            priv_validator_key["pub_key"]["value"].encode("ascii")
+        )
+    except (KeyError, ValueError) as exc:
+        raise ValueError(
+            "validator key file does not contain a usable public key"
+        ) from exc
+
+    if len(raw_public_key) != 32:
+        raise ValueError(
+            "validator key file does not contain a usable public key"
+        )
+    return raw_public_key.hex()
+
+
+def _build_creation_validator_entries(
+    *,
+    validators: list[dict[str, object]],
+) -> list[dict[str, object]]:
+    return [
+        {
+            "account_public_key": _extract_validator_public_key_hex(
+                validator["validator_key_payload"]
+            ),
+            "name": validator["name"],
+            "power": validator["power"],
+            "priv_validator_key": _extract_priv_validator_key(
+                validator["validator_key_payload"]
+            ),
+        }
+        for validator in validators
+    ]
+
+
 def _build_creation_genesis(
     *,
     chain_id: str,
     founder_private_key: str,
-    validator_key_payload: dict,
+    validators: list[dict[str, object]],
     genesis_preset: str,
-    validator_name: str,
-    validator_power: int,
 ) -> dict:
     genesis_builder = get_genesis_builder_module()
-    return genesis_builder.build_single_validator_genesis(
+    return genesis_builder.build_local_network_genesis(
         chain_id=chain_id,
         founder_private_key=founder_private_key,
-        priv_validator_key=_extract_priv_validator_key(validator_key_payload),
+        validators=_build_creation_validator_entries(validators=validators),
         network=genesis_preset,
-        validator_name=validator_name,
-        validator_power=validator_power,
     )
 
 
@@ -786,6 +940,9 @@ def _collect_node_status(
         profile=profile,
         explicit_stack_dir=args.stack_dir,
     )
+    if runtime_backend == "xian-stack":
+        stack_dir = resolve_stack_dir(base_dir, explicit=stack_dir)
+
     home = _resolve_home(
         base_dir=base_dir,
         profile=profile,
@@ -826,6 +983,21 @@ def _collect_node_status(
             result["node_id"] = read_json(node_key_path).get("node_id")
         except json.JSONDecodeError:
             result["node_id"] = None
+
+    if runtime_backend == "xian-stack" and stack_dir is not None:
+        try:
+            backend_status = get_xian_stack_node_status(
+                stack_dir=stack_dir,
+                service_node=bool(profile.get("service_node")),
+            )
+            result["backend_status"] = backend_status
+            result["backend_checked"] = True
+            result["backend_running"] = backend_status.get("backend_running")
+            if result.get("node_id") is None:
+                result["node_id"] = backend_status.get("node_id")
+        except Exception as exc:
+            result["backend_checked"] = True
+            result["backend_error"] = str(exc)
 
     if check_rpc:
         try:
@@ -1073,6 +1245,14 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     create_parser.add_argument(
+        "--validator",
+        action="append",
+        help=(
+            "additional initial validator profile name; may be repeated "
+            "for multi-validator network creation"
+        ),
+    )
+    create_parser.add_argument(
         "--node-output",
         type=Path,
         help="output file path for the bootstrap node profile",
@@ -1081,7 +1261,10 @@ def build_parser() -> argparse.ArgumentParser:
     create_parser.add_argument(
         "--init-node",
         action="store_true",
-        help="run node initialization immediately after writing the profile",
+        help=(
+            "run node initialization immediately after writing the bootstrap "
+            "node profile"
+        ),
     )
     create_parser.add_argument(
         "--stack-dir",

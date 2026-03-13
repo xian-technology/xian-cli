@@ -23,11 +23,13 @@ Planned primary commands:
 Command intent:
 
 - `network create` defines a new network manifest and may bootstrap the first
-  local node for that network.
+  local node for that network, including a multi-validator local genesis when
+  the operator declares additional initial validators.
 - `network join` defines a local node profile for an existing network and may
   initialize the node immediately.
 - `node init` performs all preparation stages needed before startup.
-- `node status` reports local bootstrap state and optional live RPC status.
+- `node status` reports local bootstrap state, backend runtime state, and
+  optional live RPC status.
 - `snapshot restore` applies the effective snapshot source to an initialized
   node home.
 - `doctor` checks workspace prerequisites and optional node prerequisites.
@@ -246,9 +248,10 @@ The current implementation already supports:
 4. explicit snapshot restore as a separate command or as part of `node init`
 5. creation-side bootstrap through `network create --bootstrap-node`
 6. explicit `node status` and `doctor` inspection flows
+7. multi-validator local network creation through repeated `--validator`
+8. stable backend status integration through `xian-stack node-status`
 
-The next implementation pass should therefore focus on:
-
-1. expanding creation flows beyond the single-node bootstrap case
-2. teaching `xian-stack` and `xian-cli` a stable backend `status` operation
-3. keeping `xian-stack` as the first runtime backend without exposing its Makefile as the long-term public interface
+The next implementation passes should focus on keeping this contract small and
+stable while expanding what sits behind it, especially richer canonical network
+metadata in `xian-configs` and additional backend implementations beyond
+`xian-stack`.

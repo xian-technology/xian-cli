@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import time
 from pathlib import Path
@@ -115,3 +116,26 @@ def stop_xian_stack_node(*, stack_dir: Path, service_node: bool) -> dict:
         "stack_dir": str(stack_dir),
         "container_target": container_target,
     }
+
+
+def get_xian_stack_node_status(
+    *,
+    stack_dir: Path,
+    service_node: bool,
+) -> dict:
+    env = os.environ.copy()
+    env["XIAN_SERVICE_NODE"] = "1" if service_node else "0"
+    result = subprocess.run(
+        ["make", "node-status"],
+        cwd=stack_dir,
+        check=True,
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+    try:
+        return json.loads(result.stdout)
+    except json.JSONDecodeError as exc:
+        raise ValueError(
+            "xian-stack node-status returned invalid JSON"
+        ) from exc

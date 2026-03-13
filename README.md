@@ -29,7 +29,8 @@ uv sync --group dev
 uv run xian --help
 uv run xian keys validator generate --out-dir ./keys
 uv run xian network create local-dev --chain-id xian-local-1 \
-  --generate-validator-key --bootstrap-node validator-1 --init-node
+  --generate-validator-key --bootstrap-node validator-1 \
+  --validator validator-2 --init-node
 uv run xian network join mainnet-node --network mainnet \
   --generate-validator-key --init-node --restore-snapshot
 uv run xian node init mainnet-node --restore-snapshot
@@ -54,7 +55,10 @@ profile.
 also bootstrap a fresh local network. When validator key material is available,
 it can generate a colocated `genesis.json`; when `--bootstrap-node` is set, it
 can also create the first node profile and optionally initialize the CometBFT
-home immediately with `--init-node`.
+home immediately with `--init-node`. Repeating `--validator <name>` adds more
+initial validator profiles and includes them in the generated local genesis.
+Only the bootstrap node is initialized immediately; additional profiles remain
+declared intent until they are initialized on their own machines.
 
 If the operator does not already have validator key material, `network join`
 can generate it directly with `--generate-validator-key`. By default it writes
@@ -72,9 +76,10 @@ override takes precedence over the manifest `genesis_source`. Snapshot URL
 precedence is explicit: command-line override first, then node profile, then
 network manifest.
 
-`node status` reports bootstrap artifacts plus an optional live RPC status
-probe. `doctor` checks workspace resolution and, when given a node name, the
-profile/manifest/home prerequisites for that node.
+`node status` reports bootstrap artifacts, the `xian-stack` backend state when
+available, and an optional live RPC status probe. `doctor` checks workspace
+resolution and, when given a node name, the profile/manifest/home prerequisites
+for that node.
 
 ## Workspace Model
 

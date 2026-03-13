@@ -18,6 +18,7 @@ from xian_cli.config_repo import (
     resolve_network_manifest_path,
 )
 from xian_cli.runtime import (
+    get_xian_stack_node_status,
     resolve_stack_dir,
     start_xian_stack_node,
     stop_xian_stack_node,
@@ -433,7 +434,7 @@ class NetworkManifestTests(unittest.TestCase):
                 "GenesisBuilder",
                 (),
                 {
-                    "build_single_validator_genesis": staticmethod(
+                    "build_local_network_genesis": staticmethod(
                         unittest.mock.Mock(return_value=fake_genesis)
                     )
                 },
@@ -491,9 +492,81 @@ class NetworkManifestTests(unittest.TestCase):
                 profile["validator_key_ref"],
                 "keys/validator-1/validator_key_info.json",
             )
-            (
-                genesis_builder.build_single_validator_genesis.assert_called_once()
+            (genesis_builder.build_local_network_genesis.assert_called_once())
+
+    def test_network_create_can_generate_multiple_initial_validators(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            base_dir = Path(tmp_dir)
+            fake_genesis = {
+                "chain_id": "xian-local-1",
+                "validators": [
+                    {"name": "validator-1"},
+                    {"name": "validator-2"},
+                ],
+                "abci_genesis": {},
+            }
+            genesis_builder = type(
+                "GenesisBuilder",
+                (),
+                {
+                    "build_local_network_genesis": staticmethod(
+                        unittest.mock.Mock(return_value=fake_genesis)
+                    )
+                },
+            )()
+
+            stdout = io.StringIO()
+            with patch(
+                "xian_cli.cli.get_genesis_builder_module",
+                return_value=genesis_builder,
+            ):
+                with redirect_stdout(stdout):
+                    exit_code = main(
+                        [
+                            "network",
+                            "create",
+                            "local-dev",
+                            "--base-dir",
+                            str(base_dir),
+                            "--chain-id",
+                            "xian-local-1",
+                            "--generate-validator-key",
+                            "--bootstrap-node",
+                            "validator-1",
+                            "--validator",
+                            "validator-2",
+                        ]
+                    )
+
+            self.assertEqual(exit_code, 0)
+            result = json.loads(stdout.getvalue())
+            self.assertEqual(len(result["validators"]), 2)
+            self.assertEqual(
+                [item["name"] for item in result["validators"]],
+                ["validator-1", "validator-2"],
             )
+            self.assertTrue(
+                (
+                    base_dir
+                    / "keys"
+                    / "validator-2"
+                    / "validator_key_info.json"
+                ).exists()
+            )
+            validator_two_profile = json.loads(
+                (base_dir / "nodes" / "validator-2.json").read_text(
+                    encoding="utf-8"
+                )
+            )
+            self.assertEqual(
+                validator_two_profile["validator_key_ref"],
+                "keys/validator-2/validator_key_info.json",
+            )
+            genesis_builder.build_local_network_genesis.assert_called_once()
+            kwargs = (
+                genesis_builder.build_local_network_genesis.call_args.kwargs
+            )
+            self.assertEqual(len(kwargs["validators"]), 2)
 
 
 class AbciBridgeTests(unittest.TestCase):
@@ -1379,16 +1452,23 @@ class NodeRuntimeTests(unittest.TestCase):
                 "xian_cli.cli.fetch_json",
                 return_value={"result": {"node_info": {"network": "xian"}}},
             ):
-                with redirect_stdout(stdout):
-                    exit_code = main(
-                        [
-                            "node",
-                            "status",
-                            "validator-1",
-                            "--base-dir",
-                            str(base_dir),
-                        ]
-                    )
+                with patch(
+                    "xian_cli.cli.get_xian_stack_node_status",
+                    return_value={
+                        "backend_running": True,
+                        "node_id": "node-123",
+                    },
+                ):
+                    with redirect_stdout(stdout):
+                        exit_code = main(
+                            [
+                                "node",
+                                "status",
+                                "validator-1",
+                                "--base-dir",
+                                str(base_dir),
+                            ]
+                        )
 
             self.assertEqual(exit_code, 0)
             result = json.loads(stdout.getvalue())
@@ -1396,6 +1476,8 @@ class NodeRuntimeTests(unittest.TestCase):
             self.assertTrue(result["rpc_reachable"])
             self.assertEqual(result["node_id"], "node-123")
             self.assertEqual(result["stack_dir"], str(stack_dir.resolve()))
+            self.assertTrue(result["backend_checked"])
+            self.assertTrue(result["backend_running"])
 
 
 class DoctorTests(unittest.TestCase):
@@ -1492,18 +1574,25 @@ class DoctorTests(unittest.TestCase):
                         )(),
                     ):
                         with redirect_stdout(stdout):
-                            exit_code = main(
-                                [
-                                    "doctor",
-                                    "validator-1",
-                                    "--base-dir",
-                                    str(base_dir),
-                                    "--configs-dir",
-                                    str(configs_dir),
-                                    "--stack-dir",
-                                    str(stack_dir),
-                                ]
-                            )
+                            with patch(
+                                "xian_cli.cli.get_xian_stack_node_status",
+                                return_value={
+                                    "backend_running": True,
+                                    "node_id": "node-123",
+                                },
+                            ):
+                                exit_code = main(
+                                    [
+                                        "doctor",
+                                        "validator-1",
+                                        "--base-dir",
+                                        str(base_dir),
+                                        "--configs-dir",
+                                        str(configs_dir),
+                                        "--stack-dir",
+                                        str(stack_dir),
+                                    ]
+                                )
 
             self.assertEqual(exit_code, 0)
             result = json.loads(stdout.getvalue())
@@ -1714,6 +1803,30 @@ class RuntimeHelperTests(unittest.TestCase):
             ],
         )
         self.assertEqual(result["container_target"], "abci-down")
+
+    def test_get_xian_stack_node_status_uses_make_target(self) -> None:
+        stack_dir = Path("/tmp/xian-stack")
+        completed_process = unittest.mock.Mock(
+            stdout=json.dumps({"backend_running": True, "node_id": "abc123"})
+        )
+
+        with patch("xian_cli.runtime.subprocess.run") as subprocess_run:
+            subprocess_run.return_value = completed_process
+            result = get_xian_stack_node_status(
+                stack_dir=stack_dir,
+                service_node=True,
+            )
+
+        self.assertTrue(result["backend_running"])
+        self.assertEqual(result["node_id"], "abc123")
+        kwargs = subprocess_run.call_args.kwargs
+        self.assertEqual(
+            subprocess_run.call_args.args,
+            (["make", "node-status"],),
+        )
+        self.assertEqual(kwargs["cwd"], stack_dir)
+        self.assertEqual(kwargs["env"]["XIAN_SERVICE_NODE"], "1")
+        self.assertTrue(kwargs["capture_output"])
 
 
 class ConfigRepoTests(unittest.TestCase):

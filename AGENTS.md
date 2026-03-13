@@ -33,6 +33,9 @@
 - `network create` may generate a colocated local `genesis.json`, but private
   key material must still live under `./keys/` and be referenced from node
   profiles rather than embedded in manifests.
+- `network create` may also define multiple initial validators via repeated
+  `--validator` flags. Only the bootstrap node should carry machine-local home
+  and stack settings by default.
 - `network join --init-node` should reuse the same initialization path as
   `node init`, not fork a second bootstrap implementation.
 - Snapshot restore precedence must stay explicit: CLI override, then node
@@ -52,6 +55,8 @@
   back cleanly to canonical manifests from the sibling `xian-configs` repo.
 - `network create --bootstrap-node` should be able to carry the flow through to
   a ready-to-init node without requiring manual file assembly.
+- `node status` should include backend state from `xian-stack` when the profile
+  uses that runtime backend, not just local file checks.
 - Keep precedence rules explicit: local node overrides win over network
   defaults, but the CLI should not duplicate canonical network metadata into
   node profiles without a clear reason.
