@@ -23,6 +23,6 @@ def get_node_setup_module():
         return node_setup
 
     raise RuntimeError(
-        "xian-abci helpers are required for node init; install xian-abci or run "
-        "xian-cli from the shared workspace"
+        "xian-abci helpers are required for node init; "
+        "install xian-abci or run xian-cli from the shared workspace"
     )

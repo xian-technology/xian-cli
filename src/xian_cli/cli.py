@@ -28,7 +28,9 @@ def _handle_keys_validator_generate(args: argparse.Namespace) -> int:
             payload["priv_validator_key"],
             force=args.force,
         )
-        write_json(out_dir / "validator_key_info.json", payload, force=args.force)
+        write_json(
+            out_dir / "validator_key_info.json", payload, force=args.force
+        )
 
     json.dump(payload, sys.stdout, indent=2)
     sys.stdout.write("\n")
@@ -57,7 +59,9 @@ def _handle_network_join(args: argparse.Namespace) -> int:
         network=args.network,
         moniker=args.moniker or args.name,
         validator_key_ref=(
-            str(args.validator_key_ref) if args.validator_key_ref is not None else None
+            str(args.validator_key_ref)
+            if args.validator_key_ref is not None
+            else None
         ),
         runtime_backend=args.runtime_backend,
         stack_dir=str(args.stack_dir) if args.stack_dir is not None else None,
@@ -75,7 +79,9 @@ def _handle_network_join(args: argparse.Namespace) -> int:
     return 0
 
 
-def _resolve_path(value: str | None, *, base_dir: Path, fallback_dir: Path | None = None) -> Path | None:
+def _resolve_path(
+    value: str | None, *, base_dir: Path, fallback_dir: Path | None = None
+) -> Path | None:
     if value is None:
         return None
 
@@ -111,7 +117,9 @@ def _resolve_stack_dir_from_profile(
     return stack_dir
 
 
-def _load_genesis_payload(genesis_source: str, *, base_dir: Path, manifest_path: Path) -> dict:
+def _load_genesis_payload(
+    genesis_source: str, *, base_dir: Path, manifest_path: Path
+) -> dict:
     parsed = urlparse(genesis_source)
     if parsed.scheme in {"http", "https"}:
         return fetch_json(genesis_source)
@@ -157,7 +165,8 @@ def _load_profile_and_network(
     network_name = profile.get("network")
     if not network_name:
         raise ValueError(
-            "node profile is missing network; recreate it with xian network join"
+            "node profile is missing network; "
+            "recreate it with xian network join"
         )
 
     network_path = network_arg or base_dir / "networks" / f"{network_name}.json"
@@ -180,7 +189,9 @@ def _handle_node_init(args: argparse.Namespace) -> int:
         profile_arg=args.profile,
         network_arg=args.network,
     )
-    runtime_backend = profile.get("runtime_backend") or network.get("runtime_backend")
+    runtime_backend = profile.get("runtime_backend") or network.get(
+        "runtime_backend"
+    )
     if runtime_backend != "xian-stack":
         raise ValueError(f"unsupported runtime backend: {runtime_backend}")
 
@@ -191,7 +202,10 @@ def _handle_node_init(args: argparse.Namespace) -> int:
     )
 
     explicit_validator_key = args.validator_key
-    if explicit_validator_key is not None and not explicit_validator_key.is_absolute():
+    if (
+        explicit_validator_key is not None
+        and not explicit_validator_key.is_absolute()
+    ):
         explicit_validator_key = (base_dir / explicit_validator_key).resolve()
 
     validator_key_ref = explicit_validator_key or _resolve_path(
@@ -205,11 +219,14 @@ def _handle_node_init(args: argparse.Namespace) -> int:
             "node profile or pass --validator-key"
         )
 
-    validator_key_payload = _extract_priv_validator_key(read_json(validator_key_ref))
+    validator_key_payload = _extract_priv_validator_key(
+        read_json(validator_key_ref)
+    )
     genesis_source = network.get("genesis_source") or profile.get("genesis_url")
     if not genesis_source:
         raise ValueError(
-            "no genesis source configured; set genesis_source in the network manifest"
+            "no genesis source configured; "
+            "set genesis_source in the network manifest"
         )
 
     genesis = _load_genesis_payload(
@@ -271,7 +288,9 @@ def _handle_node_start(args: argparse.Namespace) -> int:
         network_arg=args.network,
     )
 
-    runtime_backend = profile.get("runtime_backend") or network.get("runtime_backend")
+    runtime_backend = profile.get("runtime_backend") or network.get(
+        "runtime_backend"
+    )
     if runtime_backend != "xian-stack":
         raise ValueError(f"unsupported runtime backend: {runtime_backend}")
 
@@ -297,7 +316,8 @@ def _handle_node_start(args: argparse.Namespace) -> int:
     config_path = home / "config" / "config.toml"
     if not config_path.exists():
         raise FileNotFoundError(
-            f"{config_path} does not exist; run `xian node init {args.name}` first"
+            f"{config_path} does not exist; "
+            f"run `xian node init {args.name}` first"
         )
 
     result = start_xian_stack_node(
@@ -319,7 +339,9 @@ def _handle_node_stop(args: argparse.Namespace) -> int:
         network_arg=args.network,
     )
 
-    runtime_backend = profile.get("runtime_backend") or network.get("runtime_backend")
+    runtime_backend = profile.get("runtime_backend") or network.get(
+        "runtime_backend"
+    )
     if runtime_backend != "xian-stack":
         raise ValueError(f"unsupported runtime backend: {runtime_backend}")
 
@@ -347,7 +369,9 @@ def build_parser() -> argparse.ArgumentParser:
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     keys_parser = subparsers.add_parser("keys", help="key management")
-    keys_subparsers = keys_parser.add_subparsers(dest="keys_command", required=True)
+    keys_subparsers = keys_parser.add_subparsers(
+        dest="keys_command", required=True
+    )
 
     validator_parser = keys_subparsers.add_parser(
         "validator", help="validator key management"
@@ -361,7 +385,9 @@ def build_parser() -> argparse.ArgumentParser:
     )
     generate_parser.add_argument(
         "--private-key",
-        help="existing 64-character hex private key; omit to generate a new one",
+        help=(
+            "existing 64-character hex private key; omit to generate a new one"
+        ),
     )
     generate_parser.add_argument(
         "--out-dir",
@@ -384,12 +410,17 @@ def build_parser() -> argparse.ArgumentParser:
         "create", help="create a new network manifest"
     )
     create_parser.add_argument("name", help="network name")
-    create_parser.add_argument("--chain-id", required=True, help="chain identifier")
+    create_parser.add_argument(
+        "--chain-id", required=True, help="chain identifier"
+    )
     create_parser.add_argument(
         "--mode",
         default="join",
         choices=["join", "create"],
-        help="whether this manifest describes joining an existing network or creating a new one",
+        help=(
+            "whether this manifest describes joining an existing network "
+            "or creating a new one"
+        ),
     )
     create_parser.add_argument(
         "--runtime-backend",
@@ -442,7 +473,10 @@ def build_parser() -> argparse.ArgumentParser:
     join_parser.add_argument(
         "--seed",
         action="append",
-        help="optional node-local seed override in <node_id>@<host>:26656 format; may be repeated",
+        help=(
+            "optional node-local seed override in "
+            "<node_id>@<host>:26656 format; may be repeated"
+        ),
     )
     join_parser.add_argument("--genesis-url", help="URL to fetch genesis from")
     join_parser.add_argument("--snapshot-url", help="optional snapshot URL")
@@ -476,7 +510,9 @@ def build_parser() -> argparse.ArgumentParser:
     join_parser.set_defaults(handler=_handle_network_join)
 
     node_parser = subparsers.add_parser("node", help="node lifecycle")
-    node_subparsers = node_parser.add_subparsers(dest="node_command", required=True)
+    node_subparsers = node_parser.add_subparsers(
+        dest="node_command", required=True
+    )
 
     init_parser = node_subparsers.add_parser(
         "init", help="materialize a node home from manifests and keys"
@@ -496,17 +532,26 @@ def build_parser() -> argparse.ArgumentParser:
     init_parser.add_argument(
         "--network",
         type=Path,
-        help="explicit network manifest path; defaults to ./networks/<profile.network>.json",
+        help=(
+            "explicit network manifest path; defaults to "
+            "./networks/<profile.network>.json"
+        ),
     )
     init_parser.add_argument(
         "--validator-key",
         type=Path,
-        help="explicit validator key path; overrides validator_key_ref in the profile",
+        help=(
+            "explicit validator key path; "
+            "overrides validator_key_ref in the profile"
+        ),
     )
     init_parser.add_argument(
         "--stack-dir",
         type=Path,
-        help="explicit xian-stack checkout path; overrides stack_dir in the profile",
+        help=(
+            "explicit xian-stack checkout path; "
+            "overrides stack_dir in the profile"
+        ),
     )
     init_parser.add_argument(
         "--home",
@@ -516,7 +561,10 @@ def build_parser() -> argparse.ArgumentParser:
     init_parser.add_argument(
         "--force",
         action="store_true",
-        help="overwrite config, genesis, and priv_validator_key.json if they already exist",
+        help=(
+            "overwrite config, genesis, and priv_validator_key.json "
+            "if they already exist"
+        ),
     )
     init_parser.set_defaults(handler=_handle_node_init)
 
@@ -526,7 +574,10 @@ def build_parser() -> argparse.ArgumentParser:
         "--base-dir",
         type=Path,
         default=Path.cwd(),
-        help="workspace directory that contains ./nodes, ./networks, and ./xian-stack",
+        help=(
+            "workspace directory that contains ./nodes, ./networks, "
+            "and ./xian-stack"
+        ),
     )
     start_parser.add_argument(
         "--profile",
@@ -536,12 +587,18 @@ def build_parser() -> argparse.ArgumentParser:
     start_parser.add_argument(
         "--network",
         type=Path,
-        help="explicit network manifest path; defaults to ./networks/<profile.network>.json",
+        help=(
+            "explicit network manifest path; defaults to "
+            "./networks/<profile.network>.json"
+        ),
     )
     start_parser.add_argument(
         "--stack-dir",
         type=Path,
-        help="explicit xian-stack checkout path; overrides stack_dir in the profile",
+        help=(
+            "explicit xian-stack checkout path; "
+            "overrides stack_dir in the profile"
+        ),
     )
     start_parser.add_argument(
         "--skip-health-check",
@@ -562,7 +619,10 @@ def build_parser() -> argparse.ArgumentParser:
         "--base-dir",
         type=Path,
         default=Path.cwd(),
-        help="workspace directory that contains ./nodes, ./networks, and ./xian-stack",
+        help=(
+            "workspace directory that contains ./nodes, ./networks, "
+            "and ./xian-stack"
+        ),
     )
     stop_parser.add_argument(
         "--profile",
@@ -572,12 +632,18 @@ def build_parser() -> argparse.ArgumentParser:
     stop_parser.add_argument(
         "--network",
         type=Path,
-        help="explicit network manifest path; defaults to ./networks/<profile.network>.json",
+        help=(
+            "explicit network manifest path; defaults to "
+            "./networks/<profile.network>.json"
+        ),
     )
     stop_parser.add_argument(
         "--stack-dir",
         type=Path,
-        help="explicit xian-stack checkout path; overrides stack_dir in the profile",
+        help=(
+            "explicit xian-stack checkout path; "
+            "overrides stack_dir in the profile"
+        ),
     )
     stop_parser.set_defaults(handler=_handle_node_stop)
 

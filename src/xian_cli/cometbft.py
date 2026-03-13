@@ -12,7 +12,9 @@ def _normalize_private_key(private_key_hex: str | None) -> bytes:
         return secrets.token_bytes(32)
 
     if len(private_key_hex) != 64:
-        raise ValueError("validator private key must be a 64-character hex string")
+        raise ValueError(
+            "validator private key must be a 64-character hex string"
+        )
 
     try:
         return bytes.fromhex(private_key_hex)
@@ -41,12 +43,15 @@ def generate_validator_material(private_key_hex: str | None = None) -> dict:
             "address": address_bytes.hex().upper(),
             "pub_key": {
                 "type": "tendermint/PubKeyEd25519",
-                "value": verify_key.encode(encoder=Base64Encoder).decode("ascii"),
+                "value": verify_key.encode(encoder=Base64Encoder).decode(
+                    "ascii"
+                ),
             },
             "priv_key": {
                 "type": "tendermint/PrivKeyEd25519",
-                "value": Base64Encoder.encode(priv_key_with_pub).decode("ascii"),
+                "value": Base64Encoder.encode(priv_key_with_pub).decode(
+                    "ascii"
+                ),
             },
         },
     }
-

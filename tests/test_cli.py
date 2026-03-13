@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-import json
 import io
+import json
 import tempfile
 import unittest
 from contextlib import redirect_stdout
@@ -39,7 +39,9 @@ class ValidatorKeyTests(unittest.TestCase):
             priv_validator_payload = json.loads(
                 priv_validator_path.read_text(encoding="utf-8")
             )
-            metadata_payload = json.loads(metadata_path.read_text(encoding="utf-8"))
+            metadata_payload = json.loads(
+                metadata_path.read_text(encoding="utf-8")
+            )
 
             self.assertEqual(
                 priv_validator_payload["address"],
@@ -178,9 +180,13 @@ class NodeInitTests(unittest.TestCase):
             home = Path(result["home"])
             self.assertTrue((home / "config" / "config.toml").exists())
             self.assertTrue((home / "config" / "genesis.json").exists())
-            self.assertTrue((home / "config" / "priv_validator_key.json").exists())
+            self.assertTrue(
+                (home / "config" / "priv_validator_key.json").exists()
+            )
             self.assertTrue((home / "config" / "node_key.json").exists())
-            self.assertTrue((home / "data" / "priv_validator_state.json").exists())
+            self.assertTrue(
+                (home / "data" / "priv_validator_state.json").exists()
+            )
 
     def test_node_init_supports_remote_genesis_url(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:

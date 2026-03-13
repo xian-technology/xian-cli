@@ -31,6 +31,13 @@ pip install -e .
 xian --help
 ```
 
+Preferred development setup:
+
+```bash
+uv sync --group dev
+uv run xian --help
+```
+
 Generate a validator key:
 
 ```bash
@@ -78,3 +85,11 @@ For cross-repo work, keep `xian-cli`, `xian-stack`, `xian-abci`, and `xian-contr
 
 - `xian-abci` is installed in the same Python environment, or
 - you are running from the shared workspace layout (`~/xian/xian-cli`, `~/xian/xian-abci`, ...)
+
+## Validation
+
+```bash
+uv run ruff check .
+uv run ruff format --check .
+uv run pytest
+```

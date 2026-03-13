@@ -13,6 +13,13 @@ dependencies = [
     "toml>=0.10.2",
 ]
 
+[dependency-groups]
+dev = [
+    "pytest>=9.0.2,<10",
+    "pytest-cov>=7.0.0,<8",
+    "ruff>=0.15.6,<0.16",
+]
+
 [project.scripts]
 xian = "xian_cli.cli:main"
 
@@ -21,3 +28,13 @@ package-dir = {"" = "src"}
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 80
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I"]

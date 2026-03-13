@@ -1,8 +1,8 @@
 from __future__ import annotations
 
+import json
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-import json
 
 
 @dataclass(slots=True)
@@ -42,7 +42,9 @@ class NodeProfile:
 def write_json(path: Path, payload: dict, *, force: bool = False) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     if path.exists() and not force:
-        raise FileExistsError(f"{path} already exists; pass --force to overwrite")
+        raise FileExistsError(
+            f"{path} already exists; pass --force to overwrite"
+        )
     path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
 
 

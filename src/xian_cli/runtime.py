@@ -21,11 +21,14 @@ def resolve_stack_dir(base_dir: Path, explicit: Path | None = None) -> Path:
         return workspace_candidate.resolve()
 
     raise FileNotFoundError(
-        "unable to resolve xian-stack directory; pass --stack-dir or set stack_dir in the node profile"
+        "unable to resolve xian-stack directory; "
+        "pass --stack-dir or set stack_dir in the node profile"
     )
 
 
-def default_home_for_backend(*, base_dir: Path, runtime_backend: str, stack_dir: Path | None = None) -> Path:
+def default_home_for_backend(
+    *, base_dir: Path, runtime_backend: str, stack_dir: Path | None = None
+) -> Path:
     if runtime_backend == "xian-stack":
         resolved_stack_dir = resolve_stack_dir(base_dir, explicit=stack_dir)
         return resolved_stack_dir / ".cometbft"
@@ -54,7 +57,12 @@ def wait_for_rpc_ready(
             payload = fetch_json(rpc_url, timeout=poll_interval)
             if payload.get("result"):
                 return payload
-        except (URLError, TimeoutError, ValueError, json.JSONDecodeError) as exc:
+        except (
+            URLError,
+            TimeoutError,
+            ValueError,
+            json.JSONDecodeError,
+        ) as exc:
             last_error = exc
 
         time.sleep(poll_interval)
