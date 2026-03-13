@@ -19,19 +19,45 @@ from xian_cli.runtime import (
 )
 
 
-def _handle_keys_validator_generate(args: argparse.Namespace) -> int:
-    payload = generate_validator_material(args.private_key)
+def _write_validator_material_files(
+    *,
+    out_dir: Path,
+    private_key: str | None = None,
+    force: bool = False,
+) -> Path:
+    payload = generate_validator_material(private_key)
+    write_json(
+        out_dir / "priv_validator_key.json",
+        payload["priv_validator_key"],
+        force=force,
+    )
+    metadata_path = out_dir / "validator_key_info.json"
+    write_json(metadata_path, payload, force=force)
+    return metadata_path
 
+
+def _stringify_path_for_profile(path: Path, *, base_dir: Path) -> str:
+    resolved_path = path
+    if not resolved_path.is_absolute():
+        resolved_path = (base_dir / resolved_path).resolve()
+    else:
+        resolved_path = resolved_path.resolve()
+    try:
+        return str(resolved_path.relative_to(base_dir.resolve()))
+    except ValueError:
+        return str(resolved_path)
+
+
+def _handle_keys_validator_generate(args: argparse.Namespace) -> int:
     if args.out_dir is not None:
-        out_dir = args.out_dir.resolve()
-        write_json(
-            out_dir / "priv_validator_key.json",
-            payload["priv_validator_key"],
+        metadata_path = _write_validator_material_files(
+            out_dir=args.out_dir.resolve(),
+            private_key=args.private_key,
             force=args.force,
         )
-        write_json(
-            out_dir / "validator_key_info.json", payload, force=args.force
-        )
+        payload = read_json(metadata_path)
+    else:
+        payload = generate_validator_material(args.private_key)
 
     json.dump(payload, sys.stdout, indent=2)
     sys.stdout.write("\n")
@@ -66,16 +92,40 @@ def _handle_network_join(args: argparse.Namespace) -> int:
     runtime_backend = (
         args.runtime_backend or network.get("runtime_backend") or "xian-stack"
     )
+    if args.generate_validator_key and args.validator_key_ref is not None:
+        raise ValueError(
+            "pass either --validator-key-ref or --generate-validator-key, "
+            "not both"
+        )
+    if args.validator_key_dir is not None and not args.generate_validator_key:
+        raise ValueError(
+            "--validator-key-dir requires --generate-validator-key"
+        )
+
+    validator_key_ref: str | None = None
+    if args.validator_key_ref is not None:
+        validator_key_ref = _stringify_path_for_profile(
+            args.validator_key_ref,
+            base_dir=base_dir,
+        )
+    elif args.generate_validator_key:
+        key_dir = args.validator_key_dir or base_dir / "keys" / args.name
+        if not key_dir.is_absolute():
+            key_dir = (base_dir / key_dir).resolve()
+        metadata_path = _write_validator_material_files(
+            out_dir=key_dir,
+            force=args.force,
+        )
+        validator_key_ref = _stringify_path_for_profile(
+            metadata_path,
+            base_dir=base_dir,
+        )
 
     profile = NodeProfile(
         name=args.name,
         network=args.network,
         moniker=args.moniker or args.name,
-        validator_key_ref=(
-            str(args.validator_key_ref)
-            if args.validator_key_ref is not None
-            else None
-        ),
+        validator_key_ref=validator_key_ref,
         runtime_backend=runtime_backend,
         stack_dir=str(args.stack_dir) if args.stack_dir is not None else None,
         seeds=args.seed or [],
@@ -494,7 +544,23 @@ def build_parser() -> argparse.ArgumentParser:
     join_parser.add_argument(
         "--validator-key-ref",
         type=Path,
-        help="path to validator_key_info.json or priv_validator_key.json",
+        help=(
+            "path to validator_key_info.json or priv_validator_key.json; "
+            "omit this and pass --generate-validator-key to create one"
+        ),
+    )
+    join_parser.add_argument(
+        "--generate-validator-key",
+        action="store_true",
+        help="generate validator key material into ./keys/<name> by default",
+    )
+    join_parser.add_argument(
+        "--validator-key-dir",
+        type=Path,
+        help=(
+            "output directory for generated validator key material; defaults "
+            "to ./keys/<name>"
+        ),
     )
     join_parser.add_argument(
         "--runtime-backend",

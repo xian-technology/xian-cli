@@ -139,7 +139,7 @@ Resolution policy:
 
 - prefer a local `./networks/<name>.json` manifest when present
 - otherwise resolve the canonical manifest from the sibling
-  `xian-configs/networks/<name>.json`
+  `xian-configs/networks/<name>/manifest.json`
 
 ### Node Profile
 
@@ -165,6 +165,8 @@ Rules:
 
 - network manifests do not contain private keys
 - node profiles reference keys; they do not inline them
+- `network join` may generate validator key material, but it should still write
+  files under the workspace and store only a reference in the profile
 - node profiles should not duplicate network-owned seeds, snapshot URLs, or
   genesis sources unless the operator is intentionally applying a local override
 - generated runtime files are derived artifacts, not source-of-truth documents

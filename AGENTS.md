@@ -26,6 +26,8 @@
 - `network join` must resolve the referenced network manifest up front. Keep
   network-owned metadata in the manifest and node-local overrides in the
   profile.
+- Canonical manifests from `xian-configs` now live at
+  `networks/<name>/manifest.json` with colocated `genesis.json`.
 
 ## Validation
 - Preferred setup: `uv sync --group dev`
@@ -40,4 +42,7 @@
 - Keep precedence rules explicit: local node overrides win over network
   defaults, but the CLI should not duplicate canonical network metadata into
   node profiles without a clear reason.
+- `network join` may generate validator key material as part of the bootstrap
+  flow, but the generated files should still be referenced from the profile
+  rather than inlined into it.
 - Keep this repo small and orchestration-focused. Long operator flows should compose lower-level helpers rather than re-implement them.

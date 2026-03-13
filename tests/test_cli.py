@@ -118,17 +118,16 @@ class NetworkManifestTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp_dir:
             base_dir = Path(tmp_dir)
             configs_dir = base_dir / "xian-configs"
-            (configs_dir / "networks").mkdir(parents=True)
-            (configs_dir / "networks" / "canonical.json").write_text(
+            network_dir = configs_dir / "networks" / "canonical"
+            network_dir.mkdir(parents=True)
+            (network_dir / "manifest.json").write_text(
                 json.dumps(
                     {
                         "name": "canonical",
                         "chain_id": "xian-canonical-1",
                         "mode": "join",
                         "runtime_backend": "custom-backend",
-                        "genesis_source": (
-                            "../legacy/genesis/genesis-canonical.json"
-                        ),
+                        "genesis_source": "./genesis.json",
                         "snapshot_url": "https://example.invalid/snapshot",
                         "seed_nodes": ["seed-1@127.0.0.1:26656"],
                     }
@@ -165,17 +164,16 @@ class NetworkManifestTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp_dir:
             base_dir = Path(tmp_dir)
             configs_dir = base_dir / "xian-configs"
-            (configs_dir / "networks").mkdir(parents=True)
-            (configs_dir / "networks" / "canonical.json").write_text(
+            network_dir = configs_dir / "networks" / "canonical"
+            network_dir.mkdir(parents=True)
+            (network_dir / "manifest.json").write_text(
                 json.dumps(
                     {
                         "name": "canonical",
                         "chain_id": "xian-canonical-1",
                         "mode": "join",
                         "runtime_backend": "xian-stack",
-                        "genesis_source": (
-                            "../legacy/genesis/genesis-canonical.json"
-                        ),
+                        "genesis_source": "./genesis.json",
                         "snapshot_url": None,
                         "seed_nodes": ["seed-1@127.0.0.1:26656"],
                     }
@@ -217,6 +215,70 @@ class NetworkManifestTests(unittest.TestCase):
                 "https://example.invalid/node-snapshot",
             )
 
+    def test_network_join_can_generate_validator_key_material(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            base_dir = Path(tmp_dir)
+            configs_dir = base_dir / "xian-configs"
+            network_dir = configs_dir / "networks" / "canonical"
+            network_dir.mkdir(parents=True)
+            (network_dir / "manifest.json").write_text(
+                json.dumps(
+                    {
+                        "name": "canonical",
+                        "chain_id": "xian-canonical-1",
+                        "mode": "join",
+                        "runtime_backend": "xian-stack",
+                        "genesis_source": "./genesis.json",
+                        "snapshot_url": None,
+                        "seed_nodes": [],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            output_path = base_dir / "nodes" / "validator-1.json"
+            with patch.dict(
+                "os.environ", {"XIAN_CONFIGS_DIR": str(configs_dir)}
+            ):
+                with redirect_stdout(io.StringIO()):
+                    exit_code = main(
+                        [
+                            "network",
+                            "join",
+                            "validator-1",
+                            "--base-dir",
+                            str(base_dir),
+                            "--network",
+                            "canonical",
+                            "--generate-validator-key",
+                            "--output",
+                            str(output_path),
+                        ]
+                    )
+
+            self.assertEqual(exit_code, 0)
+            profile = json.loads(output_path.read_text(encoding="utf-8"))
+            self.assertEqual(
+                profile["validator_key_ref"],
+                "keys/validator-1/validator_key_info.json",
+            )
+            self.assertTrue(
+                (
+                    base_dir
+                    / "keys"
+                    / "validator-1"
+                    / "priv_validator_key.json"
+                ).exists()
+            )
+            self.assertTrue(
+                (
+                    base_dir
+                    / "keys"
+                    / "validator-1"
+                    / "validator_key_info.json"
+                ).exists()
+            )
+
     def test_network_join_requires_known_manifest(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             with self.assertRaisesRegex(FileNotFoundError, "network manifest"):
@@ -229,6 +291,26 @@ class NetworkManifestTests(unittest.TestCase):
                         tmp_dir,
                         "--network",
                         "does-not-exist",
+                    ]
+                )
+
+    def test_network_join_rejects_validator_key_dir_without_generation(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            with self.assertRaisesRegex(
+                ValueError,
+                "--validator-key-dir requires --generate-validator-key",
+            ):
+                main(
+                    [
+                        "network",
+                        "join",
+                        "validator-1",
+                        "--base-dir",
+                        tmp_dir,
+                        "--network",
+                        "mainnet",
+                        "--validator-key-dir",
+                        "keys/validator-1",
                     ]
                 )
 
@@ -686,29 +768,26 @@ class NodeInitTests(unittest.TestCase):
             stack_dir.mkdir()
 
             configs_dir = base_dir / "xian-configs"
-            (configs_dir / "networks").mkdir(parents=True)
-            legacy_genesis_dir = configs_dir / "legacy" / "genesis"
-            legacy_genesis_dir.mkdir(parents=True)
+            network_dir = configs_dir / "networks" / "canonical"
+            network_dir.mkdir(parents=True)
 
             genesis_payload = {
                 "chain_id": "xian-canonical-1",
                 "validators": [],
                 "abci_genesis": {},
             }
-            (legacy_genesis_dir / "genesis-canonical.json").write_text(
+            (network_dir / "genesis.json").write_text(
                 json.dumps(genesis_payload),
                 encoding="utf-8",
             )
-            (configs_dir / "networks" / "canonical.json").write_text(
+            (network_dir / "manifest.json").write_text(
                 json.dumps(
                     {
                         "name": "canonical",
                         "chain_id": "xian-canonical-1",
                         "mode": "join",
                         "runtime_backend": "xian-stack",
-                        "genesis_source": (
-                            "../legacy/genesis/genesis-canonical.json"
-                        ),
+                        "genesis_source": "./genesis.json",
                         "snapshot_url": None,
                         "seed_nodes": ["seed-1@127.0.0.1:26656"],
                     }
@@ -1037,9 +1116,10 @@ class ConfigRepoTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp_dir:
             base_dir = Path(tmp_dir)
             configs_dir = base_dir / "xian-configs"
-            networks_dir = configs_dir / "networks"
-            networks_dir.mkdir(parents=True)
-            manifest_path = networks_dir / "mainnet.json"
+            manifest_path = (
+                configs_dir / "networks" / "mainnet" / "manifest.json"
+            )
+            manifest_path.parent.mkdir(parents=True)
             manifest_path.write_text("{}", encoding="utf-8")
 
             resolved = resolve_network_manifest_path(

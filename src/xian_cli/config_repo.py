@@ -56,7 +56,7 @@ def resolve_network_manifest_path(
 
     resolved_configs_dir = resolve_configs_dir(base_dir, explicit=configs_dir)
     canonical_manifest = (
-        resolved_configs_dir / "networks" / f"{network_name}.json"
+        resolved_configs_dir / "networks" / network_name / "manifest.json"
     ).resolve()
     if canonical_manifest.exists():
         return canonical_manifest
