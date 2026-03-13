@@ -9,6 +9,8 @@
 ## Project Layout
 - `src/xian_cli/cli.py`: main command surface and argument parsing.
 - `src/xian_cli/models.py`: network manifest and node profile models.
+- `src/xian_cli/config_repo.py`: resolution of canonical network manifests from
+  `xian-configs`.
 - `src/xian_cli/runtime.py`: backend-specific runtime helpers.
 - `src/xian_cli/abci_bridge.py`: import bridge into `xian-abci`.
 - `src/xian_cli/cometbft.py`: key generation and CometBFT-specific helpers.
@@ -19,7 +21,8 @@
 - Do not copy ABCI setup logic into this repo. Import helpers from `xian-abci` instead.
 - Do not grow `xian-stack` Make targets into the public UX. `xian-cli` should call stable backend operations and present the operator-facing flow.
 - If you change manifest or profile formats, update `docs/LIFECYCLE_CONTRACT.md` and `README.md` in the same change.
-- If a feature needs canonical network definitions, keep those outside this repo and consume them here.
+- If a feature needs canonical network definitions, keep those in
+  `xian-configs` and consume them here.
 
 ## Validation
 - Preferred setup: `uv sync --group dev`
@@ -29,4 +32,6 @@
 
 ## Notes
 - The reference workspace is `~/xian` with sibling repos beside this one.
+- `xian-cli` should prefer local `./networks` manifests when present, but fall
+  back cleanly to canonical manifests from the sibling `xian-configs` repo.
 - Keep this repo small and orchestration-focused. Long operator flows should compose lower-level helpers rather than re-implement them.

@@ -36,11 +36,15 @@ uv run xian node stop mainnet-node
 ```
 
 `--genesis-source` accepts either a local file path or an `http`/`https` URL.
+If `./networks/<name>.json` does not exist locally, `node init`, `node start`,
+and `node stop` fall back to the sibling `xian-configs/networks/<name>.json`
+manifest.
 
 ## Workspace Model
 
 The preferred layout is a shared parent directory such as `~/xian/` containing
-sibling checkouts of `xian-cli`, `xian-abci`, and `xian-stack`. `xian node init`
+sibling checkouts of `xian-cli`, `xian-abci`, `xian-configs`, and `xian-stack`.
+`xian node init`
 currently expects either:
 
 - `xian-abci` installed in the same Python environment, or

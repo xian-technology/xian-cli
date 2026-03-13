@@ -8,6 +8,7 @@ from urllib.parse import urlparse
 
 from xian_cli.abci_bridge import get_node_setup_module
 from xian_cli.cometbft import generate_validator_material
+from xian_cli.config_repo import resolve_network_manifest_path
 from xian_cli.models import NetworkManifest, NodeProfile, read_json, write_json
 from xian_cli.runtime import (
     default_home_for_backend,
@@ -154,6 +155,7 @@ def _load_profile_and_network(
     name: str,
     profile_arg: Path | None,
     network_arg: Path | None,
+    configs_dir: Path | None = None,
 ) -> tuple[Path, dict, Path, dict]:
     profile_path = profile_arg or base_dir / "nodes" / f"{name}.json"
     if not profile_path.is_absolute():
@@ -169,12 +171,12 @@ def _load_profile_and_network(
             "recreate it with xian network join"
         )
 
-    network_path = network_arg or base_dir / "networks" / f"{network_name}.json"
-    if not network_path.is_absolute():
-        network_path = (base_dir / network_path).resolve()
-    if not network_path.exists():
-        raise FileNotFoundError(f"network manifest not found: {network_path}")
-
+    network_path = resolve_network_manifest_path(
+        base_dir=base_dir,
+        network_name=network_name,
+        explicit_manifest=network_arg,
+        configs_dir=configs_dir,
+    )
     network = read_json(network_path)
     return profile_path, profile, network_path, network
 
@@ -188,6 +190,7 @@ def _handle_node_init(args: argparse.Namespace) -> int:
         name=args.name,
         profile_arg=args.profile,
         network_arg=args.network,
+        configs_dir=args.configs_dir,
     )
     runtime_backend = profile.get("runtime_backend") or network.get(
         "runtime_backend"
@@ -286,6 +289,7 @@ def _handle_node_start(args: argparse.Namespace) -> int:
         name=args.name,
         profile_arg=args.profile,
         network_arg=args.network,
+        configs_dir=args.configs_dir,
     )
 
     runtime_backend = profile.get("runtime_backend") or network.get(
@@ -337,6 +341,7 @@ def _handle_node_stop(args: argparse.Namespace) -> int:
         name=args.name,
         profile_arg=args.profile,
         network_arg=args.network,
+        configs_dir=args.configs_dir,
     )
 
     runtime_backend = profile.get("runtime_backend") or network.get(
@@ -554,6 +559,14 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     init_parser.add_argument(
+        "--configs-dir",
+        type=Path,
+        help=(
+            "explicit xian-configs checkout path; defaults to XIAN_CONFIGS_DIR "
+            "or the sibling workspace layout"
+        ),
+    )
+    init_parser.add_argument(
         "--home",
         type=Path,
         help="explicit CometBFT home path; overrides the profile home",
@@ -601,6 +614,14 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     start_parser.add_argument(
+        "--configs-dir",
+        type=Path,
+        help=(
+            "explicit xian-configs checkout path; defaults to XIAN_CONFIGS_DIR "
+            "or the sibling workspace layout"
+        ),
+    )
+    start_parser.add_argument(
         "--skip-health-check",
         action="store_true",
         help="start the node without waiting for the RPC health check",
@@ -643,6 +664,14 @@ def build_parser() -> argparse.ArgumentParser:
         help=(
             "explicit xian-stack checkout path; "
             "overrides stack_dir in the profile"
+        ),
+    )
+    stop_parser.add_argument(
+        "--configs-dir",
+        type=Path,
+        help=(
+            "explicit xian-configs checkout path; defaults to XIAN_CONFIGS_DIR "
+            "or the sibling workspace layout"
         ),
     )
     stop_parser.set_defaults(handler=_handle_node_stop)

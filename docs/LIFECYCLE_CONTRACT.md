@@ -43,7 +43,7 @@ This stage produces the validator material required for `priv_validator_key.json
 ### 2. Network Manifest
 
 - Owner: `xian-cli`
-- Source of truth: network manifest JSON
+- Source of truth: network manifest JSON, either local or canonical from `xian-configs`
 - Inputs: chain ID, bootstrap mode, genesis source, seeds, optional snapshot source
 - Outputs: immutable network-level description
 
@@ -126,6 +126,12 @@ The network manifest is the network-level source of truth. Target fields:
   "seed_nodes": ["node_id@host:26656"]
 }
 ```
+
+Resolution policy:
+
+- prefer a local `./networks/<name>.json` manifest when present
+- otherwise resolve the canonical manifest from the sibling
+  `xian-configs/networks/<name>.json`
 
 ### Node Profile
 

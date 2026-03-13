@@ -13,12 +13,19 @@ from urllib.error import URLError
 import xian_cli.abci_bridge as abci_bridge
 from xian_cli.cli import main
 from xian_cli.cometbft import generate_validator_material
+from xian_cli.config_repo import (
+    resolve_configs_dir,
+    resolve_network_manifest_path,
+)
 from xian_cli.runtime import (
     resolve_stack_dir,
     start_xian_stack_node,
     stop_xian_stack_node,
     wait_for_rpc_ready,
 )
+
+WORKSPACE_ROOT = Path(__file__).resolve().parents[2]
+LEGACY_GENESIS_DIR = WORKSPACE_ROOT / "xian-configs" / "legacy" / "genesis"
 
 
 class ValidatorKeyTests(unittest.TestCase):
@@ -166,15 +173,7 @@ class NodeInitTests(unittest.TestCase):
             (base_dir / "nodes").mkdir()
             (base_dir / "keys" / "validator-1").mkdir(parents=True)
 
-            genesis_source = (
-                Path(__file__).resolve().parents[2]
-                / "xian-abci"
-                / "src"
-                / "xian"
-                / "tools"
-                / "genesis"
-                / "genesis-devnet.json"
-            )
+            genesis_source = LEGACY_GENESIS_DIR / "genesis-devnet.json"
 
             with redirect_stdout(io.StringIO()):
                 main(
@@ -333,15 +332,7 @@ class NodeInitTests(unittest.TestCase):
             key_dir = base_dir / "keys" / "validator-1"
             key_dir.mkdir(parents=True)
 
-            genesis_source = (
-                Path(__file__).resolve().parents[2]
-                / "xian-abci"
-                / "src"
-                / "xian"
-                / "tools"
-                / "genesis"
-                / "genesis-devnet.json"
-            )
+            genesis_source = LEGACY_GENESIS_DIR / "genesis-devnet.json"
 
             with redirect_stdout(io.StringIO()):
                 main(
@@ -408,15 +399,7 @@ class NodeInitTests(unittest.TestCase):
             (base_dir / "nodes").mkdir()
             (base_dir / "keys" / "validator-1").mkdir(parents=True)
 
-            genesis_source = (
-                Path(__file__).resolve().parents[2]
-                / "xian-abci"
-                / "src"
-                / "xian"
-                / "tools"
-                / "genesis"
-                / "genesis-devnet.json"
-            )
+            genesis_source = LEGACY_GENESIS_DIR / "genesis-devnet.json"
 
             with redirect_stdout(io.StringIO()):
                 main(
@@ -470,6 +453,102 @@ class NodeInitTests(unittest.TestCase):
                         str(base_dir),
                     ]
                 )
+
+    def test_node_init_uses_xian_configs_when_local_manifest_is_missing(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            base_dir = Path(tmp_dir)
+            (base_dir / "nodes").mkdir()
+            key_dir = base_dir / "keys" / "validator-1"
+            key_dir.mkdir(parents=True)
+            stack_dir = base_dir / "xian-stack"
+            stack_dir.mkdir()
+
+            configs_dir = base_dir / "xian-configs"
+            (configs_dir / "networks").mkdir(parents=True)
+            legacy_genesis_dir = configs_dir / "legacy" / "genesis"
+            legacy_genesis_dir.mkdir(parents=True)
+
+            genesis_payload = {
+                "chain_id": "xian-canonical-1",
+                "validators": [],
+                "abci_genesis": {},
+            }
+            (legacy_genesis_dir / "genesis-canonical.json").write_text(
+                json.dumps(genesis_payload),
+                encoding="utf-8",
+            )
+            (configs_dir / "networks" / "canonical.json").write_text(
+                json.dumps(
+                    {
+                        "name": "canonical",
+                        "chain_id": "xian-canonical-1",
+                        "mode": "join",
+                        "runtime_backend": "xian-stack",
+                        "genesis_source": (
+                            "../legacy/genesis/genesis-canonical.json"
+                        ),
+                        "snapshot_url": None,
+                        "seed_nodes": ["seed-1@127.0.0.1:26656"],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            with redirect_stdout(io.StringIO()):
+                main(
+                    [
+                        "keys",
+                        "validator",
+                        "generate",
+                        "--out-dir",
+                        str(key_dir),
+                    ]
+                )
+                main(
+                    [
+                        "network",
+                        "join",
+                        "validator-1",
+                        "--network",
+                        "canonical",
+                        "--validator-key-ref",
+                        str(key_dir / "validator_key_info.json"),
+                        "--stack-dir",
+                        str(stack_dir),
+                        "--output",
+                        str(base_dir / "nodes" / "validator-1.json"),
+                    ]
+                )
+
+            stdout = io.StringIO()
+            with patch.dict(
+                "os.environ", {"XIAN_CONFIGS_DIR": str(configs_dir)}
+            ):
+                with redirect_stdout(stdout):
+                    exit_code = main(
+                        [
+                            "node",
+                            "init",
+                            "validator-1",
+                            "--base-dir",
+                            str(base_dir),
+                        ]
+                    )
+
+            self.assertEqual(exit_code, 0)
+            result = json.loads(stdout.getvalue())
+            home = Path(result["home"])
+            rendered_genesis = json.loads(
+                (home / "config" / "genesis.json").read_text(encoding="utf-8")
+            )
+            rendered_config = (home / "config" / "config.toml").read_text(
+                encoding="utf-8"
+            )
+
+            self.assertEqual(rendered_genesis["chain_id"], "xian-canonical-1")
+            self.assertIn("seed-1@127.0.0.1:26656", rendered_config)
 
 
 class NodeRuntimeTests(unittest.TestCase):
@@ -714,6 +793,34 @@ class RuntimeHelperTests(unittest.TestCase):
             ],
         )
         self.assertEqual(result["container_target"], "abci-down")
+
+
+class ConfigRepoTests(unittest.TestCase):
+    def test_resolve_configs_dir_uses_workspace_fallback(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            resolved = resolve_configs_dir(Path(tmp_dir))
+
+        expected = (WORKSPACE_ROOT / "xian-configs").resolve()
+        self.assertEqual(resolved, expected)
+
+    def test_resolve_network_manifest_path_prefers_canonical_configs_repo(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            base_dir = Path(tmp_dir)
+            configs_dir = base_dir / "xian-configs"
+            networks_dir = configs_dir / "networks"
+            networks_dir.mkdir(parents=True)
+            manifest_path = networks_dir / "mainnet.json"
+            manifest_path.write_text("{}", encoding="utf-8")
+
+            resolved = resolve_network_manifest_path(
+                base_dir=base_dir,
+                network_name="mainnet",
+                configs_dir=configs_dir,
+            )
+
+        self.assertEqual(resolved, manifest_path.resolve())
 
 
 if __name__ == "__main__":
