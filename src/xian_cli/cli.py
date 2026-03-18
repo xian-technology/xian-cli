@@ -637,9 +637,7 @@ def _resolve_runtime_backend(profile: dict, network: dict) -> str:
         "runtime_backend"
     )
     if runtime_backend not in SUPPORTED_RUNTIME_BACKENDS:
-        raise ValueError(
-            f"unsupported runtime backend: {runtime_backend}"
-        )
+        raise ValueError(f"unsupported runtime backend: {runtime_backend}")
     return runtime_backend
 
 
@@ -1023,9 +1021,7 @@ def _collect_node_status(
                 stack_dir=stack_dir,
                 service_node=bool(profile.get("service_node")),
                 dashboard_enabled=bool(profile.get("dashboard_enabled")),
-                dashboard_host=str(
-                    profile.get("dashboard_host", "127.0.0.1")
-                ),
+                dashboard_host=str(profile.get("dashboard_host", "127.0.0.1")),
                 dashboard_port=int(profile.get("dashboard_port", 8080)),
             )
             result["backend_status"] = backend_status
@@ -1343,8 +1339,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--enable-dashboard",
         action="store_true",
         help=(
-            "start the optional dashboard alongside the bootstrap node "
-            "runtime"
+            "start the optional dashboard alongside the bootstrap node runtime"
         ),
     )
     create_parser.add_argument(

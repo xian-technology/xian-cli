@@ -1923,9 +1923,7 @@ class RuntimeHelperTests(unittest.TestCase):
         with patch(
             "xian_cli.runtime.run_backend_command"
         ) as run_backend_command:
-            run_backend_command.return_value = {
-                "container_target": "abci-down"
-            }
+            run_backend_command.return_value = {"container_target": "abci-down"}
             result = stop_xian_stack_node(
                 stack_dir=stack_dir,
                 service_node=False,

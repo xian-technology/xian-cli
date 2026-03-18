@@ -102,9 +102,7 @@ def run_backend_command(
 
     if wait_for_health is not None:
         cmd.append(
-            "--wait-for-health"
-            if wait_for_health
-            else "--no-wait-for-health"
+            "--wait-for-health" if wait_for_health else "--no-wait-for-health"
         )
     if rpc_timeout_seconds is not None:
         cmd.extend(["--rpc-timeout-seconds", str(rpc_timeout_seconds)])

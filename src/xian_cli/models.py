@@ -111,9 +111,7 @@ def normalize_node_profile(payload: dict) -> dict:
         "seeds": _require_str_list(payload, "seeds"),
         "genesis_url": _require_optional_str(payload, "genesis_url"),
         "snapshot_url": _require_optional_str(payload, "snapshot_url"),
-        "service_node": _require_bool(
-            payload, "service_node", default=False
-        ),
+        "service_node": _require_bool(payload, "service_node", default=False),
         "home": _require_optional_str(payload, "home"),
         "pruning_enabled": _require_bool(
             payload, "pruning_enabled", default=False
@@ -127,9 +125,7 @@ def normalize_node_profile(payload: dict) -> dict:
         "dashboard_host": _require_str(payload, "dashboard_host")
         if "dashboard_host" in payload
         else "127.0.0.1",
-        "dashboard_port": _require_int(
-            payload, "dashboard_port", default=8080
-        ),
+        "dashboard_port": _require_int(payload, "dashboard_port", default=8080),
     }
 
 
