@@ -12,13 +12,21 @@ from xian_cli.abci_bridge import (
     get_node_admin_module,
     get_node_setup_module,
 )
-from xian_cli.cometbft import generate_validator_material
 from xian_cli.config_repo import (
     resolve_configs_dir,
     resolve_network_manifest_path,
 )
-from xian_cli.models import NetworkManifest, NodeProfile, read_json, write_json
+from xian_cli.models import (
+    SUPPORTED_RUNTIME_BACKENDS,
+    NetworkManifest,
+    NodeProfile,
+    read_json,
+    read_network_manifest,
+    read_node_profile,
+    write_json,
+)
 from xian_cli.runtime import (
+    DEFAULT_RPC_TIMEOUT_SECONDS,
     default_home_for_backend,
     fetch_json,
     get_xian_stack_node_status,
@@ -34,7 +42,8 @@ def _write_validator_material_files(
     private_key: str | None = None,
     force: bool = False,
 ) -> Path:
-    payload = generate_validator_material(private_key)
+    node_setup = get_node_setup_module()
+    payload = node_setup.generate_validator_material(private_key)
     write_json(
         out_dir / "priv_validator_key.json",
         payload["priv_validator_key"],
@@ -82,7 +91,9 @@ def _handle_keys_validator_generate(args: argparse.Namespace) -> int:
         )
         payload = read_json(metadata_path)
     else:
-        payload = generate_validator_material(args.private_key)
+        payload = get_node_setup_module().generate_validator_material(
+            args.private_key
+        )
 
     json.dump(payload, sys.stdout, indent=2)
     sys.stdout.write("\n")
@@ -314,6 +325,17 @@ def _handle_network_create(args: argparse.Namespace) -> int:
             blocks_to_keep=(
                 args.blocks_to_keep if validator["is_bootstrap"] else 100000
             ),
+            dashboard_enabled=(
+                args.enable_dashboard if validator["is_bootstrap"] else False
+            ),
+            dashboard_host=(
+                args.dashboard_host
+                if validator["is_bootstrap"]
+                else "127.0.0.1"
+            ),
+            dashboard_port=(
+                args.dashboard_port if validator["is_bootstrap"] else 8080
+            ),
         )
         write_json(profile_path, profile.to_dict(), force=args.force)
         validator_result["profile_path"] = str(profile_path)
@@ -372,7 +394,7 @@ def _handle_network_join(args: argparse.Namespace) -> int:
         explicit_manifest=args.network_manifest,
         configs_dir=args.configs_dir,
     )
-    network = read_json(network_path)
+    network = read_network_manifest(network_path)
     runtime_backend = (
         args.runtime_backend or network.get("runtime_backend") or "xian-stack"
     )
@@ -421,6 +443,9 @@ def _handle_network_join(args: argparse.Namespace) -> int:
         home=str(args.home) if args.home is not None else None,
         pruning_enabled=args.enable_pruning,
         blocks_to_keep=args.blocks_to_keep,
+        dashboard_enabled=args.enable_dashboard,
+        dashboard_host=args.dashboard_host,
+        dashboard_port=args.dashboard_port,
     )
     target = args.output or base_dir / "nodes" / f"{args.name}.json"
     if not target.is_absolute():
@@ -611,8 +636,10 @@ def _resolve_runtime_backend(profile: dict, network: dict) -> str:
     runtime_backend = profile.get("runtime_backend") or network.get(
         "runtime_backend"
     )
-    if runtime_backend != "xian-stack":
-        raise ValueError(f"unsupported runtime backend: {runtime_backend}")
+    if runtime_backend not in SUPPORTED_RUNTIME_BACKENDS:
+        raise ValueError(
+            f"unsupported runtime backend: {runtime_backend}"
+        )
     return runtime_backend
 
 
@@ -718,7 +745,7 @@ def _load_profile_and_network(
     if not profile_path.exists():
         raise FileNotFoundError(f"node profile not found: {profile_path}")
 
-    profile = read_json(profile_path)
+    profile = read_node_profile(profile_path)
     network_name = profile.get("network")
     if not network_name:
         raise ValueError(
@@ -732,7 +759,7 @@ def _load_profile_and_network(
         explicit_manifest=network_arg,
         configs_dir=configs_dir,
     )
-    network = read_json(network_path)
+    network = read_network_manifest(network_path)
     return profile_path, profile, network_path, network
 
 
@@ -887,6 +914,9 @@ def _handle_node_start(args: argparse.Namespace) -> int:
     result = start_xian_stack_node(
         stack_dir=stack_dir,
         service_node=bool(profile.get("service_node")),
+        dashboard_enabled=bool(profile.get("dashboard_enabled")),
+        dashboard_host=str(profile.get("dashboard_host", "127.0.0.1")),
+        dashboard_port=int(profile.get("dashboard_port", 8080)),
         wait_for_rpc=not args.skip_health_check,
         rpc_timeout_seconds=args.rpc_timeout_seconds,
     )
@@ -915,6 +945,9 @@ def _handle_node_stop(args: argparse.Namespace) -> int:
     result = stop_xian_stack_node(
         stack_dir=stack_dir,
         service_node=bool(profile.get("service_node")),
+        dashboard_enabled=bool(profile.get("dashboard_enabled")),
+        dashboard_host=str(profile.get("dashboard_host", "127.0.0.1")),
+        dashboard_port=int(profile.get("dashboard_port", 8080)),
     )
     print(json.dumps(result, indent=2))
     return 0
@@ -989,6 +1022,11 @@ def _collect_node_status(
             backend_status = get_xian_stack_node_status(
                 stack_dir=stack_dir,
                 service_node=bool(profile.get("service_node")),
+                dashboard_enabled=bool(profile.get("dashboard_enabled")),
+                dashboard_host=str(
+                    profile.get("dashboard_host", "127.0.0.1")
+                ),
+                dashboard_port=int(profile.get("dashboard_port", 8080)),
             )
             result["backend_status"] = backend_status
             result["backend_checked"] = True
@@ -1183,6 +1221,7 @@ def build_parser() -> argparse.ArgumentParser:
     create_parser.add_argument(
         "--runtime-backend",
         default="xian-stack",
+        choices=sorted(SUPPORTED_RUNTIME_BACKENDS),
         help="runtime backend used for this network",
     )
     create_parser.add_argument(
@@ -1301,6 +1340,26 @@ def build_parser() -> argparse.ArgumentParser:
         help="number of blocks to retain when pruning is enabled",
     )
     create_parser.add_argument(
+        "--enable-dashboard",
+        action="store_true",
+        help=(
+            "start the optional dashboard alongside the bootstrap node "
+            "runtime"
+        ),
+    )
+    create_parser.add_argument(
+        "--dashboard-host",
+        type=str,
+        default="127.0.0.1",
+        help="host interface to bind for the dashboard publish port",
+    )
+    create_parser.add_argument(
+        "--dashboard-port",
+        type=int,
+        default=8080,
+        help="host port to publish for the dashboard",
+    )
+    create_parser.add_argument(
         "--output",
         type=Path,
         help=(
@@ -1360,6 +1419,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     join_parser.add_argument(
         "--runtime-backend",
+        choices=sorted(SUPPORTED_RUNTIME_BACKENDS),
         help=(
             "node-local runtime backend override; defaults to the network "
             "manifest value"
@@ -1430,6 +1490,23 @@ def build_parser() -> argparse.ArgumentParser:
         type=int,
         default=100000,
         help="number of blocks to retain when pruning is enabled",
+    )
+    join_parser.add_argument(
+        "--enable-dashboard",
+        action="store_true",
+        help="start the optional dashboard alongside this node runtime",
+    )
+    join_parser.add_argument(
+        "--dashboard-host",
+        type=str,
+        default="127.0.0.1",
+        help="host interface to bind for the dashboard publish port",
+    )
+    join_parser.add_argument(
+        "--dashboard-port",
+        type=int,
+        default=8080,
+        help="host port to publish for the dashboard",
     )
     join_parser.add_argument(
         "--output",
@@ -1563,7 +1640,7 @@ def build_parser() -> argparse.ArgumentParser:
     start_parser.add_argument(
         "--rpc-timeout-seconds",
         type=float,
-        default=30.0,
+        default=DEFAULT_RPC_TIMEOUT_SECONDS,
         help="time to wait for the local RPC status endpoint",
     )
     start_parser.set_defaults(handler=_handle_node_start)

@@ -56,10 +56,6 @@ def resolve_network_manifest_path(
     if local_manifest_dir.exists():
         return local_manifest_dir
 
-    local_manifest = (base_dir / "networks" / f"{network_name}.json").resolve()
-    if local_manifest.exists():
-        return local_manifest
-
     resolved_configs_dir = resolve_configs_dir(base_dir, explicit=configs_dir)
     canonical_manifest = (
         resolved_configs_dir / "networks" / network_name / "manifest.json"
@@ -69,5 +65,5 @@ def resolve_network_manifest_path(
 
     raise FileNotFoundError(
         "network manifest not found in local workspace or xian-configs: "
-        f"{local_manifest_dir}, {local_manifest}, or {canonical_manifest}"
+        f"{local_manifest_dir} or {canonical_manifest}"
     )

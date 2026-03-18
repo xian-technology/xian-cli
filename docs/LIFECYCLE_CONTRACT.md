@@ -61,7 +61,7 @@ This stage defines facts about a network, not about a specific node.
 
 - Owner: `xian-cli`
 - Source of truth: node profile JSON
-- Inputs: network reference, moniker, key references, role flags, home path, runtime backend options
+- Inputs: network reference, moniker, key references, role flags, and home path
 - Outputs: local node intent
 
 This stage defines machine-local choices. It should reference keys and networks, not duplicate them.
@@ -70,8 +70,7 @@ Resolution policy:
 
 - local manifests should be written at `./networks/<name>/manifest.json`
 - `network join` should resolve the referenced network manifest immediately
-- effective defaults such as `runtime_backend` come from the network manifest
-  unless the operator passes a node-local override
+- `runtime_backend` is explicit and currently must be `xian-stack`
 - node-local overrides such as extra seeds, snapshot URL overrides, and genesis
   URL overrides belong in the node profile
 - `network create` may write a colocated `genesis.json` beside the manifest
@@ -152,6 +151,7 @@ The network manifest is the network-level source of truth. Target fields:
 
 ```json
 {
+  "schema_version": 1,
   "name": "mainnet",
   "chain_id": "xian-mainnet-1",
   "mode": "join",
@@ -165,7 +165,6 @@ The network manifest is the network-level source of truth. Target fields:
 Resolution policy:
 
 - prefer a local `./networks/<name>/manifest.json` manifest when present
-- accept `./networks/<name>.json` only as a temporary legacy fallback
 - otherwise resolve the canonical manifest from the sibling
   `xian-configs/networks/<name>/manifest.json`
 
@@ -175,6 +174,7 @@ The node profile is the machine-local source of truth. Target fields:
 
 ```json
 {
+  "schema_version": 1,
   "name": "validator-1",
   "network": "mainnet",
   "moniker": "validator-1",
@@ -182,15 +182,14 @@ The node profile is the machine-local source of truth. Target fields:
   "home": "~/.cometbft",
   "service_node": false,
   "runtime_backend": "xian-stack",
-  "pruning": {
-    "enabled": false,
-    "blocks_to_keep": 100000
-  }
+  "pruning_enabled": false,
+  "blocks_to_keep": 100000
 }
 ```
 
 Rules:
 
+- manifests and profiles must declare `schema_version: 1`
 - network manifests do not contain private keys
 - node profiles reference keys; they do not inline them
 - `network create` may generate a local `genesis.json`, but that file remains a
@@ -221,12 +220,22 @@ Rules:
 ### `xian-stack`
 
 - should expose stable runtime operations for:
-  - prepare
+  - validate
+  - smoke
+  - smoke-cli
   - start
   - stop
   - status
+  - localnet-init
+  - localnet-build
+  - localnet-up
+  - localnet-down
+  - localnet-status
 
-Short term, these can still be backed by `docker compose` and Make targets. Long term, they should be treated as backend operations, not operator UX.
+These are now exposed through the machine-readable `scripts/backend.py`
+wrapper in `xian-stack`. Internally that wrapper may still call `make` and
+`docker compose`, but the wrapper is the backend contract that `xian-cli`
+consumes.
 
 ### `xian-contracting`
 
@@ -253,5 +262,4 @@ The current implementation already supports:
 
 The next implementation passes should focus on keeping this contract small and
 stable while expanding what sits behind it, especially richer canonical network
-metadata in `xian-configs` and additional backend implementations beyond
-`xian-stack`.
+metadata in `xian-configs`.

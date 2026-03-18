@@ -1,22 +1,22 @@
 from __future__ import annotations
 
+import importlib
 import io
 import json
-import sys
 import tempfile
 import unittest
 from contextlib import redirect_stdout
 from pathlib import Path
-from unittest.mock import call, patch
+from unittest.mock import patch
 from urllib.error import URLError
 
 import xian_cli.abci_bridge as abci_bridge
 from xian_cli.cli import main
-from xian_cli.cometbft import generate_validator_material
 from xian_cli.config_repo import (
     resolve_configs_dir,
     resolve_network_manifest_path,
 )
+from xian_cli.models import read_network_manifest, read_node_profile
 from xian_cli.runtime import (
     get_xian_stack_node_status,
     resolve_stack_dir,
@@ -26,12 +26,16 @@ from xian_cli.runtime import (
 )
 
 WORKSPACE_ROOT = Path(__file__).resolve().parents[2]
-LEGACY_GENESIS_DIR = WORKSPACE_ROOT / "xian-configs" / "legacy" / "genesis"
+CANONICAL_DEVNET_GENESIS = (
+    WORKSPACE_ROOT / "xian-configs" / "networks" / "devnet" / "genesis.json"
+)
 
 
 class ValidatorKeyTests(unittest.TestCase):
     def test_generate_validator_material_shape(self) -> None:
-        payload = generate_validator_material()
+        payload = (
+            abci_bridge.get_node_setup_module().generate_validator_material()
+        )
         self.assertEqual(len(payload["validator_private_key_hex"]), 64)
         self.assertEqual(len(payload["validator_public_key_hex"]), 64)
         self.assertIn("address", payload["priv_validator_key"])
@@ -84,6 +88,7 @@ class NetworkManifestTests(unittest.TestCase):
                 )
             self.assertEqual(exit_code, 0)
             manifest = json.loads(output_path.read_text(encoding="utf-8"))
+            self.assertEqual(manifest["schema_version"], 1)
             self.assertEqual(manifest["name"], "local-dev")
             self.assertEqual(manifest["chain_id"], "xian-local-1")
             self.assertEqual(manifest["mode"], "create")
@@ -111,7 +116,10 @@ class NetworkManifestTests(unittest.TestCase):
             manifest_path = (
                 base_dir / "networks" / "local-dev" / "manifest.json"
             )
-            self.assertEqual(result["manifest_path"], str(manifest_path))
+            self.assertEqual(
+                result["manifest_path"],
+                str(manifest_path.resolve()),
+            )
             manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
             self.assertEqual(manifest["mode"], "create")
             self.assertIsNone(manifest["genesis_source"])
@@ -130,17 +138,78 @@ class NetworkManifestTests(unittest.TestCase):
                         "--seed",
                         "abc@127.0.0.1:26656",
                         "--service-node",
+                        "--enable-dashboard",
+                        "--dashboard-host",
+                        "0.0.0.0",
+                        "--dashboard-port",
+                        "18080",
                         "--output",
                         str(output_path),
                     ]
                 )
             self.assertEqual(exit_code, 0)
             profile = json.loads(output_path.read_text(encoding="utf-8"))
+            self.assertEqual(profile["schema_version"], 1)
             self.assertEqual(profile["name"], "validator-1")
             self.assertEqual(profile["network"], "mainnet")
             self.assertEqual(profile["moniker"], "validator-1")
             self.assertEqual(profile["seeds"], ["abc@127.0.0.1:26656"])
             self.assertTrue(profile["service_node"])
+            self.assertTrue(profile["dashboard_enabled"])
+            self.assertEqual(profile["dashboard_host"], "0.0.0.0")
+            self.assertEqual(profile["dashboard_port"], 18080)
+
+    def test_network_create_writes_dashboard_settings_to_bootstrap_profile(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            base_dir = Path(tmp_dir)
+            key_dir = base_dir / "keys" / "local-dev"
+            with redirect_stdout(io.StringIO()):
+                self.assertEqual(
+                    main(
+                        [
+                            "keys",
+                            "validator",
+                            "generate",
+                            "--out-dir",
+                            str(key_dir),
+                        ]
+                    ),
+                    0,
+                )
+            stdout = io.StringIO()
+            with redirect_stdout(stdout):
+                exit_code = main(
+                    [
+                        "network",
+                        "create",
+                        "local-dev",
+                        "--base-dir",
+                        str(base_dir),
+                        "--chain-id",
+                        "xian-local-1",
+                        "--bootstrap-node",
+                        "local-dev",
+                        "--validator-key-ref",
+                        str(key_dir / "validator_key_info.json"),
+                        "--genesis-source",
+                        str(CANONICAL_DEVNET_GENESIS),
+                        "--enable-dashboard",
+                        "--dashboard-host",
+                        "0.0.0.0",
+                        "--dashboard-port",
+                        "18080",
+                    ]
+                )
+
+            self.assertEqual(exit_code, 0)
+            result = json.loads(stdout.getvalue())
+            profile_path = Path(result["validators"][0]["profile_path"])
+            profile = json.loads(profile_path.read_text(encoding="utf-8"))
+            self.assertTrue(profile["dashboard_enabled"])
+            self.assertEqual(profile["dashboard_host"], "0.0.0.0")
+            self.assertEqual(profile["dashboard_port"], 18080)
 
     def test_network_join_uses_canonical_manifest_defaults(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -151,10 +220,11 @@ class NetworkManifestTests(unittest.TestCase):
             (network_dir / "manifest.json").write_text(
                 json.dumps(
                     {
+                        "schema_version": 1,
                         "name": "canonical",
                         "chain_id": "xian-canonical-1",
                         "mode": "join",
-                        "runtime_backend": "custom-backend",
+                        "runtime_backend": "xian-stack",
                         "genesis_source": "./genesis.json",
                         "snapshot_url": "https://example.invalid/snapshot",
                         "seed_nodes": ["seed-1@127.0.0.1:26656"],
@@ -184,7 +254,7 @@ class NetworkManifestTests(unittest.TestCase):
 
             self.assertEqual(exit_code, 0)
             profile = json.loads(output_path.read_text(encoding="utf-8"))
-            self.assertEqual(profile["runtime_backend"], "custom-backend")
+            self.assertEqual(profile["runtime_backend"], "xian-stack")
             self.assertEqual(profile["seeds"], [])
             self.assertIsNone(profile["snapshot_url"])
 
@@ -197,6 +267,7 @@ class NetworkManifestTests(unittest.TestCase):
             (network_dir / "manifest.json").write_text(
                 json.dumps(
                     {
+                        "schema_version": 1,
                         "name": "canonical",
                         "chain_id": "xian-canonical-1",
                         "mode": "join",
@@ -223,8 +294,6 @@ class NetworkManifestTests(unittest.TestCase):
                             str(base_dir),
                             "--network",
                             "canonical",
-                            "--runtime-backend",
-                            "custom-backend",
                             "--seed",
                             "local-seed@127.0.0.1:26656",
                             "--snapshot-url",
@@ -236,7 +305,7 @@ class NetworkManifestTests(unittest.TestCase):
 
             self.assertEqual(exit_code, 0)
             profile = json.loads(output_path.read_text(encoding="utf-8"))
-            self.assertEqual(profile["runtime_backend"], "custom-backend")
+            self.assertEqual(profile["runtime_backend"], "xian-stack")
             self.assertEqual(profile["seeds"], ["local-seed@127.0.0.1:26656"])
             self.assertEqual(
                 profile["snapshot_url"],
@@ -252,6 +321,7 @@ class NetworkManifestTests(unittest.TestCase):
             (network_dir / "manifest.json").write_text(
                 json.dumps(
                     {
+                        "schema_version": 1,
                         "name": "canonical",
                         "chain_id": "xian-canonical-1",
                         "mode": "join",
@@ -366,7 +436,7 @@ class NetworkManifestTests(unittest.TestCase):
             base_dir = Path(tmp_dir)
             (base_dir / "networks").mkdir()
 
-            genesis_source = LEGACY_GENESIS_DIR / "genesis-devnet.json"
+            genesis_source = CANONICAL_DEVNET_GENESIS
 
             with redirect_stdout(io.StringIO()):
                 main(
@@ -379,7 +449,12 @@ class NetworkManifestTests(unittest.TestCase):
                         "--genesis-source",
                         str(genesis_source),
                         "--output",
-                        str(base_dir / "networks" / "local-dev.json"),
+                        str(
+                            base_dir
+                            / "networks"
+                            / "local-dev"
+                            / "manifest.json"
+                        ),
                     ]
                 )
 
@@ -471,8 +546,14 @@ class NetworkManifestTests(unittest.TestCase):
             profile_path = base_dir / "nodes" / "validator-1.json"
             genesis_path = base_dir / "networks" / "local-dev" / "genesis.json"
 
-            self.assertEqual(result["manifest_path"], str(manifest_path))
-            self.assertEqual(result["profile_path"], str(profile_path))
+            self.assertEqual(
+                result["manifest_path"],
+                str(manifest_path.resolve()),
+            )
+            self.assertEqual(
+                result["profile_path"],
+                str(profile_path.resolve()),
+            )
             self.assertTrue(result["node_initialized"])
             self.assertTrue(genesis_path.exists())
             self.assertTrue((home / "config" / "config.toml").exists())
@@ -571,24 +652,6 @@ class NetworkManifestTests(unittest.TestCase):
 
 class AbciBridgeTests(unittest.TestCase):
     def setUp(self) -> None:
-        self.original_sys_path = list(sys.path)
-        self.original_modules = {
-            name: sys.modules.pop(name, None)
-            for name in (
-                "xian",
-                "xian.node_setup",
-                "xian.node_admin",
-                "xian.genesis_builder",
-            )
-        }
-        self.workspace_src = (
-            Path(__file__).resolve().parents[2] / "xian-abci" / "src"
-        ).resolve()
-        sys.path[:] = [
-            path
-            for path in self.original_sys_path
-            if Path(path).resolve() != self.workspace_src
-        ]
         abci_bridge.get_node_setup_module.cache_clear()
         abci_bridge.get_node_admin_module.cache_clear()
         abci_bridge.get_genesis_builder_module.cache_clear()
@@ -597,39 +660,25 @@ class AbciBridgeTests(unittest.TestCase):
         abci_bridge.get_node_setup_module.cache_clear()
         abci_bridge.get_node_admin_module.cache_clear()
         abci_bridge.get_genesis_builder_module.cache_clear()
-        for name in (
-            "xian",
-            "xian.node_setup",
-            "xian.node_admin",
-            "xian.genesis_builder",
-        ):
-            sys.modules.pop(name, None)
-        for name, module in self.original_modules.items():
-            if module is not None:
-                sys.modules[name] = module
-        sys.path[:] = self.original_sys_path
 
-    def test_bridge_uses_workspace_fallback(self) -> None:
+    def test_bridge_imports_installed_modules(self) -> None:
         node_setup_module = abci_bridge.get_node_setup_module()
         node_admin_module = abci_bridge.get_node_admin_module()
 
         self.assertEqual(node_setup_module.__name__, "xian.node_setup")
         self.assertEqual(node_admin_module.__name__, "xian.node_admin")
-        self.assertEqual(Path(sys.path[0]).resolve(), self.workspace_src)
 
     def test_bridge_errors_when_helpers_are_unavailable(self) -> None:
-        original_exists = Path.exists
+        original_import_module = importlib.import_module
 
-        def fake_exists(path: Path) -> bool:
-            if path.resolve() == self.workspace_src:
-                return False
-            return original_exists(path)
+        def fake_import_module(name: str):
+            if name.startswith("xian."):
+                raise ModuleNotFoundError(name="xian")
+            return original_import_module(name)
 
-        with patch.object(
-            Path,
-            "exists",
-            autospec=True,
-            side_effect=fake_exists,
+        with patch(
+            "xian_cli.abci_bridge.import_module",
+            side_effect=fake_import_module,
         ):
             with self.assertRaisesRegex(RuntimeError, "xian-abci helpers"):
                 abci_bridge.get_node_setup_module()
@@ -647,7 +696,7 @@ class NodeInitTests(unittest.TestCase):
             (base_dir / "nodes").mkdir()
             (base_dir / "keys" / "validator-1").mkdir(parents=True)
 
-            genesis_source = LEGACY_GENESIS_DIR / "genesis-devnet.json"
+            genesis_source = CANONICAL_DEVNET_GENESIS
 
             with redirect_stdout(io.StringIO()):
                 main(
@@ -662,7 +711,12 @@ class NodeInitTests(unittest.TestCase):
                         "--seed",
                         "seed1@127.0.0.1:26656",
                         "--output",
-                        str(base_dir / "networks" / "local-dev.json"),
+                        str(
+                            base_dir
+                            / "networks"
+                            / "local-dev"
+                            / "manifest.json"
+                        ),
                     ]
                 )
                 main(
@@ -747,7 +801,12 @@ class NodeInitTests(unittest.TestCase):
                         "--genesis-source",
                         genesis_url,
                         "--output",
-                        str(base_dir / "networks" / "remote-dev.json"),
+                        str(
+                            base_dir
+                            / "networks"
+                            / "remote-dev"
+                            / "manifest.json"
+                        ),
                     ]
                 )
                 main(
@@ -800,7 +859,10 @@ class NodeInitTests(unittest.TestCase):
                 (home / "config" / "genesis.json").read_text(encoding="utf-8")
             )
             self.assertEqual(rendered_genesis["chain_id"], "xian-remote-1")
-            self.assertEqual(home, (base_dir / "xian-stack" / ".cometbft"))
+            self.assertEqual(
+                home,
+                (base_dir / "xian-stack" / ".cometbft").resolve(),
+            )
 
     def test_node_init_prefers_profile_genesis_url_override(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -833,7 +895,12 @@ class NodeInitTests(unittest.TestCase):
                         "--genesis-source",
                         str(local_genesis_path),
                         "--output",
-                        str(base_dir / "networks" / "override-dev.json"),
+                        str(
+                            base_dir
+                            / "networks"
+                            / "override-dev"
+                            / "manifest.json"
+                        ),
                     ]
                 )
                 main(
@@ -904,7 +971,7 @@ class NodeInitTests(unittest.TestCase):
             key_dir = base_dir / "keys" / "validator-1"
             key_dir.mkdir(parents=True)
 
-            genesis_source = LEGACY_GENESIS_DIR / "genesis-devnet.json"
+            genesis_source = CANONICAL_DEVNET_GENESIS
 
             with redirect_stdout(io.StringIO()):
                 main(
@@ -917,7 +984,12 @@ class NodeInitTests(unittest.TestCase):
                         "--genesis-source",
                         str(genesis_source),
                         "--output",
-                        str(base_dir / "networks" / "local-dev.json"),
+                        str(
+                            base_dir
+                            / "networks"
+                            / "local-dev"
+                            / "manifest.json"
+                        ),
                     ]
                 )
                 main(
@@ -973,7 +1045,7 @@ class NodeInitTests(unittest.TestCase):
             (base_dir / "nodes").mkdir()
             (base_dir / "keys" / "validator-1").mkdir(parents=True)
 
-            genesis_source = LEGACY_GENESIS_DIR / "genesis-devnet.json"
+            genesis_source = CANONICAL_DEVNET_GENESIS
 
             with redirect_stdout(io.StringIO()):
                 main(
@@ -986,7 +1058,12 @@ class NodeInitTests(unittest.TestCase):
                         "--genesis-source",
                         str(genesis_source),
                         "--output",
-                        str(base_dir / "networks" / "bad-chain.json"),
+                        str(
+                            base_dir
+                            / "networks"
+                            / "bad-chain"
+                            / "manifest.json"
+                        ),
                     ]
                 )
                 main(
@@ -1057,6 +1134,7 @@ class NodeInitTests(unittest.TestCase):
             (network_dir / "manifest.json").write_text(
                 json.dumps(
                     {
+                        "schema_version": 1,
                         "name": "canonical",
                         "chain_id": "xian-canonical-1",
                         "mode": "join",
@@ -1134,7 +1212,7 @@ class NodeInitTests(unittest.TestCase):
             key_dir.mkdir(parents=True)
             home = base_dir / ".cometbft"
 
-            genesis_source = LEGACY_GENESIS_DIR / "genesis-devnet.json"
+            genesis_source = CANONICAL_DEVNET_GENESIS
 
             with redirect_stdout(io.StringIO()):
                 main(
@@ -1149,7 +1227,12 @@ class NodeInitTests(unittest.TestCase):
                         "--snapshot-url",
                         "https://example.invalid/snapshot.tar.gz",
                         "--output",
-                        str(base_dir / "networks" / "local-dev.json"),
+                        str(
+                            base_dir
+                            / "networks"
+                            / "local-dev"
+                            / "manifest.json"
+                        ),
                     ]
                 )
                 main(
@@ -1240,7 +1323,12 @@ class NodeRuntimeTests(unittest.TestCase):
                         "--chain-id",
                         "xian-local-1",
                         "--output",
-                        str(base_dir / "networks" / "local-dev.json"),
+                        str(
+                            base_dir
+                            / "networks"
+                            / "local-dev"
+                            / "manifest.json"
+                        ),
                     ]
                 )
                 main(
@@ -1254,6 +1342,11 @@ class NodeRuntimeTests(unittest.TestCase):
                         "local-dev",
                         "--stack-dir",
                         str(stack_dir),
+                        "--enable-dashboard",
+                        "--dashboard-host",
+                        "0.0.0.0",
+                        "--dashboard-port",
+                        "18080",
                         "--output",
                         str(base_dir / "nodes" / "validator-1.json"),
                     ]
@@ -1284,6 +1377,9 @@ class NodeRuntimeTests(unittest.TestCase):
             kwargs = start_node.call_args.kwargs
             self.assertEqual(kwargs["stack_dir"], stack_dir.resolve())
             self.assertFalse(kwargs["service_node"])
+            self.assertTrue(kwargs["dashboard_enabled"])
+            self.assertEqual(kwargs["dashboard_host"], "0.0.0.0")
+            self.assertEqual(kwargs["dashboard_port"], 18080)
             self.assertFalse(kwargs["wait_for_rpc"])
 
     def test_node_stop_uses_xian_stack_backend(self) -> None:
@@ -1303,7 +1399,12 @@ class NodeRuntimeTests(unittest.TestCase):
                         "--chain-id",
                         "xian-local-1",
                         "--output",
-                        str(base_dir / "networks" / "local-dev.json"),
+                        str(
+                            base_dir
+                            / "networks"
+                            / "local-dev"
+                            / "manifest.json"
+                        ),
                     ]
                 )
                 main(
@@ -1363,7 +1464,12 @@ class NodeRuntimeTests(unittest.TestCase):
                         "--chain-id",
                         "xian-local-1",
                         "--output",
-                        str(base_dir / "networks" / "local-dev.json"),
+                        str(
+                            base_dir
+                            / "networks"
+                            / "local-dev"
+                            / "manifest.json"
+                        ),
                     ]
                 )
                 main(
@@ -1428,7 +1534,12 @@ class NodeRuntimeTests(unittest.TestCase):
                         "--chain-id",
                         "xian-local-1",
                         "--output",
-                        str(base_dir / "networks" / "local-dev.json"),
+                        str(
+                            base_dir
+                            / "networks"
+                            / "local-dev"
+                            / "manifest.json"
+                        ),
                     ]
                 )
                 main(
@@ -1515,7 +1626,12 @@ class DoctorTests(unittest.TestCase):
                         "--chain-id",
                         "xian-local-1",
                         "--output",
-                        str(base_dir / "networks" / "local-dev.json"),
+                        str(
+                            base_dir
+                            / "networks"
+                            / "local-dev"
+                            / "manifest.json"
+                        ),
                     ]
                 )
                 main(
@@ -1625,7 +1741,12 @@ class SnapshotCommandTests(unittest.TestCase):
                         "--snapshot-url",
                         "https://example.invalid/network-snapshot.tar.gz",
                         "--output",
-                        str(base_dir / "networks" / "local-dev.json"),
+                        str(
+                            base_dir
+                            / "networks"
+                            / "local-dev"
+                            / "manifest.json"
+                        ),
                     ]
                 )
                 main(
@@ -1700,7 +1821,12 @@ class SnapshotCommandTests(unittest.TestCase):
                         "--snapshot-url",
                         "https://example.invalid/network-snapshot.tar.gz",
                         "--output",
-                        str(base_dir / "networks" / "local-dev.json"),
+                        str(
+                            base_dir
+                            / "networks"
+                            / "local-dev"
+                            / "manifest.json"
+                        ),
                     ]
                 )
                 main(
@@ -1760,76 +1886,134 @@ class RuntimeHelperTests(unittest.TestCase):
         self.assertEqual(fetch_json_mock.call_count, 2)
         self.assertEqual(sleep_mock.call_count, 1)
 
-    def test_start_xian_stack_node_runs_expected_make_targets(self) -> None:
+    def test_start_xian_stack_node_uses_backend_command(self) -> None:
         stack_dir = Path("/tmp/xian-stack")
         rpc_status = {"result": {"sync_info": {"catching_up": False}}}
 
-        with patch("xian_cli.runtime.run_make_target") as run_make_target:
-            with patch(
-                "xian_cli.runtime.wait_for_rpc_ready",
-                return_value=rpc_status,
-            ) as wait_for_rpc:
-                result = start_xian_stack_node(
-                    stack_dir=stack_dir,
-                    service_node=True,
-                    wait_for_rpc=True,
-                    rpc_timeout_seconds=12.5,
-                )
+        with patch(
+            "xian_cli.runtime.run_backend_command"
+        ) as run_backend_command:
+            run_backend_command.return_value = {"rpc_status": rpc_status}
+            result = start_xian_stack_node(
+                stack_dir=stack_dir,
+                service_node=True,
+                dashboard_enabled=True,
+                dashboard_host="0.0.0.0",
+                dashboard_port=18080,
+                wait_for_rpc=True,
+                rpc_timeout_seconds=12.5,
+            )
 
-        self.assertEqual(
-            run_make_target.call_args_list,
-            [
-                call(stack_dir, "abci-bds-up"),
-                call(stack_dir, "node-start-bds"),
-            ],
+        run_backend_command.assert_called_once_with(
+            stack_dir,
+            "start",
+            service_node=True,
+            dashboard_enabled=True,
+            dashboard_host="0.0.0.0",
+            dashboard_port=18080,
+            wait_for_health=True,
+            rpc_timeout_seconds=12.5,
+            rpc_url="http://127.0.0.1:26657/status",
         )
-        wait_for_rpc.assert_called_once_with(timeout_seconds=12.5)
         self.assertEqual(result["rpc_status"], rpc_status)
 
-    def test_stop_xian_stack_node_runs_expected_make_targets(self) -> None:
+    def test_stop_xian_stack_node_uses_backend_command(self) -> None:
         stack_dir = Path("/tmp/xian-stack")
 
-        with patch("xian_cli.runtime.run_make_target") as run_make_target:
+        with patch(
+            "xian_cli.runtime.run_backend_command"
+        ) as run_backend_command:
+            run_backend_command.return_value = {
+                "container_target": "abci-down"
+            }
             result = stop_xian_stack_node(
                 stack_dir=stack_dir,
                 service_node=False,
+                dashboard_enabled=True,
+                dashboard_host="0.0.0.0",
+                dashboard_port=18080,
             )
 
-        self.assertEqual(
-            run_make_target.call_args_list,
-            [
-                call(stack_dir, "node-stop"),
-                call(stack_dir, "abci-down"),
-            ],
+        run_backend_command.assert_called_once_with(
+            stack_dir,
+            "stop",
+            service_node=False,
+            dashboard_enabled=True,
+            dashboard_host="0.0.0.0",
+            dashboard_port=18080,
         )
         self.assertEqual(result["container_target"], "abci-down")
 
-    def test_get_xian_stack_node_status_uses_make_target(self) -> None:
+    def test_get_xian_stack_node_status_uses_backend_command(self) -> None:
         stack_dir = Path("/tmp/xian-stack")
-        completed_process = unittest.mock.Mock(
-            stdout=json.dumps({"backend_running": True, "node_id": "abc123"})
-        )
-
-        with patch("xian_cli.runtime.subprocess.run") as subprocess_run:
-            subprocess_run.return_value = completed_process
+        with patch(
+            "xian_cli.runtime.run_backend_command"
+        ) as run_backend_command:
+            run_backend_command.return_value = {
+                "backend_running": True,
+                "node_id": "abc123",
+            }
             result = get_xian_stack_node_status(
                 stack_dir=stack_dir,
                 service_node=True,
+                dashboard_enabled=True,
+                dashboard_host="0.0.0.0",
+                dashboard_port=18080,
             )
 
         self.assertTrue(result["backend_running"])
         self.assertEqual(result["node_id"], "abc123")
-        kwargs = subprocess_run.call_args.kwargs
-        self.assertEqual(
-            subprocess_run.call_args.args,
-            (["make", "node-status"],),
+        run_backend_command.assert_called_once_with(
+            stack_dir,
+            "status",
+            service_node=True,
+            dashboard_enabled=True,
+            dashboard_host="0.0.0.0",
+            dashboard_port=18080,
         )
-        self.assertEqual(kwargs["cwd"], stack_dir)
-        self.assertEqual(kwargs["env"]["XIAN_SERVICE_NODE"], "1")
-        self.assertTrue(kwargs["capture_output"])
 
 
 class ConfigRepoTests(unittest.TestCase):
+    def test_read_network_manifest_requires_explicit_schema_version(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            manifest_path = Path(tmp_dir) / "manifest.json"
+            manifest_path.write_text(
+                json.dumps(
+                    {
+                        "name": "mainnet",
+                        "chain_id": "xian-1",
+                        "runtime_backend": "xian-stack",
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            with self.assertRaisesRegex(
+                ValueError, "unsupported schema_version"
+            ):
+                read_network_manifest(manifest_path)
+
+    def test_read_node_profile_requires_explicit_schema_version(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            profile_path = Path(tmp_dir) / "profile.json"
+            profile_path.write_text(
+                json.dumps(
+                    {
+                        "name": "validator-1",
+                        "network": "mainnet",
+                        "moniker": "validator-1",
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            with self.assertRaisesRegex(
+                ValueError, "unsupported schema_version"
+            ):
+                read_node_profile(profile_path)
+
     def test_resolve_configs_dir_uses_workspace_fallback(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             resolved = resolve_configs_dir(Path(tmp_dir))

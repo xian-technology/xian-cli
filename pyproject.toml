@@ -7,9 +7,10 @@ name = "xian-cli"
 version = "0.1.0"
 description = "Operator CLI for Xian networks and nodes"
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.12"
 dependencies = [
     "pynacl>=1.6.2,<2",
+    "xian-abci",
 ]
 
 [dependency-groups]
@@ -33,7 +34,12 @@ testpaths = ["tests"]
 
 [tool.ruff]
 line-length = 80
-target-version = "py311"
+target-version = "py312"
 
 [tool.ruff.lint]
 select = ["E", "F", "I"]
+
+[tool.uv.sources]
+xian-abci = { path = "../xian-abci", editable = true }
+xian-contracting = { path = "../xian-contracting", editable = true }
+xian-py = { path = "../xian-py", editable = true }

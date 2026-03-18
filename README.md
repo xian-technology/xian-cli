@@ -51,6 +51,10 @@ such as `runtime_backend` is used as the default, while node-local overrides
 such as `--seed`, `--snapshot-url`, and `--genesis-url` stay in the node
 profile.
 
+Both network manifests and node profiles must carry `schema_version: 1`. The
+artifact contract is explicit now; the CLI validates that shape on read and
+writes the explicit version on new output.
+
 `network create` can stay lightweight and only write a manifest, but it can now
 also bootstrap a fresh local network. When validator key material is available,
 it can generate a colocated `genesis.json`; when `--bootstrap-node` is set, it
@@ -85,11 +89,9 @@ for that node.
 
 The preferred layout is a shared parent directory such as `~/xian/` containing
 sibling checkouts of `xian-cli`, `xian-abci`, `xian-configs`, and `xian-stack`.
-`xian node init`
-currently expects either:
-
-- `xian-abci` installed in the same Python environment, or
-- the sibling-workspace layout described above
+`uv sync --group dev` installs `xian-abci` and its transitive workspace
+dependencies into the same environment as `xian-cli`. The sibling-workspace
+layout remains the supported authoring model for local path dependencies.
 
 ## Validation
 

@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import json
-import os
 import subprocess
+import sys
 import time
 from pathlib import Path
 from urllib.error import URLError
 from urllib.request import urlopen
+
+DEFAULT_RPC_TIMEOUT_SECONDS = 90.0
 
 
 def resolve_stack_dir(base_dir: Path, explicit: Path | None = None) -> Path:
@@ -47,7 +49,7 @@ def fetch_json(url: str, *, timeout: float = 10.0) -> dict:
 def wait_for_rpc_ready(
     *,
     rpc_url: str = "http://127.0.0.1:26657/status",
-    timeout_seconds: float = 30.0,
+    timeout_seconds: float = DEFAULT_RPC_TIMEOUT_SECONDS,
     poll_interval: float = 1.0,
 ) -> dict:
     deadline = time.monotonic() + timeout_seconds
@@ -59,6 +61,7 @@ def wait_for_rpc_ready(
             if payload.get("result"):
                 return payload
         except (
+            OSError,
             URLError,
             TimeoutError,
             ValueError,
@@ -71,71 +74,112 @@ def wait_for_rpc_ready(
     raise TimeoutError(f"RPC did not become ready at {rpc_url}") from last_error
 
 
-def run_make_target(stack_dir: Path, target: str) -> None:
-    subprocess.run(
-        ["make", target],
+def _backend_script(stack_dir: Path) -> Path:
+    return stack_dir / "scripts" / "backend.py"
+
+
+def run_backend_command(
+    stack_dir: Path,
+    command: str,
+    *,
+    service_node: bool = False,
+    dashboard_enabled: bool = False,
+    dashboard_host: str | None = None,
+    dashboard_port: int | None = None,
+    wait_for_health: bool | None = None,
+    rpc_timeout_seconds: float | None = None,
+    rpc_url: str | None = None,
+) -> dict:
+    cmd = [sys.executable, str(_backend_script(stack_dir)), command]
+    cmd.append("--service-node" if service_node else "--no-service-node")
+    cmd.append("--dashboard" if dashboard_enabled else "--no-dashboard")
+
+    if dashboard_enabled:
+        if dashboard_host is not None:
+            cmd.extend(["--dashboard-host", dashboard_host])
+        if dashboard_port is not None:
+            cmd.extend(["--dashboard-port", str(dashboard_port)])
+
+    if wait_for_health is not None:
+        cmd.append(
+            "--wait-for-health"
+            if wait_for_health
+            else "--no-wait-for-health"
+        )
+    if rpc_timeout_seconds is not None:
+        cmd.extend(["--rpc-timeout-seconds", str(rpc_timeout_seconds)])
+    if rpc_url is not None:
+        cmd.extend(["--rpc-url", rpc_url])
+
+    result = subprocess.run(
+        cmd,
         cwd=stack_dir,
         check=True,
+        capture_output=True,
+        text=True,
     )
+    try:
+        return json.loads(result.stdout)
+    except json.JSONDecodeError as exc:
+        raise ValueError(
+            f"xian-stack backend command returned invalid JSON: {command}"
+        ) from exc
 
 
 def start_xian_stack_node(
     *,
     stack_dir: Path,
     service_node: bool,
+    dashboard_enabled: bool = False,
+    dashboard_host: str = "127.0.0.1",
+    dashboard_port: int = 8080,
     wait_for_rpc: bool = True,
-    rpc_timeout_seconds: float = 30.0,
+    rpc_timeout_seconds: float = DEFAULT_RPC_TIMEOUT_SECONDS,
 ) -> dict:
-    container_target = "abci-bds-up" if service_node else "abci-up"
-    node_target = "node-start-bds" if service_node else "node-start"
-
-    run_make_target(stack_dir, container_target)
-    run_make_target(stack_dir, node_target)
-
-    result = {
-        "stack_dir": str(stack_dir),
-        "container_target": container_target,
-        "node_target": node_target,
-        "rpc_checked": wait_for_rpc,
-    }
-
-    if wait_for_rpc:
-        payload = wait_for_rpc_ready(timeout_seconds=rpc_timeout_seconds)
-        result["rpc_status"] = payload
-
-    return result
+    return run_backend_command(
+        stack_dir,
+        "start",
+        service_node=service_node,
+        dashboard_enabled=dashboard_enabled,
+        dashboard_host=dashboard_host,
+        dashboard_port=dashboard_port,
+        wait_for_health=wait_for_rpc,
+        rpc_timeout_seconds=rpc_timeout_seconds,
+        rpc_url="http://127.0.0.1:26657/status",
+    )
 
 
-def stop_xian_stack_node(*, stack_dir: Path, service_node: bool) -> dict:
-    container_target = "abci-bds-down" if service_node else "abci-down"
-
-    run_make_target(stack_dir, "node-stop")
-    run_make_target(stack_dir, container_target)
-
-    return {
-        "stack_dir": str(stack_dir),
-        "container_target": container_target,
-    }
+def stop_xian_stack_node(
+    *,
+    stack_dir: Path,
+    service_node: bool,
+    dashboard_enabled: bool = False,
+    dashboard_host: str = "127.0.0.1",
+    dashboard_port: int = 8080,
+) -> dict:
+    return run_backend_command(
+        stack_dir,
+        "stop",
+        service_node=service_node,
+        dashboard_enabled=dashboard_enabled,
+        dashboard_host=dashboard_host,
+        dashboard_port=dashboard_port,
+    )
 
 
 def get_xian_stack_node_status(
     *,
     stack_dir: Path,
     service_node: bool,
+    dashboard_enabled: bool = False,
+    dashboard_host: str = "127.0.0.1",
+    dashboard_port: int = 8080,
 ) -> dict:
-    env = os.environ.copy()
-    env["XIAN_SERVICE_NODE"] = "1" if service_node else "0"
-    result = subprocess.run(
-        ["make", "node-status"],
-        cwd=stack_dir,
-        check=True,
-        capture_output=True,
-        text=True,
-        env=env,
+    return run_backend_command(
+        stack_dir,
+        "status",
+        service_node=service_node,
+        dashboard_enabled=dashboard_enabled,
+        dashboard_host=dashboard_host,
+        dashboard_port=dashboard_port,
     )
-    try:
-        return json.loads(result.stdout)
-    except json.JSONDecodeError as exc:
-        raise ValueError(
-            "xian-stack node-status returned invalid JSON"
-        ) from exc
