@@ -17,6 +17,7 @@ from xian_cli.config_repo import (
     resolve_network_manifest_path,
 )
 from xian_cli.models import (
+    SUPPORTED_BLOCK_POLICY_MODES,
     SUPPORTED_RUNTIME_BACKENDS,
     NetworkManifest,
     NodeProfile,
@@ -270,6 +271,8 @@ def _handle_network_create(args: argparse.Namespace) -> int:
         genesis_source=genesis_source,
         snapshot_url=args.snapshot_url,
         seed_nodes=args.seed or [],
+        block_policy_mode=args.block_policy_mode,
+        block_policy_interval=args.block_policy_interval,
     )
     write_json(target, manifest.to_dict(), force=args.force)
 
@@ -325,6 +328,8 @@ def _handle_network_create(args: argparse.Namespace) -> int:
             blocks_to_keep=(
                 args.blocks_to_keep if validator["is_bootstrap"] else 100000
             ),
+            block_policy_mode=args.block_policy_mode,
+            block_policy_interval=args.block_policy_interval,
             dashboard_enabled=(
                 args.enable_dashboard if validator["is_bootstrap"] else False
             ),
@@ -443,6 +448,14 @@ def _handle_network_join(args: argparse.Namespace) -> int:
         home=str(args.home) if args.home is not None else None,
         pruning_enabled=args.enable_pruning,
         blocks_to_keep=args.blocks_to_keep,
+        block_policy_mode=(
+            args.block_policy_mode
+            or network.get("block_policy_mode", "on_demand")
+        ),
+        block_policy_interval=(
+            args.block_policy_interval
+            or network.get("block_policy_interval", "0s")
+        ),
         dashboard_enabled=args.enable_dashboard,
         dashboard_host=args.dashboard_host,
         dashboard_port=args.dashboard_port,
@@ -838,6 +851,18 @@ def _initialize_node_from_args(args: argparse.Namespace) -> dict:
         service_node=bool(profile.get("service_node")),
         enable_pruning=bool(profile.get("pruning_enabled")),
         blocks_to_keep=int(profile.get("blocks_to_keep", 100000)),
+        block_policy_mode=str(
+            profile.get(
+                "block_policy_mode",
+                network.get("block_policy_mode", "on_demand"),
+            )
+        ),
+        block_policy_interval=str(
+            profile.get(
+                "block_policy_interval",
+                network.get("block_policy_interval", "0s"),
+            )
+        ),
     )
 
     result = node_setup.materialize_cometbft_home(
@@ -1336,6 +1361,25 @@ def build_parser() -> argparse.ArgumentParser:
         help="number of blocks to retain when pruning is enabled",
     )
     create_parser.add_argument(
+        "--block-policy-mode",
+        choices=sorted(SUPPORTED_BLOCK_POLICY_MODES),
+        default="on_demand",
+        help=(
+            "network block production policy: on_demand waits for "
+            "transactions, idle_interval emits empty blocks after an idle "
+            "interval, periodic enables scheduled empty blocks"
+        ),
+    )
+    create_parser.add_argument(
+        "--block-policy-interval",
+        type=str,
+        default="0s",
+        help=(
+            "idle or periodic block interval, for example 10s; ignored for "
+            "on_demand"
+        ),
+    )
+    create_parser.add_argument(
         "--enable-dashboard",
         action="store_true",
         help=(
@@ -1485,6 +1529,22 @@ def build_parser() -> argparse.ArgumentParser:
         type=int,
         default=100000,
         help="number of blocks to retain when pruning is enabled",
+    )
+    join_parser.add_argument(
+        "--block-policy-mode",
+        choices=sorted(SUPPORTED_BLOCK_POLICY_MODES),
+        help=(
+            "optional node-local block policy override; defaults to the "
+            "network manifest value"
+        ),
+    )
+    join_parser.add_argument(
+        "--block-policy-interval",
+        type=str,
+        help=(
+            "optional node-local block interval override, for example 10s; "
+            "defaults to the network manifest value"
+        ),
     )
     join_parser.add_argument(
         "--enable-dashboard",

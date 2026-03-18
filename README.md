@@ -51,6 +51,15 @@ such as `runtime_backend` is used as the default, while node-local overrides
 such as `--seed`, `--snapshot-url`, and `--genesis-url` stay in the node
 profile.
 
+Block-time policy is explicit too:
+
+- `on_demand`: no empty blocks while idle
+- `idle_interval`: emit an empty block after an idle interval such as `10s`
+- `periodic`: keep scheduled empty blocks enabled with the chosen interval
+
+This only changes when chain time advances during idle periods. Contract `now`
+always comes from the finalized block timestamp agreed by consensus.
+
 Both network manifests and node profiles must carry `schema_version: 1`. The
 artifact contract is explicit now; the CLI validates that shape on read and
 writes the explicit version on new output.

@@ -93,6 +93,8 @@ class NetworkManifestTests(unittest.TestCase):
             self.assertEqual(manifest["chain_id"], "xian-local-1")
             self.assertEqual(manifest["mode"], "create")
             self.assertEqual(manifest["runtime_backend"], "xian-stack")
+            self.assertEqual(manifest["block_policy_mode"], "on_demand")
+            self.assertEqual(manifest["block_policy_interval"], "0s")
 
     def test_network_create_defaults_to_network_first_layout(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -123,6 +125,8 @@ class NetworkManifestTests(unittest.TestCase):
             manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
             self.assertEqual(manifest["mode"], "create")
             self.assertIsNone(manifest["genesis_source"])
+            self.assertEqual(manifest["block_policy_mode"], "on_demand")
+            self.assertEqual(manifest["block_policy_interval"], "0s")
 
     def test_network_join_writes_node_profile(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -158,6 +162,8 @@ class NetworkManifestTests(unittest.TestCase):
             self.assertTrue(profile["dashboard_enabled"])
             self.assertEqual(profile["dashboard_host"], "0.0.0.0")
             self.assertEqual(profile["dashboard_port"], 18080)
+            self.assertEqual(profile["block_policy_mode"], "on_demand")
+            self.assertEqual(profile["block_policy_interval"], "0s")
 
     def test_network_create_writes_dashboard_settings_to_bootstrap_profile(
         self,
@@ -228,6 +234,8 @@ class NetworkManifestTests(unittest.TestCase):
                         "genesis_source": "./genesis.json",
                         "snapshot_url": "https://example.invalid/snapshot",
                         "seed_nodes": ["seed-1@127.0.0.1:26656"],
+                        "block_policy_mode": "periodic",
+                        "block_policy_interval": "10s",
                     }
                 ),
                 encoding="utf-8",
@@ -257,6 +265,60 @@ class NetworkManifestTests(unittest.TestCase):
             self.assertEqual(profile["runtime_backend"], "xian-stack")
             self.assertEqual(profile["seeds"], [])
             self.assertIsNone(profile["snapshot_url"])
+            self.assertEqual(profile["block_policy_mode"], "periodic")
+            self.assertEqual(profile["block_policy_interval"], "10s")
+
+    def test_network_join_allows_block_policy_override(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            base_dir = Path(tmp_dir)
+            configs_dir = base_dir / "xian-configs"
+            network_dir = configs_dir / "networks" / "canonical"
+            network_dir.mkdir(parents=True)
+            (network_dir / "manifest.json").write_text(
+                json.dumps(
+                    {
+                        "schema_version": 1,
+                        "name": "canonical",
+                        "chain_id": "xian-canonical-1",
+                        "mode": "join",
+                        "runtime_backend": "xian-stack",
+                        "genesis_source": "./genesis.json",
+                        "snapshot_url": None,
+                        "seed_nodes": [],
+                        "block_policy_mode": "on_demand",
+                        "block_policy_interval": "0s",
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            output_path = base_dir / "nodes" / "validator-1.json"
+            with patch.dict(
+                "os.environ", {"XIAN_CONFIGS_DIR": str(configs_dir)}
+            ):
+                with redirect_stdout(io.StringIO()):
+                    exit_code = main(
+                        [
+                            "network",
+                            "join",
+                            "validator-1",
+                            "--base-dir",
+                            str(base_dir),
+                            "--network",
+                            "canonical",
+                            "--block-policy-mode",
+                            "idle_interval",
+                            "--block-policy-interval",
+                            "10s",
+                            "--output",
+                            str(output_path),
+                        ]
+                    )
+
+            self.assertEqual(exit_code, 0)
+            profile = json.loads(output_path.read_text(encoding="utf-8"))
+            self.assertEqual(profile["block_policy_mode"], "idle_interval")
+            self.assertEqual(profile["block_policy_interval"], "10s")
 
     def test_network_join_allows_node_local_overrides(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:

@@ -53,6 +53,8 @@ This stage produces the validator material required for `priv_validator_key.json
 - Owner: `xian-cli`
 - Source of truth: network manifest JSON, either local or canonical from `xian-configs`
 - Inputs: chain ID, bootstrap mode, genesis source, seeds, optional snapshot source
+- Inputs: chain ID, bootstrap mode, genesis source, seeds, optional snapshot
+  source, and block-time policy
 - Outputs: immutable network-level description
 
 This stage defines facts about a network, not about a specific node.
@@ -62,6 +64,8 @@ This stage defines facts about a network, not about a specific node.
 - Owner: `xian-cli`
 - Source of truth: node profile JSON
 - Inputs: network reference, moniker, key references, role flags, and home path
+- Inputs: network reference, moniker, key references, role flags, home path,
+  and optional local block-policy override
 - Outputs: local node intent
 
 This stage defines machine-local choices. It should reference keys and networks, not duplicate them.
@@ -158,7 +162,9 @@ The network manifest is the network-level source of truth. Target fields:
   "runtime_backend": "xian-stack",
   "genesis_source": "https://example/genesis.json",
   "snapshot_url": "https://example/snapshot.tar.gz",
-  "seed_nodes": ["node_id@host:26656"]
+  "seed_nodes": ["node_id@host:26656"],
+  "block_policy_mode": "on_demand",
+  "block_policy_interval": "0s"
 }
 ```
 
@@ -183,7 +189,9 @@ The node profile is the machine-local source of truth. Target fields:
   "service_node": false,
   "runtime_backend": "xian-stack",
   "pruning_enabled": false,
-  "blocks_to_keep": 100000
+  "blocks_to_keep": 100000,
+  "block_policy_mode": "on_demand",
+  "block_policy_interval": "0s"
 }
 ```
 
@@ -192,6 +200,13 @@ Rules:
 - manifests and profiles must declare `schema_version: 1`
 - network manifests do not contain private keys
 - node profiles reference keys; they do not inline them
+- `block_policy_mode` is network-owned by default and may be overridden
+  intentionally in the node profile
+- `on_demand` means no idle empty blocks; `idle_interval` means empty blocks
+  only after an idle interval; `periodic` means scheduled empty blocks are
+  enabled
+- contract `now` always comes from finalized block time; the policy only
+  changes whether time advances while the chain is idle
 - `network create` may generate a local `genesis.json`, but that file remains a
   derived network artifact rather than a place to hide node-local state
 - `network join` may generate validator key material, but it should still write

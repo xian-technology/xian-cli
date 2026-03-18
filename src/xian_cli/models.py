@@ -7,6 +7,7 @@ from pathlib import Path
 SCHEMA_VERSION = 1
 SUPPORTED_NETWORK_MODES = {"join", "create"}
 SUPPORTED_RUNTIME_BACKENDS = {"xian-stack"}
+SUPPORTED_BLOCK_POLICY_MODES = {"on_demand", "idle_interval", "periodic"}
 
 
 def _require_str(payload: dict, key: str) -> str:
@@ -68,6 +69,22 @@ def _require_runtime_backend(payload: dict) -> str:
     return runtime_backend
 
 
+def _require_block_policy_mode(payload: dict, key: str) -> str:
+    value = payload.get(key, "on_demand")
+    if not isinstance(value, str) or value not in SUPPORTED_BLOCK_POLICY_MODES:
+        raise ValueError(
+            f"{key} must be one of {sorted(SUPPORTED_BLOCK_POLICY_MODES)}"
+        )
+    return value
+
+
+def _require_block_policy_interval(payload: dict, key: str) -> str:
+    value = payload.get(key, "0s")
+    if not isinstance(value, str) or not value:
+        raise ValueError(f"{key} must be a non-empty string")
+    return value
+
+
 def _require_mode(payload: dict) -> str:
     mode = _require_str(payload, "mode")
     if mode not in SUPPORTED_NETWORK_MODES:
@@ -90,6 +107,12 @@ def normalize_network_manifest(payload: dict) -> dict:
         "genesis_source": _require_optional_str(payload, "genesis_source"),
         "snapshot_url": _require_optional_str(payload, "snapshot_url"),
         "seed_nodes": _require_str_list(payload, "seed_nodes"),
+        "block_policy_mode": _require_block_policy_mode(
+            payload, "block_policy_mode"
+        ),
+        "block_policy_interval": _require_block_policy_interval(
+            payload, "block_policy_interval"
+        ),
     }
 
 
@@ -119,6 +142,12 @@ def normalize_node_profile(payload: dict) -> dict:
         "blocks_to_keep": _require_int(
             payload, "blocks_to_keep", default=100000
         ),
+        "block_policy_mode": _require_block_policy_mode(
+            payload, "block_policy_mode"
+        ),
+        "block_policy_interval": _require_block_policy_interval(
+            payload, "block_policy_interval"
+        ),
         "dashboard_enabled": _require_bool(
             payload, "dashboard_enabled", default=False
         ),
@@ -138,6 +167,8 @@ class NetworkManifest:
     genesis_source: str | None = None
     snapshot_url: str | None = None
     seed_nodes: list[str] = field(default_factory=list)
+    block_policy_mode: str = "on_demand"
+    block_policy_interval: str = "0s"
     schema_version: int = SCHEMA_VERSION
 
     def to_dict(self) -> dict:
@@ -159,6 +190,8 @@ class NodeProfile:
     home: str | None = None
     pruning_enabled: bool = False
     blocks_to_keep: int = 100000
+    block_policy_mode: str = "on_demand"
+    block_policy_interval: str = "0s"
     dashboard_enabled: bool = False
     dashboard_host: str = "127.0.0.1"
     dashboard_port: int = 8080
