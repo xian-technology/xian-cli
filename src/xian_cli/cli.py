@@ -19,6 +19,7 @@ from xian_cli.config_repo import (
 from xian_cli.models import (
     SUPPORTED_BLOCK_POLICY_MODES,
     SUPPORTED_RUNTIME_BACKENDS,
+    SUPPORTED_TRACER_MODES,
     NetworkManifest,
     NodeProfile,
     read_json,
@@ -273,6 +274,7 @@ def _handle_network_create(args: argparse.Namespace) -> int:
         seed_nodes=args.seed or [],
         block_policy_mode=args.block_policy_mode,
         block_policy_interval=args.block_policy_interval,
+        tracer_mode=args.tracer_mode,
     )
     write_json(target, manifest.to_dict(), force=args.force)
 
@@ -330,6 +332,7 @@ def _handle_network_create(args: argparse.Namespace) -> int:
             ),
             block_policy_mode=args.block_policy_mode,
             block_policy_interval=args.block_policy_interval,
+            tracer_mode=args.tracer_mode,
             dashboard_enabled=(
                 args.enable_dashboard if validator["is_bootstrap"] else False
             ),
@@ -455,6 +458,9 @@ def _handle_network_join(args: argparse.Namespace) -> int:
         block_policy_interval=(
             args.block_policy_interval
             or network.get("block_policy_interval", "0s")
+        ),
+        tracer_mode=(
+            args.tracer_mode or network.get("tracer_mode", "python_line_v1")
         ),
         dashboard_enabled=args.enable_dashboard,
         dashboard_host=args.dashboard_host,
@@ -861,6 +867,12 @@ def _initialize_node_from_args(args: argparse.Namespace) -> dict:
             profile.get(
                 "block_policy_interval",
                 network.get("block_policy_interval", "0s"),
+            )
+        ),
+        tracer_mode=str(
+            profile.get(
+                "tracer_mode",
+                network.get("tracer_mode", "python_line_v1"),
             )
         ),
     )
@@ -1380,6 +1392,12 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     create_parser.add_argument(
+        "--tracer-mode",
+        choices=sorted(SUPPORTED_TRACER_MODES),
+        default="python_line_v1",
+        help="execution tracer backend for contract metering",
+    )
+    create_parser.add_argument(
         "--enable-dashboard",
         action="store_true",
         help=(
@@ -1544,6 +1562,14 @@ def build_parser() -> argparse.ArgumentParser:
         help=(
             "optional node-local block interval override, for example 10s; "
             "defaults to the network manifest value"
+        ),
+    )
+    join_parser.add_argument(
+        "--tracer-mode",
+        choices=sorted(SUPPORTED_TRACER_MODES),
+        help=(
+            "optional node-local tracer override; defaults to the network "
+            "manifest value"
         ),
     )
     join_parser.add_argument(

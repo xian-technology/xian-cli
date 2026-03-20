@@ -8,6 +8,7 @@ SCHEMA_VERSION = 1
 SUPPORTED_NETWORK_MODES = {"join", "create"}
 SUPPORTED_RUNTIME_BACKENDS = {"xian-stack"}
 SUPPORTED_BLOCK_POLICY_MODES = {"on_demand", "idle_interval", "periodic"}
+SUPPORTED_TRACER_MODES = {"python_line_v1", "native_instruction_v1"}
 
 
 def _require_str(payload: dict, key: str) -> str:
@@ -85,6 +86,15 @@ def _require_block_policy_interval(payload: dict, key: str) -> str:
     return value
 
 
+def _require_tracer_mode(payload: dict, key: str) -> str:
+    value = payload.get(key, "python_line_v1")
+    if not isinstance(value, str) or value not in SUPPORTED_TRACER_MODES:
+        raise ValueError(
+            f"{key} must be one of {sorted(SUPPORTED_TRACER_MODES)}"
+        )
+    return value
+
+
 def _require_mode(payload: dict) -> str:
     mode = _require_str(payload, "mode")
     if mode not in SUPPORTED_NETWORK_MODES:
@@ -113,6 +123,7 @@ def normalize_network_manifest(payload: dict) -> dict:
         "block_policy_interval": _require_block_policy_interval(
             payload, "block_policy_interval"
         ),
+        "tracer_mode": _require_tracer_mode(payload, "tracer_mode"),
     }
 
 
@@ -148,6 +159,7 @@ def normalize_node_profile(payload: dict) -> dict:
         "block_policy_interval": _require_block_policy_interval(
             payload, "block_policy_interval"
         ),
+        "tracer_mode": _require_tracer_mode(payload, "tracer_mode"),
         "dashboard_enabled": _require_bool(
             payload, "dashboard_enabled", default=False
         ),
@@ -169,6 +181,7 @@ class NetworkManifest:
     seed_nodes: list[str] = field(default_factory=list)
     block_policy_mode: str = "on_demand"
     block_policy_interval: str = "0s"
+    tracer_mode: str = "python_line_v1"
     schema_version: int = SCHEMA_VERSION
 
     def to_dict(self) -> dict:
@@ -192,6 +205,7 @@ class NodeProfile:
     blocks_to_keep: int = 100000
     block_policy_mode: str = "on_demand"
     block_policy_interval: str = "0s"
+    tracer_mode: str = "python_line_v1"
     dashboard_enabled: bool = False
     dashboard_host: str = "127.0.0.1"
     dashboard_port: int = 8080

@@ -95,6 +95,7 @@ class NetworkManifestTests(unittest.TestCase):
             self.assertEqual(manifest["runtime_backend"], "xian-stack")
             self.assertEqual(manifest["block_policy_mode"], "on_demand")
             self.assertEqual(manifest["block_policy_interval"], "0s")
+            self.assertEqual(manifest["tracer_mode"], "python_line_v1")
 
     def test_network_create_defaults_to_network_first_layout(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -127,6 +128,7 @@ class NetworkManifestTests(unittest.TestCase):
             self.assertIsNone(manifest["genesis_source"])
             self.assertEqual(manifest["block_policy_mode"], "on_demand")
             self.assertEqual(manifest["block_policy_interval"], "0s")
+            self.assertEqual(manifest["tracer_mode"], "python_line_v1")
 
     def test_network_join_writes_node_profile(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -164,6 +166,7 @@ class NetworkManifestTests(unittest.TestCase):
             self.assertEqual(profile["dashboard_port"], 18080)
             self.assertEqual(profile["block_policy_mode"], "on_demand")
             self.assertEqual(profile["block_policy_interval"], "0s")
+            self.assertEqual(profile["tracer_mode"], "python_line_v1")
 
     def test_network_create_writes_dashboard_settings_to_bootstrap_profile(
         self,
@@ -236,6 +239,7 @@ class NetworkManifestTests(unittest.TestCase):
                         "seed_nodes": ["seed-1@127.0.0.1:26656"],
                         "block_policy_mode": "periodic",
                         "block_policy_interval": "10s",
+                        "tracer_mode": "native_instruction_v1",
                     }
                 ),
                 encoding="utf-8",
@@ -267,6 +271,7 @@ class NetworkManifestTests(unittest.TestCase):
             self.assertIsNone(profile["snapshot_url"])
             self.assertEqual(profile["block_policy_mode"], "periodic")
             self.assertEqual(profile["block_policy_interval"], "10s")
+            self.assertEqual(profile["tracer_mode"], "native_instruction_v1")
 
     def test_network_join_allows_block_policy_override(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -287,6 +292,7 @@ class NetworkManifestTests(unittest.TestCase):
                         "seed_nodes": [],
                         "block_policy_mode": "on_demand",
                         "block_policy_interval": "0s",
+                        "tracer_mode": "python_line_v1",
                     }
                 ),
                 encoding="utf-8",
@@ -310,6 +316,8 @@ class NetworkManifestTests(unittest.TestCase):
                             "idle_interval",
                             "--block-policy-interval",
                             "10s",
+                            "--tracer-mode",
+                            "native_instruction_v1",
                             "--output",
                             str(output_path),
                         ]
@@ -319,6 +327,7 @@ class NetworkManifestTests(unittest.TestCase):
             profile = json.loads(output_path.read_text(encoding="utf-8"))
             self.assertEqual(profile["block_policy_mode"], "idle_interval")
             self.assertEqual(profile["block_policy_interval"], "10s")
+            self.assertEqual(profile["tracer_mode"], "native_instruction_v1")
 
     def test_network_join_allows_node_local_overrides(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -337,6 +346,7 @@ class NetworkManifestTests(unittest.TestCase):
                         "genesis_source": "./genesis.json",
                         "snapshot_url": None,
                         "seed_nodes": ["seed-1@127.0.0.1:26656"],
+                        "tracer_mode": "python_line_v1",
                     }
                 ),
                 encoding="utf-8",
@@ -373,6 +383,7 @@ class NetworkManifestTests(unittest.TestCase):
                 profile["snapshot_url"],
                 "https://example.invalid/node-snapshot",
             )
+            self.assertEqual(profile["tracer_mode"], "python_line_v1")
 
     def test_network_join_can_generate_validator_key_material(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -391,6 +402,7 @@ class NetworkManifestTests(unittest.TestCase):
                         "genesis_source": "./genesis.json",
                         "snapshot_url": None,
                         "seed_nodes": [],
+                        "tracer_mode": "python_line_v1",
                     }
                 ),
                 encoding="utf-8",
