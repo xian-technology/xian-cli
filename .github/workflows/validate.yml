@@ -14,42 +14,42 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           path: xian-cli
 
       - name: Check out xian-abci
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           repository: xian-technology/xian-abci
           path: xian-abci
 
       - name: Check out xian-contracting
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           repository: xian-technology/xian-contracting
           path: xian-contracting
 
       - name: Check out xian-py
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           repository: xian-technology/xian-py
           path: xian-py
 
       - name: Check out xian-configs
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           repository: xian-technology/xian-configs
           path: xian-configs
 
       - name: Check out xian-stack
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           repository: xian-technology/xian-stack
           path: xian-stack
 
       - name: Set up Python 3.12
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.12"
 
@@ -74,7 +74,7 @@ jobs:
 
       - name: Upload coverage report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: xian-cli-coverage
           path: xian-cli/coverage.xml
