@@ -8,6 +8,10 @@
 - Reusable bootstrap logic belongs in `xian-abci`; backend runtime orchestration belongs in `xian-stack`.
 - This repo should consume network metadata and manifests, not become the canonical home for chain-specific genesis assets.
 
+## Shared Convention
+- Follow the shared repo convention in `xian-meta/docs/REPO_CONVENTIONS.md`.
+- Keep this repo aligned with that standard for repo-level notes and folder-level entrypoint docs.
+
 ## Project Layout
 - `src/xian_cli/cli.py`: main command surface and argument parsing.
 - `src/xian_cli/models.py`: network manifest and node profile models.
