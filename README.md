@@ -57,6 +57,7 @@ uv run xian node status mainnet-node
 uv run xian node endpoints mainnet-node
 uv run xian snapshot restore mainnet-node
 uv run xian doctor mainnet-node
+uv run xian doctor mainnet-node --skip-live-checks
 uv run xian node start mainnet-node
 uv run xian node stop mainnet-node
 ```
@@ -126,6 +127,11 @@ for that node.
 `abci_query`, Xian and CometBFT metrics, and optional dashboard / Prometheus /
 Grafana services. This is the quickest way to discover what a template-enabled
 node is expected to expose.
+
+`doctor` now defaults to live health checks when a node name is provided. That
+includes backend state, RPC reachability, and optional dashboard / monitoring
+services when they are enabled in the profile. Use `--skip-live-checks` when
+you only want an offline workspace and node-home preflight.
 
 Node profiles now also carry `monitoring_enabled`. When that is true,
 `xian-cli` asks `xian-stack` to manage the Prometheus and Grafana sidecars

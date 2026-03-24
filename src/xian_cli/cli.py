@@ -1373,6 +1373,7 @@ def _collect_node_status(
     args: argparse.Namespace,
     *,
     check_rpc: bool,
+    check_backend: bool = True,
 ) -> dict:
     context = _resolve_node_context(args)
     profile_path = context["profile_path"]
@@ -1422,7 +1423,11 @@ def _collect_node_status(
         except json.JSONDecodeError:
             result["node_id"] = None
 
-    if runtime_backend == "xian-stack" and stack_dir is not None:
+    if (
+        runtime_backend == "xian-stack"
+        and stack_dir is not None
+        and check_backend
+    ):
         try:
             backend_status = get_xian_stack_node_status(
                 stack_dir=stack_dir,
@@ -1521,6 +1526,63 @@ def _run_check(name: str, fn) -> dict[str, object]:
     }
 
 
+def _doctor_node_artifacts(status: dict[str, object]) -> dict[str, object]:
+    missing = []
+    if not status.get("config_present"):
+        missing.append("config.toml")
+    if not status.get("genesis_present"):
+        missing.append("genesis.json")
+    if not status.get("node_key_present"):
+        missing.append("node_key.json")
+    if not status.get("priv_validator_state_present"):
+        missing.append("priv_validator_state.json")
+    if not status.get("initialized") or missing:
+        detail = ", ".join(missing) if missing else "node home not initialized"
+        raise RuntimeError(detail)
+    return {
+        "home": status.get("home"),
+        "node_id": status.get("node_id"),
+    }
+
+
+def _doctor_backend_check(status: dict[str, object]) -> dict[str, object]:
+    if status.get("backend_error"):
+        raise RuntimeError(str(status["backend_error"]))
+    if not status.get("backend_running"):
+        raise RuntimeError("xian-stack backend is not running")
+    return {
+        "stack_dir": status.get("stack_dir"),
+        "backend_running": True,
+    }
+
+
+def _doctor_rpc_check(status: dict[str, object]) -> dict[str, object]:
+    if not status.get("rpc_reachable"):
+        raise RuntimeError(str(status.get("rpc_error", "RPC is unreachable")))
+    return status.get("summary", {})
+
+
+def _doctor_service_check(
+    status: dict[str, object],
+    *,
+    service_name: str,
+    reachable_key: str,
+    error_key: str,
+) -> dict[str, object]:
+    backend_status = status.get("backend_status")
+    if not isinstance(backend_status, dict):
+        raise RuntimeError("backend status is unavailable")
+    if not backend_status.get(reachable_key):
+        raise RuntimeError(
+            str(backend_status.get(error_key, f"{service_name} is unreachable"))
+        )
+    return {
+        "service": service_name,
+        "reachable": True,
+        "url": status.get("endpoints", {}).get(service_name),
+    }
+
+
 def _handle_doctor(args: argparse.Namespace) -> int:
     base_dir = args.base_dir.resolve()
     checks = [
@@ -1552,19 +1614,87 @@ def _handle_doctor(args: argparse.Namespace) -> int:
             configs_dir=args.configs_dir,
             home=args.home,
             rpc_url=args.rpc_url,
-            skip_rpc=True,
+            skip_rpc=args.skip_live_checks,
+        )
+        node_status = _collect_node_status(
+            status_args,
+            check_rpc=not args.skip_live_checks,
+            check_backend=not args.skip_live_checks,
         )
         checks.append(
             _run_check(
                 "node_status",
-                lambda: _collect_node_status(status_args, check_rpc=False),
+                lambda: node_status,
             )
         )
+        checks.append(
+            _run_check(
+                "node_artifacts",
+                lambda: _doctor_node_artifacts(node_status),
+            )
+        )
+        checks.append(
+            _run_check(
+                "endpoints",
+                lambda: node_status.get("endpoints", {}),
+            )
+        )
+        if not args.skip_live_checks:
+            checks.append(
+                _run_check(
+                    "backend",
+                    lambda: _doctor_backend_check(node_status),
+                )
+            )
+            checks.append(
+                _run_check(
+                    "rpc",
+                    lambda: _doctor_rpc_check(node_status),
+                )
+            )
+            profile = node_status.get("profile", {})
+            if profile.get("dashboard_enabled"):
+                checks.append(
+                    _run_check(
+                        "dashboard",
+                        lambda: _doctor_service_check(
+                            node_status,
+                            service_name="dashboard",
+                            reachable_key="dashboard_reachable",
+                            error_key="dashboard_error",
+                        ),
+                    )
+                )
+            if profile.get("monitoring_enabled"):
+                checks.append(
+                    _run_check(
+                        "prometheus",
+                        lambda: _doctor_service_check(
+                            node_status,
+                            service_name="prometheus",
+                            reachable_key="prometheus_reachable",
+                            error_key="prometheus_error",
+                        ),
+                    )
+                )
+                checks.append(
+                    _run_check(
+                        "grafana",
+                        lambda: _doctor_service_check(
+                            node_status,
+                            service_name="grafana",
+                            reachable_key="grafana_reachable",
+                            error_key="grafana_error",
+                        ),
+                    )
+                )
 
     result = {
         "ok": all(check["ok"] for check in checks),
         "checks": checks,
     }
+    if args.name is not None:
+        result["node"] = node_status
     print(json.dumps(result, indent=2))
     return 0
 
@@ -2472,6 +2602,14 @@ def build_parser() -> argparse.ArgumentParser:
         "--rpc-url",
         default="http://127.0.0.1:26657/status",
         help="RPC status endpoint for node inspection",
+    )
+    doctor_parser.add_argument(
+        "--skip-live-checks",
+        action="store_true",
+        help=(
+            "only verify local workspace and node-home artifacts; "
+            "skip backend, RPC, dashboard, and monitoring reachability"
+        ),
     )
     doctor_parser.set_defaults(handler=_handle_doctor)
 

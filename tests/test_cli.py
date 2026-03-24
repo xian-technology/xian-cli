@@ -2111,6 +2111,7 @@ class DoctorTests(unittest.TestCase):
                                         str(configs_dir),
                                         "--stack-dir",
                                         str(stack_dir),
+                                        "--skip-live-checks",
                                     ]
                                 )
 
@@ -2121,6 +2122,148 @@ class DoctorTests(unittest.TestCase):
             self.assertIn("configs_dir", check_names)
             self.assertIn("stack_dir", check_names)
             self.assertIn("node_status", check_names)
+            self.assertIn("node_artifacts", check_names)
+            self.assertIn("endpoints", check_names)
+
+    def test_doctor_can_run_live_health_checks(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            base_dir = Path(tmp_dir)
+            configs_dir = base_dir / "xian-configs"
+            stack_dir = base_dir / "xian-stack"
+            configs_dir.mkdir()
+            stack_dir.mkdir()
+            (base_dir / "networks").mkdir()
+            (base_dir / "nodes").mkdir()
+            home = base_dir / ".cometbft"
+            config_dir = home / "config"
+            data_dir = home / "data"
+            config_dir.mkdir(parents=True)
+            data_dir.mkdir(parents=True)
+            (config_dir / "config.toml").write_text("", encoding="utf-8")
+            (config_dir / "genesis.json").write_text("{}", encoding="utf-8")
+            (config_dir / "node_key.json").write_text(
+                json.dumps({"node_id": "node-123"}),
+                encoding="utf-8",
+            )
+            (data_dir / "priv_validator_state.json").write_text(
+                "{}",
+                encoding="utf-8",
+            )
+
+            with redirect_stdout(io.StringIO()):
+                main(
+                    [
+                        "network",
+                        "create",
+                        "local-dev",
+                        "--chain-id",
+                        "xian-local-1",
+                        "--genesis-source",
+                        str(CANONICAL_DEVNET_GENESIS),
+                        "--output",
+                        str(
+                            base_dir
+                            / "networks"
+                            / "local-dev"
+                            / "manifest.json"
+                        ),
+                    ]
+                )
+                main(
+                    [
+                        "network",
+                        "join",
+                        "validator-1",
+                        "--base-dir",
+                        str(base_dir),
+                        "--network",
+                        "local-dev",
+                        "--stack-dir",
+                        str(stack_dir),
+                        "--enable-dashboard",
+                        "--enable-monitoring",
+                        "--home",
+                        str(home),
+                        "--output",
+                        str(base_dir / "nodes" / "validator-1.json"),
+                    ]
+                )
+
+            stdout = io.StringIO()
+            with patch(
+                "xian_cli.cli.get_node_setup_module",
+                return_value=type(
+                    "NodeSetup", (), {"__name__": "node_setup"}
+                )(),
+            ):
+                with patch(
+                    "xian_cli.cli.get_node_admin_module",
+                    return_value=type(
+                        "NodeAdmin", (), {"__name__": "node_admin"}
+                    )(),
+                ):
+                    with patch(
+                        "xian_cli.cli.get_genesis_builder_module",
+                        return_value=type(
+                            "GenesisBuilder",
+                            (),
+                            {"__name__": "genesis_builder"},
+                        )(),
+                    ):
+                        with patch(
+                            "xian_cli.cli.fetch_json",
+                            return_value={
+                                "result": {
+                                    "node_info": {
+                                        "network": "xian",
+                                        "other": {"n_peers": "3"},
+                                    },
+                                    "sync_info": {
+                                        "latest_block_height": "42",
+                                        "catching_up": False,
+                                    },
+                                }
+                            },
+                        ):
+                            with patch(
+                                "xian_cli.cli.get_xian_stack_node_status",
+                                return_value={
+                                    "backend_running": True,
+                                    "node_id": "node-123",
+                                    "dashboard_reachable": True,
+                                    "prometheus_reachable": True,
+                                    "grafana_reachable": True,
+                                    "endpoints": {
+                                        "rpc": "http://127.0.0.1:26657",
+                                        "dashboard": "http://127.0.0.1:8080",
+                                        "prometheus": "http://127.0.0.1:9090",
+                                        "grafana": "http://127.0.0.1:3000",
+                                    },
+                                },
+                            ):
+                                with redirect_stdout(stdout):
+                                    exit_code = main(
+                                        [
+                                            "doctor",
+                                            "validator-1",
+                                            "--base-dir",
+                                            str(base_dir),
+                                            "--configs-dir",
+                                            str(configs_dir),
+                                            "--stack-dir",
+                                            str(stack_dir),
+                                        ]
+                                    )
+
+            self.assertEqual(exit_code, 0)
+            result = json.loads(stdout.getvalue())
+            self.assertTrue(result["ok"])
+            check_names = {check["name"] for check in result["checks"]}
+            self.assertIn("backend", check_names)
+            self.assertIn("rpc", check_names)
+            self.assertIn("dashboard", check_names)
+            self.assertIn("prometheus", check_names)
+            self.assertIn("grafana", check_names)
 
 
 class SnapshotCommandTests(unittest.TestCase):
