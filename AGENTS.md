@@ -11,6 +11,8 @@
 ## Shared Convention
 - Follow the shared repo convention in `xian-meta/docs/REPO_CONVENTIONS.md`.
 - Keep this repo aligned with that standard for repo-level notes and folder-level entrypoint docs.
+- Follow the shared change workflow in `xian-meta/docs/CHANGE_WORKFLOW.md`.
+- Before push, review whether `xian-docs-web` needs updates and run the local validation path from this file.
 
 ## Project Layout
 - `src/xian_cli/cli.py`: main command surface and argument parsing.
