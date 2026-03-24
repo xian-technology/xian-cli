@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 import time
@@ -82,6 +83,7 @@ def run_backend_command(
     stack_dir: Path,
     command: str,
     *,
+    cometbft_home: Path | None = None,
     service_node: bool = False,
     dashboard_enabled: bool = False,
     monitoring_enabled: bool = False,
@@ -121,6 +123,16 @@ def run_backend_command(
             check=True,
             capture_output=True,
             text=True,
+            env=(
+                {
+                    **os.environ,
+                    **(
+                        {"XIAN_COMETBFT_HOME": str(cometbft_home)}
+                        if cometbft_home is not None
+                        else {}
+                    ),
+                }
+            ),
         )
     except subprocess.CalledProcessError as exc:
         detail = exc.stderr.strip() or exc.stdout.strip() or str(exc)
@@ -138,6 +150,7 @@ def run_backend_command(
 def start_xian_stack_node(
     *,
     stack_dir: Path,
+    cometbft_home: Path | None = None,
     service_node: bool,
     dashboard_enabled: bool = False,
     monitoring_enabled: bool = False,
@@ -149,6 +162,7 @@ def start_xian_stack_node(
     return run_backend_command(
         stack_dir,
         "start",
+        cometbft_home=cometbft_home,
         service_node=service_node,
         dashboard_enabled=dashboard_enabled,
         monitoring_enabled=monitoring_enabled,
@@ -163,6 +177,7 @@ def start_xian_stack_node(
 def stop_xian_stack_node(
     *,
     stack_dir: Path,
+    cometbft_home: Path | None = None,
     service_node: bool,
     dashboard_enabled: bool = False,
     monitoring_enabled: bool = False,
@@ -172,6 +187,7 @@ def stop_xian_stack_node(
     return run_backend_command(
         stack_dir,
         "stop",
+        cometbft_home=cometbft_home,
         service_node=service_node,
         dashboard_enabled=dashboard_enabled,
         monitoring_enabled=monitoring_enabled,
@@ -183,6 +199,7 @@ def stop_xian_stack_node(
 def get_xian_stack_node_status(
     *,
     stack_dir: Path,
+    cometbft_home: Path | None = None,
     service_node: bool,
     dashboard_enabled: bool = False,
     monitoring_enabled: bool = False,
@@ -192,6 +209,7 @@ def get_xian_stack_node_status(
     return run_backend_command(
         stack_dir,
         "status",
+        cometbft_home=cometbft_home,
         service_node=service_node,
         dashboard_enabled=dashboard_enabled,
         monitoring_enabled=monitoring_enabled,
@@ -203,6 +221,7 @@ def get_xian_stack_node_status(
 def get_xian_stack_node_endpoints(
     *,
     stack_dir: Path,
+    cometbft_home: Path | None = None,
     service_node: bool,
     dashboard_enabled: bool = False,
     monitoring_enabled: bool = False,
@@ -212,6 +231,7 @@ def get_xian_stack_node_endpoints(
     return run_backend_command(
         stack_dir,
         "endpoints",
+        cometbft_home=cometbft_home,
         service_node=service_node,
         dashboard_enabled=dashboard_enabled,
         monitoring_enabled=monitoring_enabled,
@@ -223,6 +243,7 @@ def get_xian_stack_node_endpoints(
 def get_xian_stack_node_health(
     *,
     stack_dir: Path,
+    cometbft_home: Path | None = None,
     service_node: bool,
     dashboard_enabled: bool = False,
     monitoring_enabled: bool = False,
@@ -234,6 +255,7 @@ def get_xian_stack_node_health(
     return run_backend_command(
         stack_dir,
         "health",
+        cometbft_home=cometbft_home,
         service_node=service_node,
         dashboard_enabled=dashboard_enabled,
         monitoring_enabled=monitoring_enabled,

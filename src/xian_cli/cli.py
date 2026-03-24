@@ -329,7 +329,12 @@ def _handle_network_create(args: argparse.Namespace) -> int:
                 validators=validators,
                 genesis_preset=args.genesis_preset,
             )
-            write_json(generated_genesis_path, genesis, force=args.force)
+            write_json(
+                generated_genesis_path,
+                genesis,
+                force=args.force,
+                preserve_runtime_types=True,
+            )
             genesis_source = "./genesis.json"
     if bootstrap_name is not None and genesis_source is None and not validators:
         raise ValueError(
@@ -1162,6 +1167,7 @@ def _handle_node_start(args: argparse.Namespace) -> int:
 
     result = start_xian_stack_node(
         stack_dir=stack_dir,
+        cometbft_home=home,
         service_node=bool(profile.get("service_node")),
         dashboard_enabled=bool(profile.get("dashboard_enabled")),
         monitoring_enabled=bool(profile.get("monitoring_enabled")),
@@ -1176,7 +1182,7 @@ def _handle_node_start(args: argparse.Namespace) -> int:
 
 def _handle_node_stop(args: argparse.Namespace) -> int:
     base_dir = args.base_dir.resolve()
-    _, profile, _, network = _load_profile_and_network(
+    profile_path, profile, _, network = _load_profile_and_network(
         base_dir=base_dir,
         name=args.name,
         profile_arg=args.profile,
@@ -1194,6 +1200,13 @@ def _handle_node_stop(args: argparse.Namespace) -> int:
     )
     result = stop_xian_stack_node(
         stack_dir=stack_dir,
+        cometbft_home=_resolve_home(
+            base_dir=base_dir,
+            profile=profile,
+            profile_path=profile_path,
+            runtime_backend=_resolve_runtime_backend(profile, network),
+            stack_dir=stack_dir,
+        ),
         service_node=bool(profile.get("service_node")),
         dashboard_enabled=bool(profile.get("dashboard_enabled")),
         monitoring_enabled=bool(profile.get("monitoring_enabled")),
@@ -1249,6 +1262,14 @@ def _format_url_host(hostname: str) -> str:
     return hostname
 
 
+def _display_endpoint_host(hostname: str) -> str:
+    if hostname == "0.0.0.0":
+        return "127.0.0.1"
+    if hostname == "::":
+        return "::1"
+    return hostname
+
+
 def _replace_url_port(url: str, *, port: int, suffix: str = "") -> str:
     parsed = urlparse(url)
     scheme = parsed.scheme or "http"
@@ -1284,7 +1305,9 @@ def _fallback_node_endpoints(
         ),
     }
     if bool(profile.get("dashboard_enabled")):
-        dashboard_host = str(profile.get("dashboard_host", "127.0.0.1"))
+        dashboard_host = _display_endpoint_host(
+            str(profile.get("dashboard_host", "127.0.0.1"))
+        )
         dashboard_port = int(profile.get("dashboard_port", 8080))
         dashboard_url = f"http://{dashboard_host}:{dashboard_port}"
         endpoints["dashboard"] = dashboard_url
@@ -1300,6 +1323,7 @@ def _collect_node_endpoints(args: argparse.Namespace) -> dict[str, object]:
     profile = context["profile"]
     runtime_backend = context["runtime_backend"]
     stack_dir = context["stack_dir"]
+    home = context["home"]
     rpc_status_url = getattr(args, "rpc_url", "http://127.0.0.1:26657/status")
 
     payload: dict[str, object] = {
@@ -1319,6 +1343,7 @@ def _collect_node_endpoints(args: argparse.Namespace) -> dict[str, object]:
         try:
             backend_payload = get_xian_stack_node_endpoints(
                 stack_dir=stack_dir,
+                cometbft_home=home,
                 service_node=bool(profile.get("service_node")),
                 dashboard_enabled=bool(profile.get("dashboard_enabled")),
                 monitoring_enabled=bool(profile.get("monitoring_enabled")),
@@ -1462,6 +1487,7 @@ def _collect_node_status(
         try:
             backend_status = get_xian_stack_node_status(
                 stack_dir=stack_dir,
+                cometbft_home=home,
                 service_node=bool(profile.get("service_node")),
                 dashboard_enabled=bool(profile.get("dashboard_enabled")),
                 monitoring_enabled=bool(profile.get("monitoring_enabled")),
@@ -1593,6 +1619,7 @@ def _collect_node_health(args: argparse.Namespace) -> dict[str, object]:
     if runtime_backend == "xian-stack" and stack_dir is not None:
         payload["health"] = get_xian_stack_node_health(
             stack_dir=stack_dir,
+            cometbft_home=home,
             service_node=bool(profile.get("service_node")),
             dashboard_enabled=bool(profile.get("dashboard_enabled")),
             monitoring_enabled=bool(profile.get("monitoring_enabled")),

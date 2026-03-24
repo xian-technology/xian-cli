@@ -11,10 +11,11 @@ from pathlib import Path
 from unittest.mock import patch
 from urllib.error import URLError
 
+from xian_runtime_types.decimal import ContractingDecimal
 from xian_runtime_types.time import Datetime
 
 import xian_cli.abci_bridge as abci_bridge
-from xian_cli.cli import main
+from xian_cli.cli import _fallback_node_endpoints, main
 from xian_cli.config_repo import (
     resolve_configs_dir,
     resolve_network_manifest_path,
@@ -26,6 +27,7 @@ from xian_cli.models import (
     read_node_profile,
 )
 from xian_cli.runtime import (
+    default_home_for_backend,
     get_xian_stack_node_endpoints,
     get_xian_stack_node_health,
     get_xian_stack_node_status,
@@ -811,7 +813,7 @@ class NetworkManifestTests(unittest.TestCase):
                     "genesis": [
                         {
                             "key": "currency.balances:founder",
-                            "value": "1000000",
+                            "value": ContractingDecimal("1000000.5"),
                         },
                         {
                             "key": "currency.streams:example",
@@ -898,8 +900,12 @@ class NetworkManifestTests(unittest.TestCase):
                 "keys/validator-1/validator_key_info.json",
             )
             self.assertEqual(
+                generated_genesis["abci_genesis"]["genesis"][0]["value"],
+                {"__fixed__": "1000000.5"},
+            )
+            self.assertEqual(
                 generated_genesis["abci_genesis"]["genesis"][1]["value"],
-                "2026-01-01 00:00:00",
+                {"__time__": [2026, 1, 1, 0, 0, 0, 0]},
             )
             (genesis_builder.build_local_network_genesis.assert_called_once())
 
@@ -1707,6 +1713,10 @@ class NodeRuntimeTests(unittest.TestCase):
             self.assertEqual(start_node.call_count, 1)
             kwargs = start_node.call_args.kwargs
             self.assertEqual(kwargs["stack_dir"], stack_dir.resolve())
+            self.assertEqual(
+                kwargs["cometbft_home"],
+                (stack_dir / ".cometbft").resolve(),
+            )
             self.assertFalse(kwargs["service_node"])
             self.assertTrue(kwargs["dashboard_enabled"])
             self.assertTrue(kwargs["monitoring_enabled"])
@@ -1779,6 +1789,14 @@ class NodeRuntimeTests(unittest.TestCase):
             self.assertEqual(stop_node.call_count, 1)
             kwargs = stop_node.call_args.kwargs
             self.assertEqual(kwargs["stack_dir"], stack_dir.resolve())
+            self.assertEqual(
+                kwargs["cometbft_home"],
+                default_home_for_backend(
+                    base_dir=base_dir,
+                    runtime_backend="xian-stack",
+                    stack_dir=stack_dir.resolve(),
+                ),
+            )
             self.assertTrue(kwargs["service_node"])
             self.assertFalse(kwargs["monitoring_enabled"])
 
@@ -2594,6 +2612,7 @@ class RuntimeHelperTests(unittest.TestCase):
 
     def test_start_xian_stack_node_uses_backend_command(self) -> None:
         stack_dir = Path("/tmp/xian-stack")
+        cometbft_home = Path("/tmp/xian-home")
         rpc_status = {"result": {"sync_info": {"catching_up": False}}}
 
         with patch(
@@ -2602,6 +2621,7 @@ class RuntimeHelperTests(unittest.TestCase):
             run_backend_command.return_value = {"rpc_status": rpc_status}
             result = start_xian_stack_node(
                 stack_dir=stack_dir,
+                cometbft_home=cometbft_home,
                 service_node=True,
                 dashboard_enabled=True,
                 monitoring_enabled=True,
@@ -2614,6 +2634,7 @@ class RuntimeHelperTests(unittest.TestCase):
         run_backend_command.assert_called_once_with(
             stack_dir,
             "start",
+            cometbft_home=cometbft_home,
             service_node=True,
             dashboard_enabled=True,
             monitoring_enabled=True,
@@ -2627,6 +2648,7 @@ class RuntimeHelperTests(unittest.TestCase):
 
     def test_stop_xian_stack_node_uses_backend_command(self) -> None:
         stack_dir = Path("/tmp/xian-stack")
+        cometbft_home = Path("/tmp/xian-home")
 
         with patch(
             "xian_cli.runtime.run_backend_command"
@@ -2634,6 +2656,7 @@ class RuntimeHelperTests(unittest.TestCase):
             run_backend_command.return_value = {"container_target": "abci-down"}
             result = stop_xian_stack_node(
                 stack_dir=stack_dir,
+                cometbft_home=cometbft_home,
                 service_node=False,
                 dashboard_enabled=True,
                 monitoring_enabled=True,
@@ -2644,6 +2667,7 @@ class RuntimeHelperTests(unittest.TestCase):
         run_backend_command.assert_called_once_with(
             stack_dir,
             "stop",
+            cometbft_home=cometbft_home,
             service_node=False,
             dashboard_enabled=True,
             monitoring_enabled=True,
@@ -2654,6 +2678,7 @@ class RuntimeHelperTests(unittest.TestCase):
 
     def test_get_xian_stack_node_status_uses_backend_command(self) -> None:
         stack_dir = Path("/tmp/xian-stack")
+        cometbft_home = Path("/tmp/xian-home")
         with patch(
             "xian_cli.runtime.run_backend_command"
         ) as run_backend_command:
@@ -2663,6 +2688,7 @@ class RuntimeHelperTests(unittest.TestCase):
             }
             result = get_xian_stack_node_status(
                 stack_dir=stack_dir,
+                cometbft_home=cometbft_home,
                 service_node=True,
                 dashboard_enabled=True,
                 monitoring_enabled=True,
@@ -2675,6 +2701,7 @@ class RuntimeHelperTests(unittest.TestCase):
         run_backend_command.assert_called_once_with(
             stack_dir,
             "status",
+            cometbft_home=cometbft_home,
             service_node=True,
             dashboard_enabled=True,
             monitoring_enabled=True,
@@ -2684,6 +2711,7 @@ class RuntimeHelperTests(unittest.TestCase):
 
     def test_get_xian_stack_node_endpoints_uses_backend_command(self) -> None:
         stack_dir = Path("/tmp/xian-stack")
+        cometbft_home = Path("/tmp/xian-home")
         with patch(
             "xian_cli.runtime.run_backend_command"
         ) as run_backend_command:
@@ -2692,6 +2720,7 @@ class RuntimeHelperTests(unittest.TestCase):
             }
             result = get_xian_stack_node_endpoints(
                 stack_dir=stack_dir,
+                cometbft_home=cometbft_home,
                 service_node=True,
                 dashboard_enabled=True,
                 monitoring_enabled=True,
@@ -2706,6 +2735,7 @@ class RuntimeHelperTests(unittest.TestCase):
         run_backend_command.assert_called_once_with(
             stack_dir,
             "endpoints",
+            cometbft_home=cometbft_home,
             service_node=True,
             dashboard_enabled=True,
             monitoring_enabled=True,
@@ -2715,12 +2745,14 @@ class RuntimeHelperTests(unittest.TestCase):
 
     def test_get_xian_stack_node_health_uses_backend_command(self) -> None:
         stack_dir = Path("/tmp/xian-stack")
+        cometbft_home = Path("/tmp/xian-home")
         with patch(
             "xian_cli.runtime.run_backend_command"
         ) as run_backend_command:
             run_backend_command.return_value = {"state": "healthy"}
             result = get_xian_stack_node_health(
                 stack_dir=stack_dir,
+                cometbft_home=cometbft_home,
                 service_node=True,
                 dashboard_enabled=True,
                 monitoring_enabled=True,
@@ -2734,6 +2766,7 @@ class RuntimeHelperTests(unittest.TestCase):
         run_backend_command.assert_called_once_with(
             stack_dir,
             "health",
+            cometbft_home=cometbft_home,
             service_node=True,
             dashboard_enabled=True,
             monitoring_enabled=True,
@@ -2741,6 +2774,27 @@ class RuntimeHelperTests(unittest.TestCase):
             dashboard_port=18080,
             rpc_url="http://127.0.0.1:26657/status",
             check_disk=False,
+        )
+
+    def test_fallback_node_endpoints_normalizes_wildcard_dashboard_host(
+        self,
+    ) -> None:
+        profile = {
+            "dashboard_enabled": True,
+            "dashboard_host": "0.0.0.0",
+            "dashboard_port": 18080,
+            "monitoring_enabled": False,
+        }
+
+        endpoints = _fallback_node_endpoints(
+            rpc_status_url="http://127.0.0.1:26657/status",
+            profile=profile,
+        )
+
+        self.assertEqual(endpoints["dashboard"], "http://127.0.0.1:18080")
+        self.assertEqual(
+            endpoints["dashboard_status"],
+            "http://127.0.0.1:18080/api/status",
         )
 
     def test_run_backend_command_surfaces_backend_stderr(self) -> None:

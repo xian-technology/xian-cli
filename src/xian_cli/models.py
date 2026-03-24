@@ -6,6 +6,7 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
 from xian_runtime_types.decimal import ContractingDecimal
+from xian_runtime_types.encoding import encode
 from xian_runtime_types.time import Datetime
 
 SCHEMA_VERSION = 1
@@ -342,17 +343,31 @@ class NetworkTemplate:
         return asdict(self)
 
 
-def _normalize_json_value(value):
+def _normalize_json_value(value, *, preserve_runtime_types: bool = False):
     if isinstance(value, dict):
         return {
-            str(key): _normalize_json_value(nested)
+            str(key): _normalize_json_value(
+                nested, preserve_runtime_types=preserve_runtime_types
+            )
             for key, nested in value.items()
         }
     if isinstance(value, list):
-        return [_normalize_json_value(item) for item in value]
+        return [
+            _normalize_json_value(
+                item, preserve_runtime_types=preserve_runtime_types
+            )
+            for item in value
+        ]
     if isinstance(value, tuple):
-        return [_normalize_json_value(item) for item in value]
+        return [
+            _normalize_json_value(
+                item, preserve_runtime_types=preserve_runtime_types
+            )
+            for item in value
+        ]
     if isinstance(value, (ContractingDecimal, decimal.Decimal, Datetime)):
+        if preserve_runtime_types:
+            return json.loads(encode(value))
         return str(value)
     if isinstance(value, bytes):
         try:
@@ -362,13 +377,21 @@ def _normalize_json_value(value):
     return value
 
 
-def write_json(path: Path, payload: dict, *, force: bool = False) -> None:
+def write_json(
+    path: Path,
+    payload: dict,
+    *,
+    force: bool = False,
+    preserve_runtime_types: bool = False,
+) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     if path.exists() and not force:
         raise FileExistsError(
             f"{path} already exists; pass --force to overwrite"
         )
-    normalized = _normalize_json_value(payload)
+    normalized = _normalize_json_value(
+        payload, preserve_runtime_types=preserve_runtime_types
+    )
     path.write_text(json.dumps(normalized, indent=2) + "\n", encoding="utf-8")
 
 
