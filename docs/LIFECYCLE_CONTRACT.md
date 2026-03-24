@@ -11,6 +11,8 @@ The external UX should stay smaller than the internal lifecycle.
 Planned primary commands:
 
 - `xian keys validator generate`
+- `xian network template list`
+- `xian network template show`
 - `xian network create`
 - `xian network join`
 - `xian node init`
@@ -22,6 +24,8 @@ Planned primary commands:
 
 Command intent:
 
+- `network template list/show` surfaces canonical or local starter templates
+  that prefill network and node-profile defaults.
 - `network create` defines a new network manifest and may bootstrap the first
   local node for that network, including a multi-validator local genesis when
   the operator declares additional initial validators.
@@ -73,7 +77,10 @@ This stage defines machine-local choices. It should reference keys and networks,
 Resolution policy:
 
 - local manifests should be written at `./networks/<name>/manifest.json`
+- local templates may be written at `./templates/<name>.json`
 - `network join` should resolve the referenced network manifest immediately
+- template resolution should prefer a local `./templates/<name>.json` file and
+  otherwise fall back to `xian-configs/templates/<name>.json`
 - `runtime_backend` is explicit and currently must be `xian-stack`
 - node-local overrides such as extra seeds, snapshot URL overrides, and genesis
   URL overrides belong in the node profile
@@ -190,6 +197,7 @@ The node profile is the machine-local source of truth. Target fields:
   "runtime_backend": "xian-stack",
   "pruning_enabled": false,
   "blocks_to_keep": 100000,
+  "monitoring_enabled": false,
   "block_policy_mode": "on_demand",
   "block_policy_interval": "0s"
 }
@@ -209,6 +217,9 @@ Rules:
   changes whether time advances while the chain is idle
 - `network create` may generate a local `genesis.json`, but that file remains a
   derived network artifact rather than a place to hide node-local state
+- templates may provide defaults for runtime backend, tracing, bootstrap
+  validator names, service-node mode, dashboard exposure, monitoring, and
+  pruning, but explicit CLI flags should still win
 - `network join` may generate validator key material, but it should still write
   files under the workspace and store only a reference in the profile
 - node profiles should not duplicate network-owned seeds, snapshot URLs, or

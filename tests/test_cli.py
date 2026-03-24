@@ -15,8 +15,13 @@ from xian_cli.cli import main
 from xian_cli.config_repo import (
     resolve_configs_dir,
     resolve_network_manifest_path,
+    resolve_network_template_path,
 )
-from xian_cli.models import read_network_manifest, read_node_profile
+from xian_cli.models import (
+    read_network_manifest,
+    read_network_template,
+    read_node_profile,
+)
 from xian_cli.runtime import (
     get_xian_stack_node_status,
     resolve_stack_dir,
@@ -71,6 +76,57 @@ class ValidatorKeyTests(unittest.TestCase):
 
 
 class NetworkManifestTests(unittest.TestCase):
+    def test_network_template_list_reads_canonical_templates(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            base_dir = Path(tmp_dir)
+            configs_dir = base_dir / "xian-configs"
+            templates_dir = configs_dir / "templates"
+            templates_dir.mkdir(parents=True)
+            (templates_dir / "single-node-dev.json").write_text(
+                json.dumps(
+                    {
+                        "schema_version": 1,
+                        "name": "single-node-dev",
+                        "display_name": "Single-Node Dev",
+                        "description": "Local dev template",
+                        "runtime_backend": "xian-stack",
+                        "block_policy_mode": "on_demand",
+                        "block_policy_interval": "0s",
+                        "tracer_mode": "python_line_v1",
+                        "bootstrap_node_name": "validator-1",
+                        "additional_validator_names": [],
+                        "service_node": False,
+                        "dashboard_enabled": True,
+                        "monitoring_enabled": False,
+                        "dashboard_host": "0.0.0.0",
+                        "dashboard_port": 18080,
+                        "pruning_enabled": False,
+                        "blocks_to_keep": 100000,
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            stdout = io.StringIO()
+            with redirect_stdout(stdout):
+                exit_code = main(
+                    [
+                        "network",
+                        "template",
+                        "list",
+                        "--base-dir",
+                        str(base_dir),
+                        "--configs-dir",
+                        str(configs_dir),
+                    ]
+                )
+
+            self.assertEqual(exit_code, 0)
+            payload = json.loads(stdout.getvalue())
+            self.assertEqual(len(payload), 1)
+            self.assertEqual(payload[0]["name"], "single-node-dev")
+            self.assertTrue(payload[0]["dashboard_enabled"])
+
     def test_network_create_writes_manifest(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             output_path = Path(tmp_dir) / "local.json"
@@ -129,6 +185,79 @@ class NetworkManifestTests(unittest.TestCase):
             self.assertEqual(manifest["block_policy_mode"], "on_demand")
             self.assertEqual(manifest["block_policy_interval"], "0s")
             self.assertEqual(manifest["tracer_mode"], "python_line_v1")
+
+    def test_network_create_uses_template_defaults(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            base_dir = Path(tmp_dir)
+            configs_dir = base_dir / "xian-configs"
+            templates_dir = configs_dir / "templates"
+            templates_dir.mkdir(parents=True)
+            (templates_dir / "single-node-indexed.json").write_text(
+                json.dumps(
+                    {
+                        "schema_version": 1,
+                        "name": "single-node-indexed",
+                        "display_name": "Single-Node Indexed",
+                        "description": "Indexed single node",
+                        "runtime_backend": "xian-stack",
+                        "block_policy_mode": "on_demand",
+                        "block_policy_interval": "0s",
+                        "tracer_mode": "native_instruction_v1",
+                        "bootstrap_node_name": "validator-1",
+                        "additional_validator_names": [],
+                        "service_node": True,
+                        "dashboard_enabled": True,
+                        "monitoring_enabled": True,
+                        "dashboard_host": "0.0.0.0",
+                        "dashboard_port": 18080,
+                        "pruning_enabled": False,
+                        "blocks_to_keep": 100000,
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            stdout = io.StringIO()
+            with redirect_stdout(stdout):
+                exit_code = main(
+                    [
+                        "network",
+                        "create",
+                        "local-dev",
+                        "--base-dir",
+                        str(base_dir),
+                        "--configs-dir",
+                        str(configs_dir),
+                        "--chain-id",
+                        "xian-local-1",
+                        "--template",
+                        "single-node-indexed",
+                        "--generate-validator-key",
+                        "--genesis-source",
+                        str(CANONICAL_DEVNET_GENESIS),
+                    ]
+                )
+
+            self.assertEqual(exit_code, 0)
+            result = json.loads(stdout.getvalue())
+            manifest = json.loads(
+                (
+                    base_dir / "networks" / "local-dev" / "manifest.json"
+                ).read_text(encoding="utf-8")
+            )
+            profile = json.loads(
+                (base_dir / "nodes" / "validator-1.json").read_text(
+                    encoding="utf-8"
+                )
+            )
+
+            self.assertEqual(result["template"], "single-node-indexed")
+            self.assertEqual(manifest["tracer_mode"], "native_instruction_v1")
+            self.assertTrue(profile["service_node"])
+            self.assertTrue(profile["dashboard_enabled"])
+            self.assertTrue(profile["monitoring_enabled"])
+            self.assertEqual(profile["dashboard_host"], "0.0.0.0")
+            self.assertEqual(profile["dashboard_port"], 18080)
 
     def test_network_join_writes_node_profile(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -271,6 +400,84 @@ class NetworkManifestTests(unittest.TestCase):
             self.assertIsNone(profile["snapshot_url"])
             self.assertEqual(profile["block_policy_mode"], "periodic")
             self.assertEqual(profile["block_policy_interval"], "10s")
+            self.assertEqual(profile["tracer_mode"], "native_instruction_v1")
+
+    def test_network_join_uses_template_defaults(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            base_dir = Path(tmp_dir)
+            configs_dir = base_dir / "xian-configs"
+            network_dir = configs_dir / "networks" / "canonical"
+            templates_dir = configs_dir / "templates"
+            network_dir.mkdir(parents=True)
+            templates_dir.mkdir(parents=True)
+            (network_dir / "manifest.json").write_text(
+                json.dumps(
+                    {
+                        "schema_version": 1,
+                        "name": "canonical",
+                        "chain_id": "xian-canonical-1",
+                        "mode": "join",
+                        "runtime_backend": "xian-stack",
+                        "genesis_source": "./genesis.json",
+                        "snapshot_url": None,
+                        "seed_nodes": [],
+                        "block_policy_mode": "on_demand",
+                        "block_policy_interval": "0s",
+                        "tracer_mode": "python_line_v1",
+                    }
+                ),
+                encoding="utf-8",
+            )
+            (templates_dir / "embedded-backend.json").write_text(
+                json.dumps(
+                    {
+                        "schema_version": 1,
+                        "name": "embedded-backend",
+                        "display_name": "Embedded Backend",
+                        "description": "App backend defaults",
+                        "runtime_backend": "xian-stack",
+                        "block_policy_mode": "on_demand",
+                        "block_policy_interval": "0s",
+                        "tracer_mode": "native_instruction_v1",
+                        "bootstrap_node_name": "validator-1",
+                        "additional_validator_names": [],
+                        "service_node": True,
+                        "dashboard_enabled": False,
+                        "monitoring_enabled": True,
+                        "dashboard_host": "127.0.0.1",
+                        "dashboard_port": 8080,
+                        "pruning_enabled": False,
+                        "blocks_to_keep": 100000,
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            output_path = base_dir / "nodes" / "validator-1.json"
+            with redirect_stdout(io.StringIO()):
+                exit_code = main(
+                    [
+                        "network",
+                        "join",
+                        "validator-1",
+                        "--base-dir",
+                        str(base_dir),
+                        "--configs-dir",
+                        str(configs_dir),
+                        "--network",
+                        "canonical",
+                        "--template",
+                        "embedded-backend",
+                        "--output",
+                        str(output_path),
+                    ]
+                )
+
+            self.assertEqual(exit_code, 0)
+            profile = json.loads(output_path.read_text(encoding="utf-8"))
+            self.assertTrue(profile["service_node"])
+            self.assertTrue(profile["monitoring_enabled"])
+            self.assertFalse(profile["dashboard_enabled"])
             self.assertEqual(profile["tracer_mode"], "native_instruction_v1")
 
     def test_network_join_allows_block_policy_override(self) -> None:
@@ -1417,6 +1624,7 @@ class NodeRuntimeTests(unittest.TestCase):
                         "--stack-dir",
                         str(stack_dir),
                         "--enable-dashboard",
+                        "--enable-monitoring",
                         "--dashboard-host",
                         "0.0.0.0",
                         "--dashboard-port",
@@ -1452,6 +1660,7 @@ class NodeRuntimeTests(unittest.TestCase):
             self.assertEqual(kwargs["stack_dir"], stack_dir.resolve())
             self.assertFalse(kwargs["service_node"])
             self.assertTrue(kwargs["dashboard_enabled"])
+            self.assertTrue(kwargs["monitoring_enabled"])
             self.assertEqual(kwargs["dashboard_host"], "0.0.0.0")
             self.assertEqual(kwargs["dashboard_port"], 18080)
             self.assertFalse(kwargs["wait_for_rpc"])
@@ -1520,6 +1729,7 @@ class NodeRuntimeTests(unittest.TestCase):
             kwargs = stop_node.call_args.kwargs
             self.assertEqual(kwargs["stack_dir"], stack_dir.resolve())
             self.assertTrue(kwargs["service_node"])
+            self.assertFalse(kwargs["monitoring_enabled"])
 
     def test_node_start_requires_initialized_home(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -1972,6 +2182,7 @@ class RuntimeHelperTests(unittest.TestCase):
                 stack_dir=stack_dir,
                 service_node=True,
                 dashboard_enabled=True,
+                monitoring_enabled=True,
                 dashboard_host="0.0.0.0",
                 dashboard_port=18080,
                 wait_for_rpc=True,
@@ -1983,6 +2194,7 @@ class RuntimeHelperTests(unittest.TestCase):
             "start",
             service_node=True,
             dashboard_enabled=True,
+            monitoring_enabled=True,
             dashboard_host="0.0.0.0",
             dashboard_port=18080,
             wait_for_health=True,
@@ -2002,6 +2214,7 @@ class RuntimeHelperTests(unittest.TestCase):
                 stack_dir=stack_dir,
                 service_node=False,
                 dashboard_enabled=True,
+                monitoring_enabled=True,
                 dashboard_host="0.0.0.0",
                 dashboard_port=18080,
             )
@@ -2011,6 +2224,7 @@ class RuntimeHelperTests(unittest.TestCase):
             "stop",
             service_node=False,
             dashboard_enabled=True,
+            monitoring_enabled=True,
             dashboard_host="0.0.0.0",
             dashboard_port=18080,
         )
@@ -2029,6 +2243,7 @@ class RuntimeHelperTests(unittest.TestCase):
                 stack_dir=stack_dir,
                 service_node=True,
                 dashboard_enabled=True,
+                monitoring_enabled=True,
                 dashboard_host="0.0.0.0",
                 dashboard_port=18080,
             )
@@ -2040,6 +2255,7 @@ class RuntimeHelperTests(unittest.TestCase):
             "status",
             service_node=True,
             dashboard_enabled=True,
+            monitoring_enabled=True,
             dashboard_host="0.0.0.0",
             dashboard_port=18080,
         )
@@ -2086,6 +2302,28 @@ class ConfigRepoTests(unittest.TestCase):
             ):
                 read_node_profile(profile_path)
 
+    def test_read_network_template_requires_explicit_schema_version(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            template_path = Path(tmp_dir) / "template.json"
+            template_path.write_text(
+                json.dumps(
+                    {
+                        "name": "single-node-dev",
+                        "display_name": "Single-Node Dev",
+                        "description": "Local dev template",
+                        "runtime_backend": "xian-stack",
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            with self.assertRaisesRegex(
+                ValueError, "unsupported schema_version"
+            ):
+                read_network_template(template_path)
+
     def test_resolve_configs_dir_uses_workspace_fallback(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             resolved = resolve_configs_dir(Path(tmp_dir))
@@ -2126,6 +2364,24 @@ class ConfigRepoTests(unittest.TestCase):
             )
 
         self.assertEqual(resolved, manifest_path.resolve())
+
+    def test_resolve_network_template_path_prefers_canonical_configs_repo(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            base_dir = Path(tmp_dir)
+            configs_dir = base_dir / "xian-configs"
+            template_path = configs_dir / "templates" / "single-node-dev.json"
+            template_path.parent.mkdir(parents=True)
+            template_path.write_text("{}", encoding="utf-8")
+
+            resolved = resolve_network_template_path(
+                base_dir=base_dir,
+                template_name="single-node-dev",
+                configs_dir=configs_dir,
+            )
+
+        self.assertEqual(resolved, template_path.resolve())
 
 
 if __name__ == "__main__":

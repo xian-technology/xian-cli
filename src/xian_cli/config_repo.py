@@ -67,3 +67,57 @@ def resolve_network_manifest_path(
         "network manifest not found in local workspace or xian-configs: "
         f"{local_manifest_dir} or {canonical_manifest}"
     )
+
+
+def resolve_network_template_path(
+    *,
+    base_dir: Path,
+    template_name: str,
+    configs_dir: Path | None = None,
+) -> Path:
+    local_template = (
+        base_dir / "templates" / f"{template_name}.json"
+    ).resolve()
+    if local_template.exists():
+        return local_template
+
+    resolved_configs_dir = resolve_configs_dir(base_dir, explicit=configs_dir)
+    canonical_template = (
+        resolved_configs_dir / "templates" / f"{template_name}.json"
+    ).resolve()
+    if canonical_template.exists():
+        return canonical_template
+
+    raise FileNotFoundError(
+        "network template not found in local workspace or xian-configs: "
+        f"{local_template} or {canonical_template}"
+    )
+
+
+def list_network_template_paths(
+    *,
+    base_dir: Path,
+    configs_dir: Path | None = None,
+) -> list[Path]:
+    templates: dict[str, Path] = {}
+
+    try:
+        resolved_configs_dir = resolve_configs_dir(
+            base_dir,
+            explicit=configs_dir,
+        )
+    except FileNotFoundError:
+        resolved_configs_dir = None
+
+    if resolved_configs_dir is not None:
+        canonical_dir = resolved_configs_dir / "templates"
+        if canonical_dir.exists():
+            for path in sorted(canonical_dir.glob("*.json")):
+                templates[path.stem] = path.resolve()
+
+    local_dir = base_dir / "templates"
+    if local_dir.exists():
+        for path in sorted(local_dir.glob("*.json")):
+            templates[path.stem] = path.resolve()
+
+    return [templates[name] for name in sorted(templates)]

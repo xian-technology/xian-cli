@@ -13,8 +13,10 @@ from xian_cli.abci_bridge import (
     get_node_setup_module,
 )
 from xian_cli.config_repo import (
+    list_network_template_paths,
     resolve_configs_dir,
     resolve_network_manifest_path,
+    resolve_network_template_path,
 )
 from xian_cli.models import (
     SUPPORTED_BLOCK_POLICY_MODES,
@@ -24,6 +26,7 @@ from xian_cli.models import (
     NodeProfile,
     read_json,
     read_network_manifest,
+    read_network_template,
     read_node_profile,
     write_json,
 )
@@ -84,6 +87,58 @@ def _resolve_output_path(
     return target
 
 
+def _pick_template_value(
+    explicit,
+    template_value,
+    default,
+):
+    if explicit is not None:
+        return explicit
+    if template_value is not None:
+        return template_value
+    return default
+
+
+def _load_template(
+    *,
+    base_dir: Path,
+    template_name: str | None,
+    configs_dir: Path | None,
+) -> dict | None:
+    if template_name is None:
+        return None
+    template_path = resolve_network_template_path(
+        base_dir=base_dir,
+        template_name=template_name,
+        configs_dir=configs_dir,
+    )
+    return read_network_template(template_path)
+
+
+def _handle_network_template_list(args: argparse.Namespace) -> int:
+    base_dir = args.base_dir.resolve()
+    templates = [
+        read_network_template(path)
+        for path in list_network_template_paths(
+            base_dir=base_dir,
+            configs_dir=args.configs_dir,
+        )
+    ]
+    print(json.dumps(templates, indent=2))
+    return 0
+
+
+def _handle_network_template_show(args: argparse.Namespace) -> int:
+    base_dir = args.base_dir.resolve()
+    template = _load_template(
+        base_dir=base_dir,
+        template_name=args.name,
+        configs_dir=args.configs_dir,
+    )
+    print(json.dumps(template, indent=2))
+    return 0
+
+
 def _handle_keys_validator_generate(args: argparse.Namespace) -> int:
     if args.out_dir is not None:
         metadata_path = _write_validator_material_files(
@@ -104,14 +159,23 @@ def _handle_keys_validator_generate(args: argparse.Namespace) -> int:
 
 def _collect_creation_validator_names(
     args: argparse.Namespace,
+    *,
+    template: dict | None = None,
 ) -> tuple[str | None, list[str]]:
     bootstrap_name = args.bootstrap_node
+    if bootstrap_name is None and template is not None:
+        bootstrap_name = template.get("bootstrap_node_name")
     validator_names: list[str] = []
 
     if bootstrap_name is not None:
         validator_names.append(bootstrap_name)
 
-    for validator_name in args.validator or []:
+    validator_inputs = (
+        args.validator
+        if args.validator is not None
+        else (template.get("additional_validator_names") if template else [])
+    )
+    for validator_name in validator_inputs or []:
         if validator_name in validator_names:
             raise ValueError(
                 "duplicate validator name in network creation: "
@@ -126,6 +190,7 @@ def _collect_creation_validators(
     *,
     args: argparse.Namespace,
     base_dir: Path,
+    bootstrap_name: str | None,
     validator_names: list[str],
 ) -> list[dict[str, object]]:
     validators: list[dict[str, object]] = []
@@ -181,14 +246,14 @@ def _collect_creation_validators(
                 "name": validator_name,
                 "moniker": (
                     args.moniker
-                    if validator_name == args.bootstrap_node
+                    if validator_name == bootstrap_name
                     and args.moniker is not None
                     else validator_name
                 ),
                 "validator_key_ref": validator_key_ref,
                 "validator_key_payload": validator_key_payload,
                 "power": args.validator_power,
-                "is_bootstrap": validator_name == args.bootstrap_node,
+                "is_bootstrap": validator_name == bootstrap_name,
             }
         )
 
@@ -197,6 +262,11 @@ def _collect_creation_validators(
 
 def _handle_network_create(args: argparse.Namespace) -> int:
     base_dir = args.base_dir.resolve()
+    template = _load_template(
+        base_dir=base_dir,
+        template_name=args.template,
+        configs_dir=args.configs_dir,
+    )
     target = _resolve_output_path(
         base_dir=base_dir,
         explicit_output=args.output,
@@ -214,11 +284,18 @@ def _handle_network_create(args: argparse.Namespace) -> int:
             "--validator-key-dir requires --generate-validator-key"
         )
     if args.init_node and args.bootstrap_node is None:
+        if template is None or template.get("bootstrap_node_name") is None:
+            raise ValueError("--init-node requires --bootstrap-node")
+    bootstrap_name, validator_names = _collect_creation_validator_names(
+        args,
+        template=template,
+    )
+    if args.init_node and bootstrap_name is None:
         raise ValueError("--init-node requires --bootstrap-node")
-    bootstrap_name, validator_names = _collect_creation_validator_names(args)
     validators = _collect_creation_validators(
         args=args,
         base_dir=base_dir,
+        bootstrap_name=bootstrap_name,
         validator_names=validator_names,
     )
 
@@ -268,13 +345,29 @@ def _handle_network_create(args: argparse.Namespace) -> int:
         name=args.name,
         chain_id=args.chain_id,
         mode=args.mode,
-        runtime_backend=args.runtime_backend,
+        runtime_backend=_pick_template_value(
+            args.runtime_backend,
+            None if template is None else template.get("runtime_backend"),
+            "xian-stack",
+        ),
         genesis_source=genesis_source,
         snapshot_url=args.snapshot_url,
         seed_nodes=args.seed or [],
-        block_policy_mode=args.block_policy_mode,
-        block_policy_interval=args.block_policy_interval,
-        tracer_mode=args.tracer_mode,
+        block_policy_mode=_pick_template_value(
+            args.block_policy_mode,
+            None if template is None else template.get("block_policy_mode"),
+            "on_demand",
+        ),
+        block_policy_interval=_pick_template_value(
+            args.block_policy_interval,
+            None if template is None else template.get("block_policy_interval"),
+            "0s",
+        ),
+        tracer_mode=_pick_template_value(
+            args.tracer_mode,
+            None if template is None else template.get("tracer_mode"),
+            "python_line_v1",
+        ),
     )
     write_json(target, manifest.to_dict(), force=args.force)
 
@@ -282,6 +375,7 @@ def _handle_network_create(args: argparse.Namespace) -> int:
         "manifest_path": str(target),
         "mode": args.mode,
         "genesis_source": genesis_source,
+        "template": None if template is None else template["name"],
     }
     if generated_genesis_path is not None:
         result["generated_genesis_path"] = str(generated_genesis_path)
@@ -305,7 +399,7 @@ def _handle_network_create(args: argparse.Namespace) -> int:
             network=args.name,
             moniker=validator["moniker"],
             validator_key_ref=validator["validator_key_ref"],
-            runtime_backend=args.runtime_backend,
+            runtime_backend=manifest.runtime_backend,
             stack_dir=(
                 str(args.stack_dir)
                 if validator["is_bootstrap"] and args.stack_dir is not None
@@ -317,7 +411,13 @@ def _handle_network_create(args: argparse.Namespace) -> int:
                 args.snapshot_url if validator["is_bootstrap"] else None
             ),
             service_node=(
-                args.service_node if validator["is_bootstrap"] else False
+                _pick_template_value(
+                    args.service_node,
+                    None if template is None else template.get("service_node"),
+                    False,
+                )
+                if validator["is_bootstrap"]
+                else False
             ),
             home=(
                 str(args.home)
@@ -325,24 +425,73 @@ def _handle_network_create(args: argparse.Namespace) -> int:
                 else None
             ),
             pruning_enabled=(
-                args.enable_pruning if validator["is_bootstrap"] else False
+                _pick_template_value(
+                    args.enable_pruning,
+                    None
+                    if template is None
+                    else template.get("pruning_enabled"),
+                    False,
+                )
+                if validator["is_bootstrap"]
+                else False
             ),
             blocks_to_keep=(
-                args.blocks_to_keep if validator["is_bootstrap"] else 100000
+                _pick_template_value(
+                    args.blocks_to_keep,
+                    None
+                    if template is None
+                    else template.get("blocks_to_keep"),
+                    100000,
+                )
+                if validator["is_bootstrap"]
+                else 100000
             ),
-            block_policy_mode=args.block_policy_mode,
-            block_policy_interval=args.block_policy_interval,
-            tracer_mode=args.tracer_mode,
+            block_policy_mode=manifest.block_policy_mode,
+            block_policy_interval=manifest.block_policy_interval,
+            tracer_mode=manifest.tracer_mode,
             dashboard_enabled=(
-                args.enable_dashboard if validator["is_bootstrap"] else False
+                _pick_template_value(
+                    args.enable_dashboard,
+                    None
+                    if template is None
+                    else template.get("dashboard_enabled"),
+                    False,
+                )
+                if validator["is_bootstrap"]
+                else False
+            ),
+            monitoring_enabled=(
+                _pick_template_value(
+                    args.enable_monitoring,
+                    None
+                    if template is None
+                    else template.get("monitoring_enabled"),
+                    False,
+                )
+                if validator["is_bootstrap"]
+                else False
             ),
             dashboard_host=(
-                args.dashboard_host
+                _pick_template_value(
+                    args.dashboard_host,
+                    None
+                    if template is None
+                    else template.get("dashboard_host"),
+                    "127.0.0.1",
+                )
                 if validator["is_bootstrap"]
                 else "127.0.0.1"
             ),
             dashboard_port=(
-                args.dashboard_port if validator["is_bootstrap"] else 8080
+                _pick_template_value(
+                    args.dashboard_port,
+                    None
+                    if template is None
+                    else template.get("dashboard_port"),
+                    8080,
+                )
+                if validator["is_bootstrap"]
+                else 8080
             ),
         )
         write_json(profile_path, profile.to_dict(), force=args.force)
@@ -396,6 +545,11 @@ def _handle_network_create(args: argparse.Namespace) -> int:
 
 def _handle_network_join(args: argparse.Namespace) -> int:
     base_dir = args.base_dir.resolve()
+    template = _load_template(
+        base_dir=base_dir,
+        template_name=args.template,
+        configs_dir=args.configs_dir,
+    )
     network_path = resolve_network_manifest_path(
         base_dir=base_dir,
         network_name=args.network,
@@ -403,8 +557,10 @@ def _handle_network_join(args: argparse.Namespace) -> int:
         configs_dir=args.configs_dir,
     )
     network = read_network_manifest(network_path)
-    runtime_backend = (
-        args.runtime_backend or network.get("runtime_backend") or "xian-stack"
+    runtime_backend = _pick_template_value(
+        args.runtime_backend,
+        None if template is None else template.get("runtime_backend"),
+        network.get("runtime_backend") or "xian-stack",
     )
     if args.generate_validator_key and args.validator_key_ref is not None:
         raise ValueError(
@@ -447,24 +603,57 @@ def _handle_network_join(args: argparse.Namespace) -> int:
         seeds=args.seed or [],
         genesis_url=args.genesis_url,
         snapshot_url=args.snapshot_url,
-        service_node=args.service_node,
+        service_node=_pick_template_value(
+            args.service_node,
+            None if template is None else template.get("service_node"),
+            False,
+        ),
         home=str(args.home) if args.home is not None else None,
-        pruning_enabled=args.enable_pruning,
-        blocks_to_keep=args.blocks_to_keep,
-        block_policy_mode=(
-            args.block_policy_mode
-            or network.get("block_policy_mode", "on_demand")
+        pruning_enabled=_pick_template_value(
+            args.enable_pruning,
+            None if template is None else template.get("pruning_enabled"),
+            False,
         ),
-        block_policy_interval=(
-            args.block_policy_interval
-            or network.get("block_policy_interval", "0s")
+        blocks_to_keep=_pick_template_value(
+            args.blocks_to_keep,
+            None if template is None else template.get("blocks_to_keep"),
+            100000,
         ),
-        tracer_mode=(
-            args.tracer_mode or network.get("tracer_mode", "python_line_v1")
+        block_policy_mode=_pick_template_value(
+            args.block_policy_mode,
+            None if template is None else template.get("block_policy_mode"),
+            network.get("block_policy_mode", "on_demand"),
         ),
-        dashboard_enabled=args.enable_dashboard,
-        dashboard_host=args.dashboard_host,
-        dashboard_port=args.dashboard_port,
+        block_policy_interval=_pick_template_value(
+            args.block_policy_interval,
+            None if template is None else template.get("block_policy_interval"),
+            network.get("block_policy_interval", "0s"),
+        ),
+        tracer_mode=_pick_template_value(
+            args.tracer_mode,
+            None if template is None else template.get("tracer_mode"),
+            network.get("tracer_mode", "python_line_v1"),
+        ),
+        dashboard_enabled=_pick_template_value(
+            args.enable_dashboard,
+            None if template is None else template.get("dashboard_enabled"),
+            False,
+        ),
+        monitoring_enabled=_pick_template_value(
+            args.enable_monitoring,
+            None if template is None else template.get("monitoring_enabled"),
+            False,
+        ),
+        dashboard_host=_pick_template_value(
+            args.dashboard_host,
+            None if template is None else template.get("dashboard_host"),
+            "127.0.0.1",
+        ),
+        dashboard_port=_pick_template_value(
+            args.dashboard_port,
+            None if template is None else template.get("dashboard_port"),
+            8080,
+        ),
     )
     target = args.output or base_dir / "nodes" / f"{args.name}.json"
     if not target.is_absolute():
@@ -493,6 +682,7 @@ def _handle_network_join(args: argparse.Namespace) -> int:
             {
                 "profile_path": str(target),
                 "network_path": str(network_path),
+                "template": None if template is None else template["name"],
                 "validator_key_ref": validator_key_ref,
                 "node_initialized": True,
                 "node_init": init_result,
@@ -950,6 +1140,7 @@ def _handle_node_start(args: argparse.Namespace) -> int:
         stack_dir=stack_dir,
         service_node=bool(profile.get("service_node")),
         dashboard_enabled=bool(profile.get("dashboard_enabled")),
+        monitoring_enabled=bool(profile.get("monitoring_enabled")),
         dashboard_host=str(profile.get("dashboard_host", "127.0.0.1")),
         dashboard_port=int(profile.get("dashboard_port", 8080)),
         wait_for_rpc=not args.skip_health_check,
@@ -981,6 +1172,7 @@ def _handle_node_stop(args: argparse.Namespace) -> int:
         stack_dir=stack_dir,
         service_node=bool(profile.get("service_node")),
         dashboard_enabled=bool(profile.get("dashboard_enabled")),
+        monitoring_enabled=bool(profile.get("monitoring_enabled")),
         dashboard_host=str(profile.get("dashboard_host", "127.0.0.1")),
         dashboard_port=int(profile.get("dashboard_port", 8080)),
     )
@@ -1058,6 +1250,7 @@ def _collect_node_status(
                 stack_dir=stack_dir,
                 service_node=bool(profile.get("service_node")),
                 dashboard_enabled=bool(profile.get("dashboard_enabled")),
+                monitoring_enabled=bool(profile.get("monitoring_enabled")),
                 dashboard_host=str(profile.get("dashboard_host", "127.0.0.1")),
                 dashboard_port=int(profile.get("dashboard_port", 8080)),
             )
@@ -1226,6 +1419,58 @@ def build_parser() -> argparse.ArgumentParser:
         dest="network_command", required=True
     )
 
+    template_parser = network_subparsers.add_parser(
+        "template", help="inspect canonical network templates"
+    )
+    template_subparsers = template_parser.add_subparsers(
+        dest="network_template_command", required=True
+    )
+
+    template_list_parser = template_subparsers.add_parser(
+        "list", help="list available network templates"
+    )
+    template_list_parser.add_argument(
+        "--base-dir",
+        type=Path,
+        default=Path.cwd(),
+        help=(
+            "workspace directory that may contain local ./templates and "
+            "optionally sibling repos"
+        ),
+    )
+    template_list_parser.add_argument(
+        "--configs-dir",
+        type=Path,
+        help=(
+            "explicit xian-configs checkout path; defaults to XIAN_CONFIGS_DIR "
+            "or the sibling workspace layout"
+        ),
+    )
+    template_list_parser.set_defaults(handler=_handle_network_template_list)
+
+    template_show_parser = template_subparsers.add_parser(
+        "show", help="show one network template"
+    )
+    template_show_parser.add_argument("name", help="template name")
+    template_show_parser.add_argument(
+        "--base-dir",
+        type=Path,
+        default=Path.cwd(),
+        help=(
+            "workspace directory that may contain local ./templates and "
+            "optionally sibling repos"
+        ),
+    )
+    template_show_parser.add_argument(
+        "--configs-dir",
+        type=Path,
+        help=(
+            "explicit xian-configs checkout path; defaults to XIAN_CONFIGS_DIR "
+            "or the sibling workspace layout"
+        ),
+    )
+    template_show_parser.set_defaults(handler=_handle_network_template_show)
+
     create_parser = network_subparsers.add_parser(
         "create", help="create a new network manifest"
     )
@@ -1243,6 +1488,13 @@ def build_parser() -> argparse.ArgumentParser:
         "--chain-id", required=True, help="chain identifier"
     )
     create_parser.add_argument(
+        "--template",
+        help=(
+            "canonical or local template name used to prefill network and "
+            "bootstrap-profile defaults"
+        ),
+    )
+    create_parser.add_argument(
         "--mode",
         default="create",
         choices=["join", "create"],
@@ -1253,9 +1505,10 @@ def build_parser() -> argparse.ArgumentParser:
     )
     create_parser.add_argument(
         "--runtime-backend",
-        default="xian-stack",
         choices=sorted(SUPPORTED_RUNTIME_BACKENDS),
-        help="runtime backend used for this network",
+        help=(
+            "runtime backend used for this network; overrides template defaults"
+        ),
     )
     create_parser.add_argument(
         "--genesis-source",
@@ -1358,62 +1611,72 @@ def build_parser() -> argparse.ArgumentParser:
     )
     create_parser.add_argument(
         "--service-node",
-        action="store_true",
+        action=argparse.BooleanOptionalAction,
+        default=None,
         help="mark the bootstrap node profile as a service node",
     )
     create_parser.add_argument(
         "--enable-pruning",
-        action="store_true",
+        action=argparse.BooleanOptionalAction,
+        default=None,
         help="enable pruning for the bootstrap node",
     )
     create_parser.add_argument(
         "--blocks-to-keep",
         type=int,
-        default=100000,
         help="number of blocks to retain when pruning is enabled",
     )
     create_parser.add_argument(
         "--block-policy-mode",
         choices=sorted(SUPPORTED_BLOCK_POLICY_MODES),
-        default="on_demand",
         help=(
             "network block production policy: on_demand waits for "
             "transactions, idle_interval emits empty blocks after an idle "
-            "interval, periodic enables scheduled empty blocks"
+            "interval, periodic enables scheduled empty blocks; overrides "
+            "template defaults"
         ),
     )
     create_parser.add_argument(
         "--block-policy-interval",
         type=str,
-        default="0s",
         help=(
             "idle or periodic block interval, for example 10s; ignored for "
-            "on_demand"
+            "on_demand; overrides template defaults"
         ),
     )
     create_parser.add_argument(
         "--tracer-mode",
         choices=sorted(SUPPORTED_TRACER_MODES),
-        default="python_line_v1",
-        help="execution tracer backend for contract metering",
+        help=(
+            "execution tracer backend for contract metering; overrides "
+            "template defaults"
+        ),
     )
     create_parser.add_argument(
         "--enable-dashboard",
-        action="store_true",
+        action=argparse.BooleanOptionalAction,
+        default=None,
         help=(
             "start the optional dashboard alongside the bootstrap node runtime"
         ),
     )
     create_parser.add_argument(
+        "--enable-monitoring",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help=(
+            "start the optional Prometheus and Grafana stack for the "
+            "bootstrap node"
+        ),
+    )
+    create_parser.add_argument(
         "--dashboard-host",
         type=str,
-        default="127.0.0.1",
         help="host interface to bind for the dashboard publish port",
     )
     create_parser.add_argument(
         "--dashboard-port",
         type=int,
-        default=8080,
         help="host port to publish for the dashboard",
     )
     create_parser.add_argument(
@@ -1443,6 +1706,13 @@ def build_parser() -> argparse.ArgumentParser:
         "--network",
         required=True,
         help="network manifest name, for example mainnet",
+    )
+    join_parser.add_argument(
+        "--template",
+        help=(
+            "canonical or local template name used to prefill node-profile "
+            "runtime defaults"
+        ),
     )
     join_parser.add_argument(
         "--network-manifest",
@@ -1534,18 +1804,19 @@ def build_parser() -> argparse.ArgumentParser:
     )
     join_parser.add_argument(
         "--service-node",
-        action="store_true",
+        action=argparse.BooleanOptionalAction,
+        default=None,
         help="mark the node profile as a service node",
     )
     join_parser.add_argument(
         "--enable-pruning",
-        action="store_true",
+        action=argparse.BooleanOptionalAction,
+        default=None,
         help="enable pruning for this node",
     )
     join_parser.add_argument(
         "--blocks-to-keep",
         type=int,
-        default=100000,
         help="number of blocks to retain when pruning is enabled",
     )
     join_parser.add_argument(
@@ -1574,19 +1845,27 @@ def build_parser() -> argparse.ArgumentParser:
     )
     join_parser.add_argument(
         "--enable-dashboard",
-        action="store_true",
+        action=argparse.BooleanOptionalAction,
+        default=None,
         help="start the optional dashboard alongside this node runtime",
+    )
+    join_parser.add_argument(
+        "--enable-monitoring",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help=(
+            "start the optional Prometheus and Grafana stack for this node "
+            "runtime"
+        ),
     )
     join_parser.add_argument(
         "--dashboard-host",
         type=str,
-        default="127.0.0.1",
         help="host interface to bind for the dashboard publish port",
     )
     join_parser.add_argument(
         "--dashboard-port",
         type=int,
-        default=8080,
         help="host port to publish for the dashboard",
     )
     join_parser.add_argument(

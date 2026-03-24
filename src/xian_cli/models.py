@@ -163,10 +163,56 @@ def normalize_node_profile(payload: dict) -> dict:
         "dashboard_enabled": _require_bool(
             payload, "dashboard_enabled", default=False
         ),
+        "monitoring_enabled": _require_bool(
+            payload, "monitoring_enabled", default=False
+        ),
         "dashboard_host": _require_str(payload, "dashboard_host")
         if "dashboard_host" in payload
         else "127.0.0.1",
         "dashboard_port": _require_int(payload, "dashboard_port", default=8080),
+    }
+
+
+def normalize_network_template(payload: dict) -> dict:
+    if not isinstance(payload, dict):
+        raise ValueError("network template must be a JSON object")
+
+    return {
+        "schema_version": _require_schema_version(payload),
+        "name": _require_str(payload, "name"),
+        "display_name": _require_str(payload, "display_name"),
+        "description": _require_str(payload, "description"),
+        "runtime_backend": _require_runtime_backend(payload),
+        "block_policy_mode": _require_block_policy_mode(
+            payload, "block_policy_mode"
+        ),
+        "block_policy_interval": _require_block_policy_interval(
+            payload, "block_policy_interval"
+        ),
+        "tracer_mode": _require_tracer_mode(payload, "tracer_mode"),
+        "bootstrap_node_name": _require_optional_str(
+            payload, "bootstrap_node_name"
+        ),
+        "additional_validator_names": _require_str_list(
+            payload, "additional_validator_names"
+        ),
+        "service_node": _require_bool(payload, "service_node", default=False),
+        "dashboard_enabled": _require_bool(
+            payload, "dashboard_enabled", default=False
+        ),
+        "monitoring_enabled": _require_bool(
+            payload, "monitoring_enabled", default=False
+        ),
+        "dashboard_host": _require_str(payload, "dashboard_host")
+        if "dashboard_host" in payload
+        else "127.0.0.1",
+        "dashboard_port": _require_int(payload, "dashboard_port", default=8080),
+        "pruning_enabled": _require_bool(
+            payload, "pruning_enabled", default=False
+        ),
+        "blocks_to_keep": _require_int(
+            payload, "blocks_to_keep", default=100000
+        ),
     }
 
 
@@ -207,8 +253,33 @@ class NodeProfile:
     block_policy_interval: str = "0s"
     tracer_mode: str = "python_line_v1"
     dashboard_enabled: bool = False
+    monitoring_enabled: bool = False
     dashboard_host: str = "127.0.0.1"
     dashboard_port: int = 8080
+    schema_version: int = SCHEMA_VERSION
+
+    def to_dict(self) -> dict:
+        return asdict(self)
+
+
+@dataclass(slots=True)
+class NetworkTemplate:
+    name: str
+    display_name: str
+    description: str
+    runtime_backend: str = "xian-stack"
+    block_policy_mode: str = "on_demand"
+    block_policy_interval: str = "0s"
+    tracer_mode: str = "python_line_v1"
+    bootstrap_node_name: str | None = None
+    additional_validator_names: list[str] = field(default_factory=list)
+    service_node: bool = False
+    dashboard_enabled: bool = False
+    monitoring_enabled: bool = False
+    dashboard_host: str = "127.0.0.1"
+    dashboard_port: int = 8080
+    pruning_enabled: bool = False
+    blocks_to_keep: int = 100000
     schema_version: int = SCHEMA_VERSION
 
     def to_dict(self) -> dict:
@@ -234,3 +305,7 @@ def read_network_manifest(path: Path) -> dict:
 
 def read_node_profile(path: Path) -> dict:
     return normalize_node_profile(read_json(path))
+
+
+def read_network_template(path: Path) -> dict:
+    return normalize_network_template(read_json(path))

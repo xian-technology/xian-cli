@@ -84,6 +84,7 @@ def run_backend_command(
     *,
     service_node: bool = False,
     dashboard_enabled: bool = False,
+    monitoring_enabled: bool = False,
     dashboard_host: str | None = None,
     dashboard_port: int | None = None,
     wait_for_health: bool | None = None,
@@ -93,6 +94,7 @@ def run_backend_command(
     cmd = [sys.executable, str(_backend_script(stack_dir)), command]
     cmd.append("--service-node" if service_node else "--no-service-node")
     cmd.append("--dashboard" if dashboard_enabled else "--no-dashboard")
+    cmd.append("--monitoring" if monitoring_enabled else "--no-monitoring")
 
     if dashboard_enabled:
         if dashboard_host is not None:
@@ -129,6 +131,7 @@ def start_xian_stack_node(
     stack_dir: Path,
     service_node: bool,
     dashboard_enabled: bool = False,
+    monitoring_enabled: bool = False,
     dashboard_host: str = "127.0.0.1",
     dashboard_port: int = 8080,
     wait_for_rpc: bool = True,
@@ -139,6 +142,7 @@ def start_xian_stack_node(
         "start",
         service_node=service_node,
         dashboard_enabled=dashboard_enabled,
+        monitoring_enabled=monitoring_enabled,
         dashboard_host=dashboard_host,
         dashboard_port=dashboard_port,
         wait_for_health=wait_for_rpc,
@@ -152,6 +156,7 @@ def stop_xian_stack_node(
     stack_dir: Path,
     service_node: bool,
     dashboard_enabled: bool = False,
+    monitoring_enabled: bool = False,
     dashboard_host: str = "127.0.0.1",
     dashboard_port: int = 8080,
 ) -> dict:
@@ -160,6 +165,7 @@ def stop_xian_stack_node(
         "stop",
         service_node=service_node,
         dashboard_enabled=dashboard_enabled,
+        monitoring_enabled=monitoring_enabled,
         dashboard_host=dashboard_host,
         dashboard_port=dashboard_port,
     )
@@ -170,6 +176,7 @@ def get_xian_stack_node_status(
     stack_dir: Path,
     service_node: bool,
     dashboard_enabled: bool = False,
+    monitoring_enabled: bool = False,
     dashboard_host: str = "127.0.0.1",
     dashboard_port: int = 8080,
 ) -> dict:
@@ -178,6 +185,7 @@ def get_xian_stack_node_status(
         "status",
         service_node=service_node,
         dashboard_enabled=dashboard_enabled,
+        monitoring_enabled=monitoring_enabled,
         dashboard_host=dashboard_host,
         dashboard_port=dashboard_port,
     )
