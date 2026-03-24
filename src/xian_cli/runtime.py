@@ -189,3 +189,23 @@ def get_xian_stack_node_status(
         dashboard_host=dashboard_host,
         dashboard_port=dashboard_port,
     )
+
+
+def get_xian_stack_node_endpoints(
+    *,
+    stack_dir: Path,
+    service_node: bool,
+    dashboard_enabled: bool = False,
+    monitoring_enabled: bool = False,
+    dashboard_host: str = "127.0.0.1",
+    dashboard_port: int = 8080,
+) -> dict:
+    return run_backend_command(
+        stack_dir,
+        "endpoints",
+        service_node=service_node,
+        dashboard_enabled=dashboard_enabled,
+        monitoring_enabled=monitoring_enabled,
+        dashboard_host=dashboard_host,
+        dashboard_port=dashboard_port,
+    )

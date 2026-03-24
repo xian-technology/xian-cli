@@ -54,6 +54,7 @@ uv run xian network join mainnet-node --network mainnet \
   --init-node --restore-snapshot
 uv run xian node init mainnet-node --restore-snapshot
 uv run xian node status mainnet-node
+uv run xian node endpoints mainnet-node
 uv run xian snapshot restore mainnet-node
 uv run xian doctor mainnet-node
 uv run xian node start mainnet-node
@@ -120,6 +121,11 @@ network manifest.
 available, and an optional live RPC status probe. `doctor` checks workspace
 resolution and, when given a node name, the profile/manifest/home prerequisites
 for that node.
+
+`node endpoints` prints the effective local URLs for CometBFT RPC,
+`abci_query`, Xian and CometBFT metrics, and optional dashboard / Prometheus /
+Grafana services. This is the quickest way to discover what a template-enabled
+node is expected to expose.
 
 Node profiles now also carry `monitoring_enabled`. When that is true,
 `xian-cli` asks `xian-stack` to manage the Prometheus and Grafana sidecars

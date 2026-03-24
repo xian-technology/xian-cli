@@ -34,6 +34,7 @@ from xian_cli.runtime import (
     DEFAULT_RPC_TIMEOUT_SECONDS,
     default_home_for_backend,
     fetch_json,
+    get_xian_stack_node_endpoints,
     get_xian_stack_node_status,
     resolve_stack_dir,
     start_xian_stack_node,
@@ -1180,11 +1181,7 @@ def _handle_node_stop(args: argparse.Namespace) -> int:
     return 0
 
 
-def _collect_node_status(
-    args: argparse.Namespace,
-    *,
-    check_rpc: bool,
-) -> dict:
+def _resolve_node_context(args: argparse.Namespace) -> dict[str, object]:
     base_dir = args.base_dir.resolve()
     profile_path, profile, network_path, network = _load_profile_and_network(
         base_dir=base_dir,
@@ -1211,6 +1208,180 @@ def _collect_node_status(
         stack_dir=stack_dir,
         explicit_home=getattr(args, "home", None),
     )
+    return {
+        "base_dir": base_dir,
+        "profile_path": profile_path,
+        "profile": profile,
+        "network_path": network_path,
+        "network": network,
+        "runtime_backend": runtime_backend,
+        "stack_dir": stack_dir,
+        "home": home,
+    }
+
+
+def _format_url_host(hostname: str) -> str:
+    if ":" in hostname and not hostname.startswith("["):
+        return f"[{hostname}]"
+    return hostname
+
+
+def _replace_url_port(url: str, *, port: int, suffix: str = "") -> str:
+    parsed = urlparse(url)
+    scheme = parsed.scheme or "http"
+    hostname = _format_url_host(parsed.hostname or "127.0.0.1")
+    return f"{scheme}://{hostname}:{port}{suffix}"
+
+
+def _rpc_base_url(rpc_status_url: str) -> str:
+    if rpc_status_url.endswith("/status"):
+        return rpc_status_url[: -len("/status")]
+    return rpc_status_url.rstrip("/")
+
+
+def _fallback_node_endpoints(
+    *,
+    rpc_status_url: str,
+    profile: NodeProfile,
+) -> dict[str, str]:
+    base_url = _rpc_base_url(rpc_status_url)
+    endpoints = {
+        "rpc": base_url,
+        "rpc_status": rpc_status_url,
+        "abci_query": f"{base_url}/abci_query",
+        "cometbft_metrics": _replace_url_port(
+            base_url,
+            port=26660,
+            suffix="/metrics",
+        ),
+        "xian_metrics": _replace_url_port(
+            base_url,
+            port=9108,
+            suffix="/metrics",
+        ),
+    }
+    if bool(profile.get("dashboard_enabled")):
+        dashboard_host = str(profile.get("dashboard_host", "127.0.0.1"))
+        dashboard_port = int(profile.get("dashboard_port", 8080))
+        dashboard_url = f"http://{dashboard_host}:{dashboard_port}"
+        endpoints["dashboard"] = dashboard_url
+        endpoints["dashboard_status"] = f"{dashboard_url}/api/status"
+    if bool(profile.get("monitoring_enabled")):
+        endpoints["prometheus"] = _replace_url_port(base_url, port=9090)
+        endpoints["grafana"] = _replace_url_port(base_url, port=3000)
+    return endpoints
+
+
+def _collect_node_endpoints(args: argparse.Namespace) -> dict[str, object]:
+    context = _resolve_node_context(args)
+    profile = context["profile"]
+    runtime_backend = context["runtime_backend"]
+    stack_dir = context["stack_dir"]
+    rpc_status_url = getattr(args, "rpc_url", "http://127.0.0.1:26657/status")
+
+    payload: dict[str, object] = {
+        "profile_path": str(context["profile_path"]),
+        "network_path": str(context["network_path"]),
+        "runtime_backend": runtime_backend,
+        "service_node": bool(profile.get("service_node")),
+        "dashboard_enabled": bool(profile.get("dashboard_enabled")),
+        "monitoring_enabled": bool(profile.get("monitoring_enabled")),
+    }
+    if stack_dir is not None:
+        payload["stack_dir"] = str(stack_dir)
+
+    if runtime_backend == "xian-stack" and stack_dir is not None:
+        try:
+            backend_payload = get_xian_stack_node_endpoints(
+                stack_dir=stack_dir,
+                service_node=bool(profile.get("service_node")),
+                dashboard_enabled=bool(profile.get("dashboard_enabled")),
+                monitoring_enabled=bool(profile.get("monitoring_enabled")),
+                dashboard_host=str(profile.get("dashboard_host", "127.0.0.1")),
+                dashboard_port=int(profile.get("dashboard_port", 8080)),
+            )
+            payload["endpoints"] = backend_payload["endpoints"]
+            payload["backend_checked"] = True
+            return payload
+        except Exception as exc:
+            payload["backend_checked"] = True
+            payload["backend_error"] = str(exc)
+
+    payload["endpoints"] = _fallback_node_endpoints(
+        rpc_status_url=rpc_status_url,
+        profile=profile,
+    )
+    return payload
+
+
+def _summarize_node_status(result: dict[str, object]) -> dict[str, object]:
+    rpc_payload = result.get("rpc_status")
+    rpc_result = (
+        rpc_payload.get("result", {}) if isinstance(rpc_payload, dict) else {}
+    )
+    sync_info = (
+        rpc_result.get("sync_info", {}) if isinstance(rpc_result, dict) else {}
+    )
+    node_info = (
+        rpc_result.get("node_info", {}) if isinstance(rpc_result, dict) else {}
+    )
+    other = node_info.get("other", {}) if isinstance(node_info, dict) else {}
+
+    state = "ready"
+    if not result.get("initialized"):
+        state = "not_initialized"
+    elif result.get("backend_checked") and not result.get("backend_running"):
+        state = "stopped"
+    elif result.get("rpc_checked") and not result.get("rpc_reachable"):
+        state = "rpc_unreachable"
+
+    summary: dict[str, object] = {
+        "state": state,
+        "initialized": bool(result.get("initialized")),
+        "service_node": bool(result.get("profile", {}).get("service_node")),
+        "dashboard_enabled": bool(
+            result.get("profile", {}).get("dashboard_enabled")
+        ),
+        "monitoring_enabled": bool(
+            result.get("profile", {}).get("monitoring_enabled")
+        ),
+        "backend_running": result.get("backend_running"),
+        "rpc_reachable": result.get("rpc_reachable"),
+        "rpc_height": sync_info.get("latest_block_height"),
+        "rpc_catching_up": sync_info.get("catching_up"),
+        "rpc_network": node_info.get("network"),
+        "peer_count": other.get("n_peers"),
+    }
+
+    backend_status = result.get("backend_status")
+    if isinstance(backend_status, dict):
+        if summary["dashboard_enabled"]:
+            summary["dashboard_reachable"] = backend_status.get(
+                "dashboard_reachable"
+            )
+        if summary["monitoring_enabled"]:
+            summary["prometheus_reachable"] = backend_status.get(
+                "prometheus_reachable"
+            )
+            summary["grafana_reachable"] = backend_status.get(
+                "grafana_reachable"
+            )
+    return summary
+
+
+def _collect_node_status(
+    args: argparse.Namespace,
+    *,
+    check_rpc: bool,
+) -> dict:
+    context = _resolve_node_context(args)
+    profile_path = context["profile_path"]
+    profile = context["profile"]
+    network_path = context["network_path"]
+    network = context["network"]
+    runtime_backend = context["runtime_backend"]
+    stack_dir = context["stack_dir"]
+    home = context["home"]
     config_path = home / "config" / "config.toml"
     genesis_path = home / "config" / "genesis.json"
     node_key_path = home / "config" / "node_key.json"
@@ -1234,6 +1405,13 @@ def _collect_node_status(
             network=network,
         ),
         "rpc_checked": check_rpc,
+        "profile": {
+            "name": args.name,
+            "network": profile.get("network"),
+            "service_node": bool(profile.get("service_node")),
+            "dashboard_enabled": bool(profile.get("dashboard_enabled")),
+            "monitoring_enabled": bool(profile.get("monitoring_enabled")),
+        },
     }
     if stack_dir is not None:
         result["stack_dir"] = str(stack_dir)
@@ -1271,11 +1449,28 @@ def _collect_node_status(
             result["rpc_reachable"] = False
             result["rpc_error"] = str(exc)
 
+    if isinstance(result.get("backend_status"), dict) and isinstance(
+        result["backend_status"].get("endpoints"), dict
+    ):
+        result["endpoints"] = result["backend_status"]["endpoints"]
+    else:
+        result["endpoints"] = _fallback_node_endpoints(
+            rpc_status_url=args.rpc_url,
+            profile=profile,
+        )
+
+    result["summary"] = _summarize_node_status(result)
     return result
 
 
 def _handle_node_status(args: argparse.Namespace) -> int:
     result = _collect_node_status(args, check_rpc=not args.skip_rpc)
+    print(json.dumps(result, indent=2))
+    return 0
+
+
+def _handle_node_endpoints(args: argparse.Namespace) -> int:
+    result = _collect_node_endpoints(args)
     print(json.dumps(result, indent=2))
     return 0
 
@@ -2105,6 +2300,65 @@ def build_parser() -> argparse.ArgumentParser:
         help="skip the live RPC status probe",
     )
     status_parser.set_defaults(handler=_handle_node_status)
+
+    endpoints_parser = node_subparsers.add_parser(
+        "endpoints",
+        help=(
+            "print the expected local URLs for RPC, metrics, dashboard, "
+            "and monitoring"
+        ),
+    )
+    endpoints_parser.add_argument("name", help="node profile name")
+    endpoints_parser.add_argument(
+        "--base-dir",
+        type=Path,
+        default=Path.cwd(),
+        help=(
+            "base directory containing ./nodes, ./networks, ./keys, "
+            "and optionally sibling repos"
+        ),
+    )
+    endpoints_parser.add_argument(
+        "--profile",
+        type=Path,
+        help="explicit node profile path; defaults to ./nodes/<name>.json",
+    )
+    endpoints_parser.add_argument(
+        "--network",
+        type=Path,
+        help=(
+            "explicit network manifest path; defaults to "
+            "./networks/<profile.network>/manifest.json"
+        ),
+    )
+    endpoints_parser.add_argument(
+        "--stack-dir",
+        type=Path,
+        help=(
+            "explicit xian-stack checkout path when using the xian-stack "
+            "backend; "
+            "overrides stack_dir in the profile"
+        ),
+    )
+    endpoints_parser.add_argument(
+        "--configs-dir",
+        type=Path,
+        help=(
+            "explicit xian-configs checkout path for canonical manifests "
+            "or the sibling workspace layout"
+        ),
+    )
+    endpoints_parser.add_argument(
+        "--home",
+        type=Path,
+        help="explicit CometBFT home path; overrides the profile home",
+    )
+    endpoints_parser.add_argument(
+        "--rpc-url",
+        default="http://127.0.0.1:26657/status",
+        help="RPC status endpoint used to derive default host/port URLs",
+    )
+    endpoints_parser.set_defaults(handler=_handle_node_endpoints)
 
     snapshot_parser = subparsers.add_parser("snapshot", help="snapshot tools")
     snapshot_subparsers = snapshot_parser.add_subparsers(

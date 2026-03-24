@@ -23,6 +23,7 @@ from xian_cli.models import (
     read_node_profile,
 )
 from xian_cli.runtime import (
+    get_xian_stack_node_endpoints,
     get_xian_stack_node_status,
     resolve_stack_dir,
     start_xian_stack_node,
@@ -1603,6 +1604,8 @@ class NodeRuntimeTests(unittest.TestCase):
                         "local-dev",
                         "--chain-id",
                         "xian-local-1",
+                        "--genesis-source",
+                        str(CANONICAL_DEVNET_GENESIS),
                         "--output",
                         str(
                             base_dir
@@ -1681,6 +1684,8 @@ class NodeRuntimeTests(unittest.TestCase):
                         "local-dev",
                         "--chain-id",
                         "xian-local-1",
+                        "--genesis-source",
+                        str(CANONICAL_DEVNET_GENESIS),
                         "--output",
                         str(
                             base_dir
@@ -1765,6 +1770,8 @@ class NodeRuntimeTests(unittest.TestCase):
                         str(base_dir),
                         "--network",
                         "local-dev",
+                        "--template",
+                        "single-node-indexed",
                         "--stack-dir",
                         str(stack_dir),
                         "--output",
@@ -1835,6 +1842,8 @@ class NodeRuntimeTests(unittest.TestCase):
                         str(base_dir),
                         "--network",
                         "local-dev",
+                        "--template",
+                        "single-node-indexed",
                         "--stack-dir",
                         str(stack_dir),
                         "--output",
@@ -1845,13 +1854,32 @@ class NodeRuntimeTests(unittest.TestCase):
             stdout = io.StringIO()
             with patch(
                 "xian_cli.cli.fetch_json",
-                return_value={"result": {"node_info": {"network": "xian"}}},
+                return_value={
+                    "result": {
+                        "node_info": {
+                            "network": "xian",
+                            "other": {"n_peers": "2"},
+                        },
+                        "sync_info": {
+                            "latest_block_height": "12",
+                            "catching_up": False,
+                        },
+                    }
+                },
             ):
                 with patch(
                     "xian_cli.cli.get_xian_stack_node_status",
                     return_value={
                         "backend_running": True,
                         "node_id": "node-123",
+                        "dashboard_reachable": True,
+                        "prometheus_reachable": True,
+                        "grafana_reachable": True,
+                        "endpoints": {
+                            "rpc": "http://127.0.0.1:26657",
+                            "dashboard": "http://127.0.0.1:8080",
+                            "prometheus": "http://127.0.0.1:9090",
+                        },
                     },
                 ):
                     with redirect_stdout(stdout):
@@ -1873,6 +1901,98 @@ class NodeRuntimeTests(unittest.TestCase):
             self.assertEqual(result["stack_dir"], str(stack_dir.resolve()))
             self.assertTrue(result["backend_checked"])
             self.assertTrue(result["backend_running"])
+            self.assertEqual(result["summary"]["state"], "ready")
+            self.assertEqual(result["summary"]["rpc_network"], "xian")
+            self.assertEqual(result["summary"]["rpc_height"], "12")
+            self.assertEqual(result["summary"]["peer_count"], "2")
+            self.assertTrue(result["summary"]["dashboard_reachable"])
+            self.assertTrue(result["summary"]["prometheus_reachable"])
+            self.assertEqual(
+                result["endpoints"]["dashboard"],
+                "http://127.0.0.1:8080",
+            )
+
+    def test_node_endpoints_reports_effective_operator_urls(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            base_dir = Path(tmp_dir)
+            (base_dir / "networks").mkdir()
+            (base_dir / "nodes").mkdir()
+            stack_dir = base_dir / "xian-stack"
+            stack_dir.mkdir()
+
+            with redirect_stdout(io.StringIO()):
+                main(
+                    [
+                        "network",
+                        "create",
+                        "local-dev",
+                        "--chain-id",
+                        "xian-local-1",
+                        "--genesis-source",
+                        str(CANONICAL_DEVNET_GENESIS),
+                        "--output",
+                        str(
+                            base_dir
+                            / "networks"
+                            / "local-dev"
+                            / "manifest.json"
+                        ),
+                    ]
+                )
+                main(
+                    [
+                        "network",
+                        "join",
+                        "validator-1",
+                        "--base-dir",
+                        str(base_dir),
+                        "--network",
+                        "local-dev",
+                        "--template",
+                        "single-node-indexed",
+                        "--stack-dir",
+                        str(stack_dir),
+                        "--output",
+                        str(base_dir / "nodes" / "validator-1.json"),
+                    ]
+                )
+
+            stdout = io.StringIO()
+            with patch(
+                "xian_cli.cli.get_xian_stack_node_endpoints",
+                return_value={
+                    "endpoints": {
+                        "rpc": "http://127.0.0.1:26657",
+                        "rpc_status": "http://127.0.0.1:26657/status",
+                        "xian_metrics": "http://127.0.0.1:9108/metrics",
+                        "prometheus": "http://127.0.0.1:9090",
+                        "grafana": "http://127.0.0.1:3000",
+                    }
+                },
+            ):
+                with redirect_stdout(stdout):
+                    exit_code = main(
+                        [
+                            "node",
+                            "endpoints",
+                            "validator-1",
+                            "--base-dir",
+                            str(base_dir),
+                        ]
+                    )
+
+            self.assertEqual(exit_code, 0)
+            result = json.loads(stdout.getvalue())
+            self.assertTrue(result["dashboard_enabled"])
+            self.assertTrue(result["monitoring_enabled"])
+            self.assertEqual(
+                result["endpoints"]["xian_metrics"],
+                "http://127.0.0.1:9108/metrics",
+            )
+            self.assertEqual(
+                result["endpoints"]["prometheus"],
+                "http://127.0.0.1:9090",
+            )
 
 
 class DoctorTests(unittest.TestCase):
@@ -2253,6 +2373,37 @@ class RuntimeHelperTests(unittest.TestCase):
         run_backend_command.assert_called_once_with(
             stack_dir,
             "status",
+            service_node=True,
+            dashboard_enabled=True,
+            monitoring_enabled=True,
+            dashboard_host="0.0.0.0",
+            dashboard_port=18080,
+        )
+
+    def test_get_xian_stack_node_endpoints_uses_backend_command(self) -> None:
+        stack_dir = Path("/tmp/xian-stack")
+        with patch(
+            "xian_cli.runtime.run_backend_command"
+        ) as run_backend_command:
+            run_backend_command.return_value = {
+                "endpoints": {"rpc": "http://127.0.0.1:26657"}
+            }
+            result = get_xian_stack_node_endpoints(
+                stack_dir=stack_dir,
+                service_node=True,
+                dashboard_enabled=True,
+                monitoring_enabled=True,
+                dashboard_host="0.0.0.0",
+                dashboard_port=18080,
+            )
+
+        self.assertEqual(
+            result["endpoints"]["rpc"],
+            "http://127.0.0.1:26657",
+        )
+        run_backend_command.assert_called_once_with(
+            stack_dir,
+            "endpoints",
             service_node=True,
             dashboard_enabled=True,
             monitoring_enabled=True,
