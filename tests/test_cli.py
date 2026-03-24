@@ -24,6 +24,7 @@ from xian_cli.models import (
 )
 from xian_cli.runtime import (
     get_xian_stack_node_endpoints,
+    get_xian_stack_node_health,
     get_xian_stack_node_status,
     resolve_stack_dir,
     start_xian_stack_node,
@@ -1994,6 +1995,115 @@ class NodeRuntimeTests(unittest.TestCase):
                 "http://127.0.0.1:9090",
             )
 
+    def test_node_health_reports_runtime_and_statesync(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            base_dir = Path(tmp_dir)
+            (base_dir / "networks").mkdir()
+            (base_dir / "nodes").mkdir()
+            stack_dir = base_dir / "xian-stack"
+            stack_dir.mkdir()
+            home = stack_dir / ".cometbft"
+            config_dir = home / "config"
+            data_dir = home / "data"
+            config_dir.mkdir(parents=True)
+            data_dir.mkdir(parents=True)
+            (config_dir / "config.toml").write_text(
+                f"""
+[statesync]
+enable = true
+rpc_servers = "http://rpc-1.example:26657,http://rpc-2.example:26657"
+trust_height = 120
+trust_hash = "{"ab" * 32}"
+trust_period = "336h0m0s"
+""",
+                encoding="utf-8",
+            )
+            (config_dir / "genesis.json").write_text("{}", encoding="utf-8")
+            (config_dir / "node_key.json").write_text(
+                json.dumps({"node_id": "node-123"}),
+                encoding="utf-8",
+            )
+            (data_dir / "priv_validator_state.json").write_text(
+                "{}",
+                encoding="utf-8",
+            )
+
+            with redirect_stdout(io.StringIO()):
+                main(
+                    [
+                        "network",
+                        "create",
+                        "local-dev",
+                        "--chain-id",
+                        "xian-local-1",
+                        "--snapshot-url",
+                        "https://example.invalid/snapshot.tar.gz",
+                        "--output",
+                        str(
+                            base_dir
+                            / "networks"
+                            / "local-dev"
+                            / "manifest.json"
+                        ),
+                    ]
+                )
+                main(
+                    [
+                        "network",
+                        "join",
+                        "validator-1",
+                        "--base-dir",
+                        str(base_dir),
+                        "--network",
+                        "local-dev",
+                        "--stack-dir",
+                        str(stack_dir),
+                        "--home",
+                        str(home),
+                        "--enable-dashboard",
+                        "--enable-monitoring",
+                        "--output",
+                        str(base_dir / "nodes" / "validator-1.json"),
+                    ]
+                )
+
+            stdout = io.StringIO()
+            with patch(
+                "xian_cli.cli.get_xian_stack_node_health",
+                return_value={
+                    "state": "healthy",
+                    "checks": {"backend": {"ok": True}},
+                    "endpoints": {
+                        "rpc": "http://127.0.0.1:26657",
+                        "xian_metrics": "http://127.0.0.1:9108/metrics",
+                    },
+                },
+            ):
+                with redirect_stdout(stdout):
+                    exit_code = main(
+                        [
+                            "node",
+                            "health",
+                            "validator-1",
+                            "--base-dir",
+                            str(base_dir),
+                        ]
+                    )
+
+            self.assertEqual(exit_code, 0)
+            result = json.loads(stdout.getvalue())
+            self.assertEqual(result["health"]["state"], "healthy")
+            self.assertEqual(result["statesync"]["state"], "configured")
+            self.assertTrue(result["statesync"]["ready"])
+            self.assertEqual(
+                result["effective_snapshot_url"],
+                "https://example.invalid/snapshot.tar.gz",
+            )
+            self.assertEqual(
+                result["endpoints"]["xian_metrics"],
+                "http://127.0.0.1:9108/metrics",
+            )
+
 
 class DoctorTests(unittest.TestCase):
     def test_doctor_reports_workspace_and_node_checks(self) -> None:
@@ -2261,6 +2371,8 @@ class DoctorTests(unittest.TestCase):
             check_names = {check["name"] for check in result["checks"]}
             self.assertIn("backend", check_names)
             self.assertIn("rpc", check_names)
+            self.assertIn("statesync", check_names)
+            self.assertIn("snapshot_bootstrap", check_names)
             self.assertIn("dashboard", check_names)
             self.assertIn("prometheus", check_names)
             self.assertIn("grafana", check_names)
@@ -2552,6 +2664,36 @@ class RuntimeHelperTests(unittest.TestCase):
             monitoring_enabled=True,
             dashboard_host="0.0.0.0",
             dashboard_port=18080,
+        )
+
+    def test_get_xian_stack_node_health_uses_backend_command(self) -> None:
+        stack_dir = Path("/tmp/xian-stack")
+        with patch(
+            "xian_cli.runtime.run_backend_command"
+        ) as run_backend_command:
+            run_backend_command.return_value = {"state": "healthy"}
+            result = get_xian_stack_node_health(
+                stack_dir=stack_dir,
+                service_node=True,
+                dashboard_enabled=True,
+                monitoring_enabled=True,
+                dashboard_host="0.0.0.0",
+                dashboard_port=18080,
+                rpc_url="http://127.0.0.1:26657/status",
+                check_disk=False,
+            )
+
+        self.assertEqual(result["state"], "healthy")
+        run_backend_command.assert_called_once_with(
+            stack_dir,
+            "health",
+            service_node=True,
+            dashboard_enabled=True,
+            monitoring_enabled=True,
+            dashboard_host="0.0.0.0",
+            dashboard_port=18080,
+            rpc_url="http://127.0.0.1:26657/status",
+            check_disk=False,
         )
 
 

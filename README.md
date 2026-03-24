@@ -55,6 +55,7 @@ uv run xian network join mainnet-node --network mainnet \
 uv run xian node init mainnet-node --restore-snapshot
 uv run xian node status mainnet-node
 uv run xian node endpoints mainnet-node
+uv run xian node health mainnet-node
 uv run xian snapshot restore mainnet-node
 uv run xian doctor mainnet-node
 uv run xian doctor mainnet-node --skip-live-checks
@@ -127,6 +128,11 @@ for that node.
 `abci_query`, Xian and CometBFT metrics, and optional dashboard / Prometheus /
 Grafana services. This is the quickest way to discover what a template-enabled
 node is expected to expose.
+
+`node health` is the concise live-runtime view. It surfaces the `xian-stack`
+health state, endpoint health, optional disk-pressure checks, state-sync
+readiness from the rendered CometBFT config, and the effective snapshot
+bootstrap URL.
 
 `doctor` now defaults to live health checks when a node name is provided. That
 includes backend state, RPC reachability, and optional dashboard / monitoring

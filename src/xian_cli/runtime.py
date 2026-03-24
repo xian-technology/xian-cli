@@ -90,6 +90,7 @@ def run_backend_command(
     wait_for_health: bool | None = None,
     rpc_timeout_seconds: float | None = None,
     rpc_url: str | None = None,
+    check_disk: bool | None = None,
 ) -> dict:
     cmd = [sys.executable, str(_backend_script(stack_dir)), command]
     cmd.append("--service-node" if service_node else "--no-service-node")
@@ -110,6 +111,8 @@ def run_backend_command(
         cmd.extend(["--rpc-timeout-seconds", str(rpc_timeout_seconds)])
     if rpc_url is not None:
         cmd.extend(["--rpc-url", rpc_url])
+    if check_disk is not None:
+        cmd.append("--check-disk" if check_disk else "--no-check-disk")
 
     result = subprocess.run(
         cmd,
@@ -208,4 +211,28 @@ def get_xian_stack_node_endpoints(
         monitoring_enabled=monitoring_enabled,
         dashboard_host=dashboard_host,
         dashboard_port=dashboard_port,
+    )
+
+
+def get_xian_stack_node_health(
+    *,
+    stack_dir: Path,
+    service_node: bool,
+    dashboard_enabled: bool = False,
+    monitoring_enabled: bool = False,
+    dashboard_host: str = "127.0.0.1",
+    dashboard_port: int = 8080,
+    rpc_url: str = "http://127.0.0.1:26657/status",
+    check_disk: bool = True,
+) -> dict:
+    return run_backend_command(
+        stack_dir,
+        "health",
+        service_node=service_node,
+        dashboard_enabled=dashboard_enabled,
+        monitoring_enabled=monitoring_enabled,
+        dashboard_host=dashboard_host,
+        dashboard_port=dashboard_port,
+        rpc_url=rpc_url,
+        check_disk=check_disk,
     )

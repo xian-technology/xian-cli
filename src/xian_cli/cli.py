@@ -4,6 +4,7 @@ import argparse
 import base64
 import json
 import sys
+import tomllib
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -35,6 +36,7 @@ from xian_cli.runtime import (
     default_home_for_backend,
     fetch_json,
     get_xian_stack_node_endpoints,
+    get_xian_stack_node_health,
     get_xian_stack_node_status,
     resolve_stack_dir,
     start_xian_stack_node,
@@ -1480,6 +1482,109 @@ def _handle_node_endpoints(args: argparse.Namespace) -> int:
     return 0
 
 
+def _read_rendered_config_toml(home: Path) -> dict[str, object]:
+    config_path = home / "config" / "config.toml"
+    if not config_path.exists():
+        raise FileNotFoundError(f"{config_path} does not exist")
+    try:
+        return tomllib.loads(config_path.read_text(encoding="utf-8"))
+    except tomllib.TOMLDecodeError as exc:
+        raise ValueError(f"invalid TOML in {config_path}") from exc
+
+
+def _collect_statesync_readiness(home: Path) -> dict[str, object]:
+    config = _read_rendered_config_toml(home)
+    statesync = config.get("statesync", {})
+    enabled = bool(statesync.get("enable"))
+    rpc_servers = [
+        server.strip()
+        for server in str(statesync.get("rpc_servers", "")).split(",")
+        if server.strip()
+    ]
+    trust_height = int(statesync.get("trust_height", 0) or 0)
+    trust_hash = str(statesync.get("trust_hash", "") or "")
+    trust_period = str(statesync.get("trust_period", "") or "")
+
+    if not enabled:
+        state = "disabled"
+        ready = False
+    else:
+        ready = (
+            len(rpc_servers) >= 2
+            and trust_height > 0
+            and bool(trust_hash)
+            and bool(trust_period)
+        )
+        state = "configured" if ready else "incomplete"
+
+    return {
+        "enabled": enabled,
+        "state": state,
+        "ready": ready,
+        "rpc_servers": rpc_servers,
+        "trust_height": trust_height,
+        "trust_hash_present": bool(trust_hash),
+        "trust_period": trust_period,
+    }
+
+
+def _collect_node_health(args: argparse.Namespace) -> dict[str, object]:
+    context = _resolve_node_context(args)
+    profile = context["profile"]
+    runtime_backend = context["runtime_backend"]
+    stack_dir = context["stack_dir"]
+    home = context["home"]
+
+    payload: dict[str, object] = {
+        "profile_path": str(context["profile_path"]),
+        "network_path": str(context["network_path"]),
+        "runtime_backend": runtime_backend,
+        "home": str(home),
+        "service_node": bool(profile.get("service_node")),
+        "dashboard_enabled": bool(profile.get("dashboard_enabled")),
+        "monitoring_enabled": bool(profile.get("monitoring_enabled")),
+        "effective_snapshot_url": _resolve_effective_snapshot_url(
+            profile=profile,
+            network=context["network"],
+        ),
+    }
+    if stack_dir is not None:
+        payload["stack_dir"] = str(stack_dir)
+
+    try:
+        payload["statesync"] = _collect_statesync_readiness(home)
+    except Exception as exc:
+        payload["statesync"] = {
+            "state": "unavailable",
+            "error": str(exc),
+        }
+
+    if runtime_backend == "xian-stack" and stack_dir is not None:
+        payload["health"] = get_xian_stack_node_health(
+            stack_dir=stack_dir,
+            service_node=bool(profile.get("service_node")),
+            dashboard_enabled=bool(profile.get("dashboard_enabled")),
+            monitoring_enabled=bool(profile.get("monitoring_enabled")),
+            dashboard_host=str(profile.get("dashboard_host", "127.0.0.1")),
+            dashboard_port=int(profile.get("dashboard_port", 8080)),
+            rpc_url=args.rpc_url,
+            check_disk=not args.skip_disk_check,
+        )
+        payload["endpoints"] = payload["health"].get("endpoints", {})
+    else:
+        payload["endpoints"] = _fallback_node_endpoints(
+            rpc_status_url=args.rpc_url,
+            profile=profile,
+        )
+    return payload
+
+
+def _handle_node_health(args: argparse.Namespace) -> int:
+    result = _collect_node_health(args)
+    print(json.dumps(result, indent=2))
+    return 0
+
+
 def _handle_snapshot_restore(args: argparse.Namespace) -> int:
     base_dir = args.base_dir.resolve()
     profile_path, profile, _, network = _load_profile_and_network(
@@ -1562,6 +1667,22 @@ def _doctor_rpc_check(status: dict[str, object]) -> dict[str, object]:
     return status.get("summary", {})
 
 
+def _doctor_statesync_check(status: dict[str, object]) -> dict[str, object]:
+    readiness = _collect_statesync_readiness(Path(str(status["home"])))
+    if readiness["state"] == "incomplete":
+        raise RuntimeError(
+            "statesync is enabled but trust settings are incomplete"
+        )
+    return readiness
+
+
+def _doctor_snapshot_check(status: dict[str, object]) -> dict[str, object]:
+    return {
+        "effective_snapshot_url": status.get("effective_snapshot_url"),
+        "available": bool(status.get("effective_snapshot_url")),
+    }
+
+
 def _doctor_service_check(
     status: dict[str, object],
     *,
@@ -1637,6 +1758,18 @@ def _handle_doctor(args: argparse.Namespace) -> int:
             _run_check(
                 "endpoints",
                 lambda: node_status.get("endpoints", {}),
+            )
+        )
+        checks.append(
+            _run_check(
+                "statesync",
+                lambda: _doctor_statesync_check(node_status),
+            )
+        )
+        checks.append(
+            _run_check(
+                "snapshot_bootstrap",
+                lambda: _doctor_snapshot_check(node_status),
             )
         )
         if not args.skip_live_checks:
@@ -2489,6 +2622,69 @@ def build_parser() -> argparse.ArgumentParser:
         help="RPC status endpoint used to derive default host/port URLs",
     )
     endpoints_parser.set_defaults(handler=_handle_node_endpoints)
+
+    health_parser = node_subparsers.add_parser(
+        "health",
+        help=(
+            "inspect live runtime health, disk pressure, and state-sync "
+            "readiness"
+        ),
+    )
+    health_parser.add_argument("name", help="node profile name")
+    health_parser.add_argument(
+        "--base-dir",
+        type=Path,
+        default=Path.cwd(),
+        help=(
+            "base directory containing ./nodes, ./networks, ./keys, "
+            "and optionally sibling repos"
+        ),
+    )
+    health_parser.add_argument(
+        "--profile",
+        type=Path,
+        help="explicit node profile path; defaults to ./nodes/<name>.json",
+    )
+    health_parser.add_argument(
+        "--network",
+        type=Path,
+        help=(
+            "explicit network manifest path; defaults to "
+            "./networks/<profile.network>/manifest.json"
+        ),
+    )
+    health_parser.add_argument(
+        "--stack-dir",
+        type=Path,
+        help=(
+            "explicit xian-stack checkout path when using the xian-stack "
+            "backend; overrides stack_dir in the profile"
+        ),
+    )
+    health_parser.add_argument(
+        "--configs-dir",
+        type=Path,
+        help=(
+            "explicit xian-configs checkout path for canonical manifests "
+            "or the sibling workspace layout"
+        ),
+    )
+    health_parser.add_argument(
+        "--home",
+        type=Path,
+        help="explicit CometBFT home path; overrides the profile home",
+    )
+    health_parser.add_argument(
+        "--rpc-url",
+        default="http://127.0.0.1:26657/status",
+        help="RPC status endpoint used for live health probes",
+    )
+    health_parser.add_argument(
+        "--skip-disk-check",
+        action="store_true",
+        help="skip the host-disk and data-volume health probe",
+    )
+    health_parser.set_defaults(handler=_handle_node_health)
 
     snapshot_parser = subparsers.add_parser("snapshot", help="snapshot tools")
     snapshot_subparsers = snapshot_parser.add_subparsers(
