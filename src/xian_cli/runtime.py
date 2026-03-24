@@ -114,13 +114,19 @@ def run_backend_command(
     if check_disk is not None:
         cmd.append("--check-disk" if check_disk else "--no-check-disk")
 
-    result = subprocess.run(
-        cmd,
-        cwd=stack_dir,
-        check=True,
-        capture_output=True,
-        text=True,
-    )
+    try:
+        result = subprocess.run(
+            cmd,
+            cwd=stack_dir,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    except subprocess.CalledProcessError as exc:
+        detail = exc.stderr.strip() or exc.stdout.strip() or str(exc)
+        raise RuntimeError(
+            f"xian-stack backend command failed ({command}): {detail}"
+        ) from exc
     try:
         return json.loads(result.stdout)
     except json.JSONDecodeError as exc:

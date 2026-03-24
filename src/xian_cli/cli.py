@@ -1084,6 +1084,11 @@ def _initialize_node_from_args(args: argparse.Namespace) -> dict:
                 network.get("tracer_mode", "python_line_v1"),
             )
         ),
+        # The xian-stack runtime publishes the app metrics port from Docker,
+        # so the in-container exporter must listen on all interfaces.
+        metrics_host="0.0.0.0"
+        if runtime_backend == "xian-stack"
+        else "127.0.0.1",
     )
 
     result = node_setup.materialize_cometbft_home(

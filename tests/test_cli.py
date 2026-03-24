@@ -3,12 +3,15 @@ from __future__ import annotations
 import importlib
 import io
 import json
+import subprocess
 import tempfile
 import unittest
 from contextlib import redirect_stdout
 from pathlib import Path
 from unittest.mock import patch
 from urllib.error import URLError
+
+from xian_runtime_types.time import Datetime
 
 import xian_cli.abci_bridge as abci_bridge
 from xian_cli.cli import main
@@ -27,6 +30,7 @@ from xian_cli.runtime import (
     get_xian_stack_node_health,
     get_xian_stack_node_status,
     resolve_stack_dir,
+    run_backend_command,
     start_xian_stack_node,
     stop_xian_stack_node,
     wait_for_rpc_ready,
@@ -780,6 +784,9 @@ class NetworkManifestTests(unittest.TestCase):
             home = Path(result["node_init"]["home"])
             self.assertTrue((home / "config" / "config.toml").exists())
             self.assertTrue((home / "config" / "genesis.json").exists())
+            config_toml = (home / "config" / "config.toml").read_text(
+                encoding="utf-8"
+            )
             profile = json.loads(
                 (base_dir / "nodes" / "validator-1.json").read_text(
                     encoding="utf-8"
@@ -789,6 +796,7 @@ class NetworkManifestTests(unittest.TestCase):
                 profile["validator_key_ref"],
                 "keys/validator-1/validator_key_info.json",
             )
+            self.assertIn('metrics_host = "0.0.0.0"', config_toml)
 
     def test_network_create_can_bootstrap_local_network(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -799,7 +807,24 @@ class NetworkManifestTests(unittest.TestCase):
             fake_genesis = {
                 "chain_id": "xian-local-1",
                 "validators": [],
-                "abci_genesis": {},
+                "abci_genesis": {
+                    "genesis": [
+                        {
+                            "key": "currency.balances:founder",
+                            "value": "1000000",
+                        },
+                        {
+                            "key": "currency.streams:example",
+                            "value": Datetime(
+                                year=2026,
+                                month=1,
+                                day=1,
+                                hour=0,
+                                minute=0,
+                            ),
+                        },
+                    ]
+                },
             }
             genesis_builder = type(
                 "GenesisBuilder",
@@ -864,10 +889,17 @@ class NetworkManifestTests(unittest.TestCase):
 
             manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
             profile = json.loads(profile_path.read_text(encoding="utf-8"))
+            generated_genesis = json.loads(
+                genesis_path.read_text(encoding="utf-8")
+            )
             self.assertEqual(manifest["genesis_source"], "./genesis.json")
             self.assertEqual(
                 profile["validator_key_ref"],
                 "keys/validator-1/validator_key_info.json",
+            )
+            self.assertEqual(
+                generated_genesis["abci_genesis"]["genesis"][1]["value"],
+                "2026-01-01 00:00:00",
             )
             (genesis_builder.build_local_network_genesis.assert_called_once())
 
@@ -2710,6 +2742,26 @@ class RuntimeHelperTests(unittest.TestCase):
             rpc_url="http://127.0.0.1:26657/status",
             check_disk=False,
         )
+
+    def test_run_backend_command_surfaces_backend_stderr(self) -> None:
+        stack_dir = Path("/tmp/xian-stack")
+        error = subprocess.CalledProcessError(
+            1,
+            ["python3", "backend.py", "start"],
+            output='{"state":"failed"}',
+            stderr="compose interpolation failed",
+        )
+
+        with patch(
+            "xian_cli.runtime.subprocess.run",
+            side_effect=error,
+        ):
+            with self.assertRaisesRegex(
+                RuntimeError,
+                "xian-stack backend command failed \\(start\\): "
+                "compose interpolation failed",
+            ):
+                run_backend_command(stack_dir, "start")
 
 
 class ConfigRepoTests(unittest.TestCase):

@@ -1,8 +1,12 @@
 from __future__ import annotations
 
+import decimal
 import json
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
+
+from xian_runtime_types.decimal import ContractingDecimal
+from xian_runtime_types.time import Datetime
 
 SCHEMA_VERSION = 1
 SUPPORTED_NETWORK_MODES = {"join", "create"}
@@ -338,13 +342,34 @@ class NetworkTemplate:
         return asdict(self)
 
 
+def _normalize_json_value(value):
+    if isinstance(value, dict):
+        return {
+            str(key): _normalize_json_value(nested)
+            for key, nested in value.items()
+        }
+    if isinstance(value, list):
+        return [_normalize_json_value(item) for item in value]
+    if isinstance(value, tuple):
+        return [_normalize_json_value(item) for item in value]
+    if isinstance(value, (ContractingDecimal, decimal.Decimal, Datetime)):
+        return str(value)
+    if isinstance(value, bytes):
+        try:
+            return value.decode("utf-8")
+        except UnicodeDecodeError:
+            return value.hex()
+    return value
+
+
 def write_json(path: Path, payload: dict, *, force: bool = False) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     if path.exists() and not force:
         raise FileExistsError(
             f"{path} already exists; pass --force to overwrite"
         )
-    path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+    normalized = _normalize_json_value(payload)
+    path.write_text(json.dumps(normalized, indent=2) + "\n", encoding="utf-8")
 
 
 def read_json(path: Path) -> dict:
