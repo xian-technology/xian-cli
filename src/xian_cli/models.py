@@ -9,6 +9,17 @@ SUPPORTED_NETWORK_MODES = {"join", "create"}
 SUPPORTED_RUNTIME_BACKENDS = {"xian-stack"}
 SUPPORTED_BLOCK_POLICY_MODES = {"on_demand", "idle_interval", "periodic"}
 SUPPORTED_TRACER_MODES = {"python_line_v1", "native_instruction_v1"}
+SUPPORTED_OPERATOR_PROFILES = {
+    "local_development",
+    "indexed_development",
+    "shared_network",
+    "embedded_backend",
+}
+SUPPORTED_MONITORING_PROFILES = {
+    "none",
+    "local_stack",
+    "service_node",
+}
 
 
 def _require_str(payload: dict, key: str) -> str:
@@ -24,6 +35,21 @@ def _require_optional_str(payload: dict, key: str) -> str | None:
         return None
     if not isinstance(value, str) or not value:
         raise ValueError(f"{key} must be a non-empty string when provided")
+    return value
+
+
+def _require_optional_choice(
+    payload: dict,
+    key: str,
+    *,
+    supported: set[str],
+    default: str | None = None,
+) -> str | None:
+    value = payload.get(key, default)
+    if value is None:
+        return None
+    if not isinstance(value, str) or value not in supported:
+        raise ValueError(f"{key} must be one of {sorted(supported)}")
     return value
 
 
@@ -160,6 +186,18 @@ def normalize_node_profile(payload: dict) -> dict:
             payload, "block_policy_interval"
         ),
         "tracer_mode": _require_tracer_mode(payload, "tracer_mode"),
+        "operator_profile": _require_optional_choice(
+            payload,
+            "operator_profile",
+            supported=SUPPORTED_OPERATOR_PROFILES,
+            default=None,
+        ),
+        "monitoring_profile": _require_optional_choice(
+            payload,
+            "monitoring_profile",
+            supported=SUPPORTED_MONITORING_PROFILES,
+            default=None,
+        ),
         "dashboard_enabled": _require_bool(
             payload, "dashboard_enabled", default=False
         ),
@@ -190,6 +228,16 @@ def normalize_network_template(payload: dict) -> dict:
             payload, "block_policy_interval"
         ),
         "tracer_mode": _require_tracer_mode(payload, "tracer_mode"),
+        "operator_profile": _require_optional_choice(
+            payload,
+            "operator_profile",
+            supported=SUPPORTED_OPERATOR_PROFILES,
+        ),
+        "monitoring_profile": _require_optional_choice(
+            payload,
+            "monitoring_profile",
+            supported=SUPPORTED_MONITORING_PROFILES,
+        ),
         "bootstrap_node_name": _require_optional_str(
             payload, "bootstrap_node_name"
         ),
@@ -252,6 +300,8 @@ class NodeProfile:
     block_policy_mode: str = "on_demand"
     block_policy_interval: str = "0s"
     tracer_mode: str = "python_line_v1"
+    operator_profile: str | None = None
+    monitoring_profile: str | None = None
     dashboard_enabled: bool = False
     monitoring_enabled: bool = False
     dashboard_host: str = "127.0.0.1"
@@ -271,6 +321,8 @@ class NetworkTemplate:
     block_policy_mode: str = "on_demand"
     block_policy_interval: str = "0s"
     tracer_mode: str = "python_line_v1"
+    operator_profile: str | None = None
+    monitoring_profile: str | None = None
     bootstrap_node_name: str | None = None
     additional_validator_names: list[str] = field(default_factory=list)
     service_node: bool = False

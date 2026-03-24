@@ -452,6 +452,16 @@ def _handle_network_create(args: argparse.Namespace) -> int:
             block_policy_mode=manifest.block_policy_mode,
             block_policy_interval=manifest.block_policy_interval,
             tracer_mode=manifest.tracer_mode,
+            operator_profile=(
+                template.get("operator_profile")
+                if validator["is_bootstrap"] and template is not None
+                else None
+            ),
+            monitoring_profile=(
+                template.get("monitoring_profile")
+                if validator["is_bootstrap"] and template is not None
+                else None
+            ),
             dashboard_enabled=(
                 _pick_template_value(
                     args.enable_dashboard,
@@ -636,6 +646,12 @@ def _handle_network_join(args: argparse.Namespace) -> int:
             args.tracer_mode,
             None if template is None else template.get("tracer_mode"),
             network.get("tracer_mode", "python_line_v1"),
+        ),
+        operator_profile=(
+            None if template is None else template.get("operator_profile")
+        ),
+        monitoring_profile=(
+            None if template is None else template.get("monitoring_profile")
         ),
         dashboard_enabled=_pick_template_value(
             args.enable_dashboard,
@@ -1286,6 +1302,8 @@ def _collect_node_endpoints(args: argparse.Namespace) -> dict[str, object]:
         "network_path": str(context["network_path"]),
         "runtime_backend": runtime_backend,
         "service_node": bool(profile.get("service_node")),
+        "operator_profile": profile.get("operator_profile"),
+        "monitoring_profile": profile.get("monitoring_profile"),
         "dashboard_enabled": bool(profile.get("dashboard_enabled")),
         "monitoring_enabled": bool(profile.get("monitoring_enabled")),
     }
@@ -1341,6 +1359,10 @@ def _summarize_node_status(result: dict[str, object]) -> dict[str, object]:
         "state": state,
         "initialized": bool(result.get("initialized")),
         "service_node": bool(result.get("profile", {}).get("service_node")),
+        "operator_profile": result.get("profile", {}).get("operator_profile"),
+        "monitoring_profile": result.get("profile", {}).get(
+            "monitoring_profile"
+        ),
         "dashboard_enabled": bool(
             result.get("profile", {}).get("dashboard_enabled")
         ),
@@ -1412,6 +1434,8 @@ def _collect_node_status(
             "name": args.name,
             "network": profile.get("network"),
             "service_node": bool(profile.get("service_node")),
+            "operator_profile": profile.get("operator_profile"),
+            "monitoring_profile": profile.get("monitoring_profile"),
             "dashboard_enabled": bool(profile.get("dashboard_enabled")),
             "monitoring_enabled": bool(profile.get("monitoring_enabled")),
         },
@@ -1541,6 +1565,8 @@ def _collect_node_health(args: argparse.Namespace) -> dict[str, object]:
         "runtime_backend": runtime_backend,
         "home": str(home),
         "service_node": bool(profile.get("service_node")),
+        "operator_profile": profile.get("operator_profile"),
+        "monitoring_profile": profile.get("monitoring_profile"),
         "dashboard_enabled": bool(profile.get("dashboard_enabled")),
         "monitoring_enabled": bool(profile.get("monitoring_enabled")),
         "effective_snapshot_url": _resolve_effective_snapshot_url(

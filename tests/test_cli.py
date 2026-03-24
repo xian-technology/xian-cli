@@ -95,6 +95,8 @@ class NetworkManifestTests(unittest.TestCase):
                         "block_policy_mode": "on_demand",
                         "block_policy_interval": "0s",
                         "tracer_mode": "python_line_v1",
+                        "operator_profile": "local_development",
+                        "monitoring_profile": "none",
                         "bootstrap_node_name": "validator-1",
                         "additional_validator_names": [],
                         "service_node": False,
@@ -127,6 +129,9 @@ class NetworkManifestTests(unittest.TestCase):
             payload = json.loads(stdout.getvalue())
             self.assertEqual(len(payload), 1)
             self.assertEqual(payload[0]["name"], "single-node-dev")
+            self.assertEqual(
+                payload[0]["operator_profile"], "local_development"
+            )
             self.assertTrue(payload[0]["dashboard_enabled"])
 
     def test_network_create_writes_manifest(self) -> None:
@@ -205,6 +210,8 @@ class NetworkManifestTests(unittest.TestCase):
                         "block_policy_mode": "on_demand",
                         "block_policy_interval": "0s",
                         "tracer_mode": "native_instruction_v1",
+                        "operator_profile": "indexed_development",
+                        "monitoring_profile": "local_stack",
                         "bootstrap_node_name": "validator-1",
                         "additional_validator_names": [],
                         "service_node": True,
@@ -256,6 +263,8 @@ class NetworkManifestTests(unittest.TestCase):
             self.assertEqual(result["template"], "single-node-indexed")
             self.assertEqual(manifest["tracer_mode"], "native_instruction_v1")
             self.assertTrue(profile["service_node"])
+            self.assertEqual(profile["operator_profile"], "indexed_development")
+            self.assertEqual(profile["monitoring_profile"], "local_stack")
             self.assertTrue(profile["dashboard_enabled"])
             self.assertTrue(profile["monitoring_enabled"])
             self.assertEqual(profile["dashboard_host"], "0.0.0.0")
@@ -441,6 +450,8 @@ class NetworkManifestTests(unittest.TestCase):
                         "block_policy_mode": "on_demand",
                         "block_policy_interval": "0s",
                         "tracer_mode": "native_instruction_v1",
+                        "operator_profile": "embedded_backend",
+                        "monitoring_profile": "service_node",
                         "bootstrap_node_name": "validator-1",
                         "additional_validator_names": [],
                         "service_node": True,
@@ -478,6 +489,8 @@ class NetworkManifestTests(unittest.TestCase):
             self.assertEqual(exit_code, 0)
             profile = json.loads(output_path.read_text(encoding="utf-8"))
             self.assertTrue(profile["service_node"])
+            self.assertEqual(profile["operator_profile"], "embedded_backend")
+            self.assertEqual(profile["monitoring_profile"], "service_node")
             self.assertTrue(profile["monitoring_enabled"])
             self.assertFalse(profile["dashboard_enabled"])
             self.assertEqual(profile["tracer_mode"], "native_instruction_v1")
@@ -2092,6 +2105,8 @@ trust_period = "336h0m0s"
 
             self.assertEqual(exit_code, 0)
             result = json.loads(stdout.getvalue())
+            self.assertIsNone(result["operator_profile"])
+            self.assertIsNone(result["monitoring_profile"])
             self.assertEqual(result["health"]["state"], "healthy")
             self.assertEqual(result["statesync"]["state"], "configured")
             self.assertTrue(result["statesync"]["ready"])
