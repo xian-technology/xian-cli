@@ -55,11 +55,23 @@ uv run xian snapshot restore mainnet-node
 ## What It Covers
 
 - key generation and validator material
+- network template and solution-pack discovery
 - network creation and network join flows
 - node initialization, start, stop, and status
 - endpoint and health discovery
 - snapshot restore and doctor diagnostics
 - solution-pack starter flows built on `xian-configs`
+
+## Command Groups
+
+- `xian keys ...`: generate validator and account material
+- `xian network template ...`: inspect reusable network templates
+- `xian network create ...`: create a local/operator-managed network profile
+- `xian network join ...`: join an existing canonical or remote network
+- `xian node ...`: initialize, start, stop, inspect, and recover a node profile
+- `xian doctor ...`: run broader local diagnostics
+- `xian solution-pack ...`: discover starter flows built on top of the golden
+  path
 
 ## Validation
 
