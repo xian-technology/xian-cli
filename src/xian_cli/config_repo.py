@@ -121,3 +121,57 @@ def list_network_template_paths(
             templates[path.stem] = path.resolve()
 
     return [templates[name] for name in sorted(templates)]
+
+
+def resolve_solution_pack_path(
+    *,
+    base_dir: Path,
+    pack_name: str,
+    configs_dir: Path | None = None,
+) -> Path:
+    local_pack = (
+        base_dir / "solution-packs" / pack_name / "pack.json"
+    ).resolve()
+    if local_pack.exists():
+        return local_pack
+
+    resolved_configs_dir = resolve_configs_dir(base_dir, explicit=configs_dir)
+    canonical_pack = (
+        resolved_configs_dir / "solution-packs" / pack_name / "pack.json"
+    ).resolve()
+    if canonical_pack.exists():
+        return canonical_pack
+
+    raise FileNotFoundError(
+        "solution pack not found in local workspace or xian-configs: "
+        f"{local_pack} or {canonical_pack}"
+    )
+
+
+def list_solution_pack_paths(
+    *,
+    base_dir: Path,
+    configs_dir: Path | None = None,
+) -> list[Path]:
+    packs: dict[str, Path] = {}
+
+    try:
+        resolved_configs_dir = resolve_configs_dir(
+            base_dir,
+            explicit=configs_dir,
+        )
+    except FileNotFoundError:
+        resolved_configs_dir = None
+
+    if resolved_configs_dir is not None:
+        canonical_dir = resolved_configs_dir / "solution-packs"
+        if canonical_dir.exists():
+            for path in sorted(canonical_dir.glob("*/pack.json")):
+                packs[path.parent.name] = path.resolve()
+
+    local_dir = base_dir / "solution-packs"
+    if local_dir.exists():
+        for path in sorted(local_dir.glob("*/pack.json")):
+            packs[path.parent.name] = path.resolve()
+
+    return [packs[name] for name in sorted(packs)]

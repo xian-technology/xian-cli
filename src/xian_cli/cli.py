@@ -15,9 +15,11 @@ from xian_cli.abci_bridge import (
 )
 from xian_cli.config_repo import (
     list_network_template_paths,
+    list_solution_pack_paths,
     resolve_configs_dir,
     resolve_network_manifest_path,
     resolve_network_template_path,
+    resolve_solution_pack_path,
 )
 from xian_cli.models import (
     SUPPORTED_BLOCK_POLICY_MODES,
@@ -29,6 +31,7 @@ from xian_cli.models import (
     read_network_manifest,
     read_network_template,
     read_node_profile,
+    read_solution_pack,
     write_json,
 )
 from xian_cli.runtime import (
@@ -139,6 +142,88 @@ def _handle_network_template_show(args: argparse.Namespace) -> int:
         configs_dir=args.configs_dir,
     )
     print(json.dumps(template, indent=2))
+    return 0
+
+
+def _load_solution_pack(
+    *,
+    base_dir: Path,
+    pack_name: str,
+    configs_dir: Path | None,
+) -> dict:
+    pack_path = resolve_solution_pack_path(
+        base_dir=base_dir,
+        pack_name=pack_name,
+        configs_dir=configs_dir,
+    )
+    return read_solution_pack(pack_path)
+
+
+def _handle_solution_pack_list(args: argparse.Namespace) -> int:
+    base_dir = args.base_dir.resolve()
+    packs = [
+        read_solution_pack(path)
+        for path in list_solution_pack_paths(
+            base_dir=base_dir,
+            configs_dir=args.configs_dir,
+        )
+    ]
+    summaries = [
+        {
+            "name": pack["name"],
+            "display_name": pack["display_name"],
+            "description": pack["description"],
+            "recommended_local_template": pack["recommended_local_template"],
+            "recommended_remote_template": pack["recommended_remote_template"],
+            "docs_path": pack["docs_path"],
+            "example_dir": pack["example_dir"],
+        }
+        for pack in packs
+    ]
+    print(json.dumps(summaries, indent=2))
+    return 0
+
+
+def _handle_solution_pack_show(args: argparse.Namespace) -> int:
+    base_dir = args.base_dir.resolve()
+    pack = _load_solution_pack(
+        base_dir=base_dir,
+        pack_name=args.name,
+        configs_dir=args.configs_dir,
+    )
+    print(json.dumps(pack, indent=2))
+    return 0
+
+
+def _handle_solution_pack_starter(args: argparse.Namespace) -> int:
+    base_dir = args.base_dir.resolve()
+    pack = _load_solution_pack(
+        base_dir=base_dir,
+        pack_name=args.name,
+        configs_dir=args.configs_dir,
+    )
+    flow = next(
+        (item for item in pack["starter_flows"] if item["name"] == args.flow),
+        None,
+    )
+    if flow is None:
+        available = sorted(item["name"] for item in pack["starter_flows"])
+        raise ValueError(
+            "solution pack flow "
+            f"'{args.flow}' not found; available: {available}"
+        )
+
+    starter = {
+        "name": pack["name"],
+        "display_name": pack["display_name"],
+        "description": pack["description"],
+        "use_case": pack["use_case"],
+        "docs_path": pack["docs_path"],
+        "example_dir": pack["example_dir"],
+        "contract_paths": pack["contract_paths"],
+        "flow": flow,
+    }
+    print(json.dumps(starter, indent=2))
     return 0
 
 
@@ -1986,6 +2071,90 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     template_show_parser.set_defaults(handler=_handle_network_template_show)
+
+    solution_pack_parser = subparsers.add_parser(
+        "solution-pack",
+        help="inspect packaged solution-pack starter flows",
+    )
+    solution_pack_subparsers = solution_pack_parser.add_subparsers(
+        dest="solution_pack_command", required=True
+    )
+
+    solution_pack_list_parser = solution_pack_subparsers.add_parser(
+        "list", help="list available solution packs"
+    )
+    solution_pack_list_parser.add_argument(
+        "--base-dir",
+        type=Path,
+        default=Path.cwd(),
+        help=(
+            "workspace directory that may contain local ./solution-packs and "
+            "optionally sibling repos"
+        ),
+    )
+    solution_pack_list_parser.add_argument(
+        "--configs-dir",
+        type=Path,
+        help=(
+            "explicit xian-configs checkout path; defaults to XIAN_CONFIGS_DIR "
+            "or the sibling workspace layout"
+        ),
+    )
+    solution_pack_list_parser.set_defaults(handler=_handle_solution_pack_list)
+
+    solution_pack_show_parser = solution_pack_subparsers.add_parser(
+        "show", help="show one solution pack"
+    )
+    solution_pack_show_parser.add_argument("name", help="solution pack name")
+    solution_pack_show_parser.add_argument(
+        "--base-dir",
+        type=Path,
+        default=Path.cwd(),
+        help=(
+            "workspace directory that may contain local ./solution-packs and "
+            "optionally sibling repos"
+        ),
+    )
+    solution_pack_show_parser.add_argument(
+        "--configs-dir",
+        type=Path,
+        help=(
+            "explicit xian-configs checkout path; defaults to XIAN_CONFIGS_DIR "
+            "or the sibling workspace layout"
+        ),
+    )
+    solution_pack_show_parser.set_defaults(handler=_handle_solution_pack_show)
+
+    solution_pack_starter_parser = solution_pack_subparsers.add_parser(
+        "starter",
+        help="show the canonical starter flow for one solution pack",
+    )
+    solution_pack_starter_parser.add_argument("name", help="solution pack name")
+    solution_pack_starter_parser.add_argument(
+        "--flow",
+        default="local",
+        help="starter flow name; defaults to local",
+    )
+    solution_pack_starter_parser.add_argument(
+        "--base-dir",
+        type=Path,
+        default=Path.cwd(),
+        help=(
+            "workspace directory that may contain local ./solution-packs and "
+            "optionally sibling repos"
+        ),
+    )
+    solution_pack_starter_parser.add_argument(
+        "--configs-dir",
+        type=Path,
+        help=(
+            "explicit xian-configs checkout path; defaults to XIAN_CONFIGS_DIR "
+            "or the sibling workspace layout"
+        ),
+    )
+    solution_pack_starter_parser.set_defaults(
+        handler=_handle_solution_pack_starter
+    )
 
     create_parser = network_subparsers.add_parser(
         "create", help="create a new network manifest"

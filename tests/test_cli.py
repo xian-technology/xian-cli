@@ -20,11 +20,13 @@ from xian_cli.config_repo import (
     resolve_configs_dir,
     resolve_network_manifest_path,
     resolve_network_template_path,
+    resolve_solution_pack_path,
 )
 from xian_cli.models import (
     read_network_manifest,
     read_network_template,
     read_node_profile,
+    read_solution_pack,
 )
 from xian_cli.runtime import (
     default_home_for_backend,
@@ -2881,12 +2883,256 @@ class ConfigRepoTests(unittest.TestCase):
             ):
                 read_network_template(template_path)
 
+    def test_solution_pack_list_reads_canonical_solution_packs(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            base_dir = Path(tmp_dir)
+            configs_dir = base_dir / "xian-configs"
+            pack_dir = configs_dir / "solution-packs" / "credits-ledger"
+            pack_dir.mkdir(parents=True)
+            (pack_dir / "pack.json").write_text(
+                json.dumps(
+                    {
+                        "schema_version": 1,
+                        "name": "credits-ledger",
+                        "display_name": "Credits Ledger Pack",
+                        "description": "Credits ledger starter flow",
+                        "use_case": (
+                            "Use Xian as an application credits ledger."
+                        ),
+                        "recommended_local_template": "single-node-indexed",
+                        "recommended_remote_template": "embedded-backend",
+                        "docs_path": "/solution-packs/credits-ledger",
+                        "example_dir": "xian-py/examples/credits_ledger",
+                        "contract_paths": [
+                            "solution-packs/credits-ledger/contracts/credits_ledger.s.py"
+                        ],
+                        "starter_flows": [
+                            {
+                                "name": "local",
+                                "display_name": "Local Starter",
+                                "template": "single-node-indexed",
+                                "summary": "Local starter flow",
+                                "network_name": "credits-ledger-local",
+                                "node_name": "validator-1",
+                                "steps": [
+                                    {
+                                        "title": "Create network",
+                                        "commands": [
+                                            "uv run xian network create "
+                                            "credits-ledger-local --template "
+                                            "single-node-indexed --chain-id "
+                                            "credits-ledger-local-1 "
+                                            "--generate-validator-key "
+                                            "--init-node"
+                                        ],
+                                        "notes": ["Run from xian-cli."],
+                                    }
+                                ],
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            stdout = io.StringIO()
+            with redirect_stdout(stdout):
+                exit_code = main(
+                    [
+                        "solution-pack",
+                        "list",
+                        "--base-dir",
+                        str(base_dir),
+                        "--configs-dir",
+                        str(configs_dir),
+                    ]
+                )
+
+            self.assertEqual(exit_code, 0)
+            payload = json.loads(stdout.getvalue())
+            self.assertEqual(len(payload), 1)
+            self.assertEqual(payload[0]["name"], "credits-ledger")
+            self.assertEqual(
+                payload[0]["recommended_local_template"],
+                "single-node-indexed",
+            )
+            self.assertEqual(
+                payload[0]["example_dir"],
+                "xian-py/examples/credits_ledger",
+            )
+
+    def test_solution_pack_starter_returns_selected_flow(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            base_dir = Path(tmp_dir)
+            configs_dir = base_dir / "xian-configs"
+            pack_dir = configs_dir / "solution-packs" / "workflow-backend"
+            pack_dir.mkdir(parents=True)
+            (pack_dir / "pack.json").write_text(
+                json.dumps(
+                    {
+                        "schema_version": 1,
+                        "name": "workflow-backend",
+                        "display_name": "Workflow Backend Pack",
+                        "description": "Workflow starter flow",
+                        "use_case": "Use Xian as a shared workflow backend.",
+                        "recommended_local_template": "single-node-indexed",
+                        "recommended_remote_template": "embedded-backend",
+                        "docs_path": "/solution-packs/workflow-backend",
+                        "example_dir": "xian-py/examples/workflow_backend",
+                        "contract_paths": [
+                            "solution-packs/workflow-backend/contracts/job_workflow.s.py"
+                        ],
+                        "starter_flows": [
+                            {
+                                "name": "local",
+                                "display_name": "Local Starter",
+                                "template": "single-node-indexed",
+                                "summary": "Local flow",
+                                "network_name": "workflow-backend-local",
+                                "node_name": "validator-1",
+                                "steps": [
+                                    {
+                                        "title": "Create network",
+                                        "commands": [
+                                            "uv run xian network create "
+                                            "workflow-backend-local "
+                                            "--template "
+                                            "single-node-indexed --chain-id "
+                                            "workflow-backend-local-1 "
+                                            "--generate-validator-key "
+                                            "--init-node"
+                                        ],
+                                        "notes": [],
+                                    }
+                                ],
+                            },
+                            {
+                                "name": "remote",
+                                "display_name": "Remote Starter",
+                                "template": "embedded-backend",
+                                "summary": "Remote flow",
+                                "network_name": "workflow-backend-remote",
+                                "node_name": "validator-1",
+                                "steps": [
+                                    {
+                                        "title": "Deploy remote node",
+                                        "commands": [
+                                            "ansible-playbook "
+                                            "playbooks/deploy.yml"
+                                        ],
+                                        "notes": ["Run from xian-deploy."],
+                                    }
+                                ],
+                            },
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            stdout = io.StringIO()
+            with redirect_stdout(stdout):
+                exit_code = main(
+                    [
+                        "solution-pack",
+                        "starter",
+                        "workflow-backend",
+                        "--flow",
+                        "remote",
+                        "--base-dir",
+                        str(base_dir),
+                        "--configs-dir",
+                        str(configs_dir),
+                    ]
+                )
+
+            self.assertEqual(exit_code, 0)
+            payload = json.loads(stdout.getvalue())
+            self.assertEqual(payload["name"], "workflow-backend")
+            self.assertEqual(payload["flow"]["name"], "remote")
+            self.assertEqual(payload["flow"]["template"], "embedded-backend")
+            self.assertEqual(
+                payload["flow"]["steps"][0]["commands"][0],
+                "ansible-playbook playbooks/deploy.yml",
+            )
+
+    def test_read_solution_pack_requires_explicit_schema_version(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            pack_path = Path(tmp_dir) / "pack.json"
+            pack_path.write_text(
+                json.dumps(
+                    {
+                        "name": "credits-ledger",
+                        "display_name": "Credits Ledger Pack",
+                        "description": "Credits ledger starter flow",
+                        "use_case": (
+                            "Use Xian as an application credits ledger."
+                        ),
+                        "recommended_local_template": "single-node-indexed",
+                        "recommended_remote_template": "embedded-backend",
+                        "docs_path": "/solution-packs/credits-ledger",
+                        "example_dir": "xian-py/examples/credits_ledger",
+                        "contract_paths": [
+                            "solution-packs/credits-ledger/contracts/credits_ledger.s.py"
+                        ],
+                        "starter_flows": [
+                            {
+                                "name": "local",
+                                "display_name": "Local Starter",
+                                "template": "single-node-indexed",
+                                "summary": "Local starter flow",
+                                "steps": [
+                                    {
+                                        "title": "Create network",
+                                        "commands": [
+                                            "uv run xian network create "
+                                            "credits-ledger-local --template "
+                                            "single-node-indexed --chain-id "
+                                            "credits-ledger-local-1 "
+                                            "--generate-validator-key "
+                                            "--init-node"
+                                        ],
+                                        "notes": [],
+                                    }
+                                ],
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            with self.assertRaisesRegex(
+                ValueError, "unsupported schema_version"
+            ):
+                read_solution_pack(pack_path)
+
     def test_resolve_configs_dir_uses_workspace_fallback(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             resolved = resolve_configs_dir(Path(tmp_dir))
 
         expected = (WORKSPACE_ROOT / "xian-configs").resolve()
         self.assertEqual(resolved, expected)
+
+    def test_resolve_solution_pack_path_prefers_canonical_configs_repo(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            base_dir = Path(tmp_dir)
+            configs_dir = base_dir / "xian-configs"
+            pack_path = (
+                configs_dir / "solution-packs" / "credits-ledger" / "pack.json"
+            )
+            pack_path.parent.mkdir(parents=True)
+            pack_path.write_text("{}", encoding="utf-8")
+
+            resolved = resolve_solution_pack_path(
+                base_dir=base_dir,
+                pack_name="credits-ledger",
+                configs_dir=configs_dir,
+            )
+
+        self.assertEqual(resolved, pack_path.resolve())
 
     def test_resolve_network_manifest_path_prefers_local_network_dir(self):
         with tempfile.TemporaryDirectory() as tmp_dir:

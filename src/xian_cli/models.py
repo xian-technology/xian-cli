@@ -269,6 +269,82 @@ def normalize_network_template(payload: dict) -> dict:
     }
 
 
+def _normalize_solution_pack_step(payload: dict) -> dict:
+    if not isinstance(payload, dict):
+        raise ValueError("solution pack step must be a JSON object")
+
+    commands = _require_str_list(payload, "commands")
+    if not commands:
+        raise ValueError("solution pack step commands must not be empty")
+
+    return {
+        "title": _require_str(payload, "title"),
+        "commands": commands,
+        "notes": _require_str_list(payload, "notes"),
+    }
+
+
+def _normalize_solution_pack_flow(payload: dict) -> dict:
+    if not isinstance(payload, dict):
+        raise ValueError("solution pack starter flow must be a JSON object")
+
+    steps = payload.get("steps")
+    if (
+        not isinstance(steps, list)
+        or not steps
+        or any(not isinstance(item, dict) for item in steps)
+    ):
+        raise ValueError(
+            "solution pack starter flow steps must be a non-empty "
+            "list of objects"
+        )
+
+    return {
+        "name": _require_str(payload, "name"),
+        "display_name": _require_str(payload, "display_name"),
+        "template": _require_str(payload, "template"),
+        "summary": _require_str(payload, "summary"),
+        "network_name": _require_optional_str(payload, "network_name"),
+        "node_name": _require_optional_str(payload, "node_name"),
+        "steps": [_normalize_solution_pack_step(item) for item in steps],
+    }
+
+
+def normalize_solution_pack(payload: dict) -> dict:
+    if not isinstance(payload, dict):
+        raise ValueError("solution pack must be a JSON object")
+
+    starter_flows = payload.get("starter_flows")
+    if (
+        not isinstance(starter_flows, list)
+        or not starter_flows
+        or any(not isinstance(item, dict) for item in starter_flows)
+    ):
+        raise ValueError(
+            "starter_flows must be a non-empty list of flow objects"
+        )
+
+    return {
+        "schema_version": _require_schema_version(payload),
+        "name": _require_str(payload, "name"),
+        "display_name": _require_str(payload, "display_name"),
+        "description": _require_str(payload, "description"),
+        "use_case": _require_str(payload, "use_case"),
+        "recommended_local_template": _require_str(
+            payload, "recommended_local_template"
+        ),
+        "recommended_remote_template": _require_str(
+            payload, "recommended_remote_template"
+        ),
+        "docs_path": _require_str(payload, "docs_path"),
+        "example_dir": _require_str(payload, "example_dir"),
+        "contract_paths": _require_str_list(payload, "contract_paths"),
+        "starter_flows": [
+            _normalize_solution_pack_flow(item) for item in starter_flows
+        ],
+    }
+
+
 @dataclass(slots=True)
 class NetworkManifest:
     name: str
@@ -343,6 +419,48 @@ class NetworkTemplate:
         return asdict(self)
 
 
+@dataclass(slots=True)
+class SolutionPackStarterStep:
+    title: str
+    commands: list[str] = field(default_factory=list)
+    notes: list[str] = field(default_factory=list)
+
+    def to_dict(self) -> dict:
+        return asdict(self)
+
+
+@dataclass(slots=True)
+class SolutionPackStarterFlow:
+    name: str
+    display_name: str
+    template: str
+    summary: str
+    network_name: str | None = None
+    node_name: str | None = None
+    steps: list[SolutionPackStarterStep] = field(default_factory=list)
+
+    def to_dict(self) -> dict:
+        return asdict(self)
+
+
+@dataclass(slots=True)
+class SolutionPack:
+    name: str
+    display_name: str
+    description: str
+    use_case: str
+    recommended_local_template: str
+    recommended_remote_template: str
+    docs_path: str
+    example_dir: str
+    contract_paths: list[str] = field(default_factory=list)
+    starter_flows: list[SolutionPackStarterFlow] = field(default_factory=list)
+    schema_version: int = SCHEMA_VERSION
+
+    def to_dict(self) -> dict:
+        return asdict(self)
+
+
 def _normalize_json_value(value, *, preserve_runtime_types: bool = False):
     if isinstance(value, dict):
         return {
@@ -409,3 +527,7 @@ def read_node_profile(path: Path) -> dict:
 
 def read_network_template(path: Path) -> dict:
     return normalize_network_template(read_json(path))
+
+
+def read_solution_pack(path: Path) -> dict:
+    return normalize_solution_pack(read_json(path))
