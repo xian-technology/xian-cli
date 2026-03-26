@@ -72,6 +72,13 @@ def _require_int(payload: dict, key: str, *, default: int) -> int:
     return value
 
 
+def _require_non_negative_int(payload: dict, key: str, *, default: int) -> int:
+    value = payload.get(key, default)
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        raise ValueError(f"{key} must be a non-negative integer")
+    return value
+
+
 def _require_str_list(payload: dict, key: str) -> list[str]:
     value = payload.get(key, [])
     if not isinstance(value, list) or any(
@@ -191,6 +198,15 @@ def normalize_node_profile(payload: dict) -> dict:
             payload, "block_policy_interval"
         ),
         "tracer_mode": _require_tracer_mode(payload, "tracer_mode"),
+        "parallel_execution_enabled": _require_bool(
+            payload, "parallel_execution_enabled", default=False
+        ),
+        "parallel_execution_workers": _require_non_negative_int(
+            payload, "parallel_execution_workers", default=0
+        ),
+        "parallel_execution_min_transactions": _require_non_negative_int(
+            payload, "parallel_execution_min_transactions", default=8
+        ),
         "operator_profile": _require_optional_choice(
             payload,
             "operator_profile",
@@ -233,6 +249,15 @@ def normalize_network_template(payload: dict) -> dict:
             payload, "block_policy_interval"
         ),
         "tracer_mode": _require_tracer_mode(payload, "tracer_mode"),
+        "parallel_execution_enabled": _require_bool(
+            payload, "parallel_execution_enabled", default=False
+        ),
+        "parallel_execution_workers": _require_non_negative_int(
+            payload, "parallel_execution_workers", default=0
+        ),
+        "parallel_execution_min_transactions": _require_non_negative_int(
+            payload, "parallel_execution_min_transactions", default=8
+        ),
         "operator_profile": _require_optional_choice(
             payload,
             "operator_profile",
@@ -381,6 +406,9 @@ class NodeProfile:
     block_policy_mode: str = "on_demand"
     block_policy_interval: str = "0s"
     tracer_mode: str = "python_line_v1"
+    parallel_execution_enabled: bool = False
+    parallel_execution_workers: int = 0
+    parallel_execution_min_transactions: int = 8
     operator_profile: str | None = None
     monitoring_profile: str | None = None
     dashboard_enabled: bool = False
@@ -402,6 +430,9 @@ class NetworkTemplate:
     block_policy_mode: str = "on_demand"
     block_policy_interval: str = "0s"
     tracer_mode: str = "python_line_v1"
+    parallel_execution_enabled: bool = False
+    parallel_execution_workers: int = 0
+    parallel_execution_min_transactions: int = 8
     operator_profile: str | None = None
     monitoring_profile: str | None = None
     bootstrap_node_name: str | None = None

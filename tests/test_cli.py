@@ -218,6 +218,9 @@ class NetworkManifestTests(unittest.TestCase):
                         "block_policy_mode": "on_demand",
                         "block_policy_interval": "0s",
                         "tracer_mode": "native_instruction_v1",
+                        "parallel_execution_enabled": True,
+                        "parallel_execution_workers": 4,
+                        "parallel_execution_min_transactions": 12,
                         "operator_profile": "indexed_development",
                         "monitoring_profile": "local_stack",
                         "bootstrap_node_name": "validator-1",
@@ -271,6 +274,9 @@ class NetworkManifestTests(unittest.TestCase):
             self.assertEqual(result["template"], "single-node-indexed")
             self.assertEqual(manifest["tracer_mode"], "native_instruction_v1")
             self.assertTrue(profile["service_node"])
+            self.assertTrue(profile["parallel_execution_enabled"])
+            self.assertEqual(profile["parallel_execution_workers"], 4)
+            self.assertEqual(profile["parallel_execution_min_transactions"], 12)
             self.assertEqual(profile["operator_profile"], "indexed_development")
             self.assertEqual(profile["monitoring_profile"], "local_stack")
             self.assertTrue(profile["dashboard_enabled"])
@@ -458,6 +464,9 @@ class NetworkManifestTests(unittest.TestCase):
                         "block_policy_mode": "on_demand",
                         "block_policy_interval": "0s",
                         "tracer_mode": "native_instruction_v1",
+                        "parallel_execution_enabled": True,
+                        "parallel_execution_workers": 3,
+                        "parallel_execution_min_transactions": 9,
                         "operator_profile": "embedded_backend",
                         "monitoring_profile": "service_node",
                         "bootstrap_node_name": "validator-1",
@@ -497,6 +506,9 @@ class NetworkManifestTests(unittest.TestCase):
             self.assertEqual(exit_code, 0)
             profile = json.loads(output_path.read_text(encoding="utf-8"))
             self.assertTrue(profile["service_node"])
+            self.assertTrue(profile["parallel_execution_enabled"])
+            self.assertEqual(profile["parallel_execution_workers"], 3)
+            self.assertEqual(profile["parallel_execution_min_transactions"], 9)
             self.assertEqual(profile["operator_profile"], "embedded_backend")
             self.assertEqual(profile["monitoring_profile"], "service_node")
             self.assertTrue(profile["monitoring_enabled"])
@@ -548,6 +560,11 @@ class NetworkManifestTests(unittest.TestCase):
                             "10s",
                             "--tracer-mode",
                             "native_instruction_v1",
+                            "--parallel-execution-enabled",
+                            "--parallel-execution-workers",
+                            "6",
+                            "--parallel-execution-min-transactions",
+                            "14",
                             "--output",
                             str(output_path),
                         ]
@@ -558,6 +575,9 @@ class NetworkManifestTests(unittest.TestCase):
             self.assertEqual(profile["block_policy_mode"], "idle_interval")
             self.assertEqual(profile["block_policy_interval"], "10s")
             self.assertEqual(profile["tracer_mode"], "native_instruction_v1")
+            self.assertTrue(profile["parallel_execution_enabled"])
+            self.assertEqual(profile["parallel_execution_workers"], 6)
+            self.assertEqual(profile["parallel_execution_min_transactions"], 14)
 
     def test_network_join_allows_node_local_overrides(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -614,6 +634,49 @@ class NetworkManifestTests(unittest.TestCase):
                 "https://example.invalid/node-snapshot",
             )
             self.assertEqual(profile["tracer_mode"], "python_line_v1")
+
+    def test_network_join_rejects_negative_parallel_settings(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            base_dir = Path(tmp_dir)
+            configs_dir = base_dir / "xian-configs"
+            network_dir = configs_dir / "networks" / "canonical"
+            network_dir.mkdir(parents=True)
+            (network_dir / "manifest.json").write_text(
+                json.dumps(
+                    {
+                        "schema_version": 1,
+                        "name": "canonical",
+                        "chain_id": "xian-canonical-1",
+                        "mode": "join",
+                        "runtime_backend": "xian-stack",
+                        "genesis_source": "./genesis.json",
+                        "snapshot_url": None,
+                        "seed_nodes": [],
+                        "tracer_mode": "python_line_v1",
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            with self.assertRaisesRegex(
+                ValueError,
+                "parallel_execution_workers must be a non-negative integer",
+            ):
+                main(
+                    [
+                        "network",
+                        "join",
+                        "validator-1",
+                        "--base-dir",
+                        str(base_dir),
+                        "--configs-dir",
+                        str(configs_dir),
+                        "--network",
+                        "canonical",
+                        "--parallel-execution-workers",
+                        "-1",
+                    ]
+                )
 
     def test_network_join_can_generate_validator_key_material(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -779,6 +842,11 @@ class NetworkManifestTests(unittest.TestCase):
                         str(base_dir / ".cometbft"),
                         "--output",
                         str(base_dir / "nodes" / "validator-1.json"),
+                        "--parallel-execution-enabled",
+                        "--parallel-execution-workers",
+                        "5",
+                        "--parallel-execution-min-transactions",
+                        "11",
                     ]
                 )
 
@@ -1082,6 +1150,11 @@ class NodeInitTests(unittest.TestCase):
                         ),
                         "--home",
                         str(base_dir / ".cometbft"),
+                        "--parallel-execution-enabled",
+                        "--parallel-execution-workers",
+                        "5",
+                        "--parallel-execution-min-transactions",
+                        "11",
                         "--output",
                         str(base_dir / "nodes" / "validator-1.json"),
                     ]
@@ -1110,6 +1183,15 @@ class NodeInitTests(unittest.TestCase):
             self.assertTrue((home / "config" / "node_key.json").exists())
             self.assertTrue(
                 (home / "data" / "priv_validator_state.json").exists()
+            )
+            config_toml = (home / "config" / "config.toml").read_text(
+                encoding="utf-8"
+            )
+            self.assertIn("parallel_execution_enabled = true", config_toml)
+            self.assertIn("parallel_execution_workers = 5", config_toml)
+            self.assertIn(
+                "parallel_execution_min_transactions = 11",
+                config_toml,
             )
 
     def test_node_init_supports_remote_genesis_url(self) -> None:

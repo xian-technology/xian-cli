@@ -105,6 +105,12 @@ def _pick_template_value(
     return default
 
 
+def _validate_non_negative_int(name: str, value: int) -> int:
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        raise ValueError(f"{name} must be a non-negative integer")
+    return value
+
+
 def _load_template(
     *,
     base_dir: Path,
@@ -542,6 +548,33 @@ def _handle_network_create(args: argparse.Namespace) -> int:
             block_policy_mode=manifest.block_policy_mode,
             block_policy_interval=manifest.block_policy_interval,
             tracer_mode=manifest.tracer_mode,
+            parallel_execution_enabled=_pick_template_value(
+                args.parallel_execution_enabled,
+                None
+                if template is None
+                else template.get("parallel_execution_enabled"),
+                False,
+            ),
+            parallel_execution_workers=_validate_non_negative_int(
+                "parallel_execution_workers",
+                _pick_template_value(
+                    args.parallel_execution_workers,
+                    None
+                    if template is None
+                    else template.get("parallel_execution_workers"),
+                    0,
+                ),
+            ),
+            parallel_execution_min_transactions=_validate_non_negative_int(
+                "parallel_execution_min_transactions",
+                _pick_template_value(
+                    args.parallel_execution_min_transactions,
+                    None
+                    if template is None
+                    else template.get("parallel_execution_min_transactions"),
+                    8,
+                ),
+            ),
             operator_profile=(
                 template.get("operator_profile")
                 if validator["is_bootstrap"] and template is not None
@@ -736,6 +769,33 @@ def _handle_network_join(args: argparse.Namespace) -> int:
             args.tracer_mode,
             None if template is None else template.get("tracer_mode"),
             network.get("tracer_mode", "python_line_v1"),
+        ),
+        parallel_execution_enabled=_pick_template_value(
+            args.parallel_execution_enabled,
+            None
+            if template is None
+            else template.get("parallel_execution_enabled"),
+            False,
+        ),
+        parallel_execution_workers=_validate_non_negative_int(
+            "parallel_execution_workers",
+            _pick_template_value(
+                args.parallel_execution_workers,
+                None
+                if template is None
+                else template.get("parallel_execution_workers"),
+                0,
+            ),
+        ),
+        parallel_execution_min_transactions=_validate_non_negative_int(
+            "parallel_execution_min_transactions",
+            _pick_template_value(
+                args.parallel_execution_min_transactions,
+                None
+                if template is None
+                else template.get("parallel_execution_min_transactions"),
+                8,
+            ),
         ),
         operator_profile=(
             None if template is None else template.get("operator_profile")
@@ -1173,6 +1233,15 @@ def _initialize_node_from_args(args: argparse.Namespace) -> dict:
                 "tracer_mode",
                 network.get("tracer_mode", "python_line_v1"),
             )
+        ),
+        parallel_execution_enabled=bool(
+            profile.get("parallel_execution_enabled", False)
+        ),
+        parallel_execution_workers=int(
+            profile.get("parallel_execution_workers", 0)
+        ),
+        parallel_execution_min_transactions=int(
+            profile.get("parallel_execution_min_transactions", 8)
         ),
         # The xian-stack runtime publishes the app metrics port from Docker,
         # so the in-container exporter must listen on all interfaces.
@@ -2338,6 +2407,31 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     create_parser.add_argument(
+        "--parallel-execution-enabled",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help=(
+            "enable speculative parallel block execution in generated node "
+            "profiles; overrides template defaults"
+        ),
+    )
+    create_parser.add_argument(
+        "--parallel-execution-workers",
+        type=int,
+        help=(
+            "speculative execution worker count for generated node profiles; "
+            "overrides template defaults"
+        ),
+    )
+    create_parser.add_argument(
+        "--parallel-execution-min-transactions",
+        type=int,
+        help=(
+            "minimum transactions in a block before parallel execution is "
+            "used in generated node profiles; overrides template defaults"
+        ),
+    )
+    create_parser.add_argument(
         "--enable-dashboard",
         action=argparse.BooleanOptionalAction,
         default=None,
@@ -2526,6 +2620,31 @@ def build_parser() -> argparse.ArgumentParser:
         help=(
             "optional node-local tracer override; defaults to the network "
             "manifest value"
+        ),
+    )
+    join_parser.add_argument(
+        "--parallel-execution-enabled",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help=(
+            "optional node-local speculative parallel execution override; "
+            "defaults to the template value"
+        ),
+    )
+    join_parser.add_argument(
+        "--parallel-execution-workers",
+        type=int,
+        help=(
+            "optional node-local speculative execution worker override; "
+            "defaults to the template value"
+        ),
+    )
+    join_parser.add_argument(
+        "--parallel-execution-min-transactions",
+        type=int,
+        help=(
+            "optional node-local minimum block size before speculative "
+            "parallel execution is used; defaults to the template value"
         ),
     )
     join_parser.add_argument(
