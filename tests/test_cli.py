@@ -218,6 +218,10 @@ class NetworkManifestTests(unittest.TestCase):
                         "block_policy_mode": "on_demand",
                         "block_policy_interval": "0s",
                         "tracer_mode": "native_instruction_v1",
+                        "simulation_enabled": False,
+                        "simulation_max_concurrency": 3,
+                        "simulation_timeout_ms": 2500,
+                        "simulation_max_stamps": 500000,
                         "parallel_execution_enabled": True,
                         "parallel_execution_workers": 4,
                         "parallel_execution_min_transactions": 12,
@@ -274,6 +278,10 @@ class NetworkManifestTests(unittest.TestCase):
             self.assertEqual(result["template"], "single-node-indexed")
             self.assertEqual(manifest["tracer_mode"], "native_instruction_v1")
             self.assertTrue(profile["service_node"])
+            self.assertFalse(profile["simulation_enabled"])
+            self.assertEqual(profile["simulation_max_concurrency"], 3)
+            self.assertEqual(profile["simulation_timeout_ms"], 2500)
+            self.assertEqual(profile["simulation_max_stamps"], 500000)
             self.assertTrue(profile["parallel_execution_enabled"])
             self.assertEqual(profile["parallel_execution_workers"], 4)
             self.assertEqual(profile["parallel_execution_min_transactions"], 12)
@@ -464,6 +472,10 @@ class NetworkManifestTests(unittest.TestCase):
                         "block_policy_mode": "on_demand",
                         "block_policy_interval": "0s",
                         "tracer_mode": "native_instruction_v1",
+                        "simulation_enabled": True,
+                        "simulation_max_concurrency": 4,
+                        "simulation_timeout_ms": 4000,
+                        "simulation_max_stamps": 800000,
                         "parallel_execution_enabled": True,
                         "parallel_execution_workers": 3,
                         "parallel_execution_min_transactions": 9,
@@ -506,6 +518,10 @@ class NetworkManifestTests(unittest.TestCase):
             self.assertEqual(exit_code, 0)
             profile = json.loads(output_path.read_text(encoding="utf-8"))
             self.assertTrue(profile["service_node"])
+            self.assertTrue(profile["simulation_enabled"])
+            self.assertEqual(profile["simulation_max_concurrency"], 4)
+            self.assertEqual(profile["simulation_timeout_ms"], 4000)
+            self.assertEqual(profile["simulation_max_stamps"], 800000)
             self.assertTrue(profile["parallel_execution_enabled"])
             self.assertEqual(profile["parallel_execution_workers"], 3)
             self.assertEqual(profile["parallel_execution_min_transactions"], 9)
@@ -560,6 +576,13 @@ class NetworkManifestTests(unittest.TestCase):
                             "10s",
                             "--tracer-mode",
                             "native_instruction_v1",
+                            "--simulation-enabled",
+                            "--simulation-max-concurrency",
+                            "5",
+                            "--simulation-timeout-ms",
+                            "3500",
+                            "--simulation-max-stamps",
+                            "900000",
                             "--parallel-execution-enabled",
                             "--parallel-execution-workers",
                             "6",
@@ -575,6 +598,10 @@ class NetworkManifestTests(unittest.TestCase):
             self.assertEqual(profile["block_policy_mode"], "idle_interval")
             self.assertEqual(profile["block_policy_interval"], "10s")
             self.assertEqual(profile["tracer_mode"], "native_instruction_v1")
+            self.assertTrue(profile["simulation_enabled"])
+            self.assertEqual(profile["simulation_max_concurrency"], 5)
+            self.assertEqual(profile["simulation_timeout_ms"], 3500)
+            self.assertEqual(profile["simulation_max_stamps"], 900000)
             self.assertTrue(profile["parallel_execution_enabled"])
             self.assertEqual(profile["parallel_execution_workers"], 6)
             self.assertEqual(profile["parallel_execution_min_transactions"], 14)
@@ -675,6 +702,49 @@ class NetworkManifestTests(unittest.TestCase):
                         "canonical",
                         "--parallel-execution-workers",
                         "-1",
+                    ]
+                )
+
+    def test_network_join_rejects_non_positive_simulation_settings(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            base_dir = Path(tmp_dir)
+            configs_dir = base_dir / "xian-configs"
+            network_dir = configs_dir / "networks" / "canonical"
+            network_dir.mkdir(parents=True)
+            (network_dir / "manifest.json").write_text(
+                json.dumps(
+                    {
+                        "schema_version": 1,
+                        "name": "canonical",
+                        "chain_id": "xian-canonical-1",
+                        "mode": "join",
+                        "runtime_backend": "xian-stack",
+                        "genesis_source": "./genesis.json",
+                        "snapshot_url": None,
+                        "seed_nodes": [],
+                        "tracer_mode": "python_line_v1",
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            with self.assertRaisesRegex(
+                ValueError,
+                "simulation_max_concurrency must be a positive integer",
+            ):
+                main(
+                    [
+                        "network",
+                        "join",
+                        "validator-1",
+                        "--base-dir",
+                        str(base_dir),
+                        "--configs-dir",
+                        str(configs_dir),
+                        "--network",
+                        "canonical",
+                        "--simulation-max-concurrency",
+                        "0",
                     ]
                 )
 
@@ -1150,6 +1220,13 @@ class NodeInitTests(unittest.TestCase):
                         ),
                         "--home",
                         str(base_dir / ".cometbft"),
+                        "--simulation-enabled",
+                        "--simulation-max-concurrency",
+                        "4",
+                        "--simulation-timeout-ms",
+                        "3200",
+                        "--simulation-max-stamps",
+                        "700000",
                         "--parallel-execution-enabled",
                         "--parallel-execution-workers",
                         "5",
@@ -1187,6 +1264,10 @@ class NodeInitTests(unittest.TestCase):
             config_toml = (home / "config" / "config.toml").read_text(
                 encoding="utf-8"
             )
+            self.assertIn("simulation_enabled = true", config_toml)
+            self.assertIn("simulation_max_concurrency = 4", config_toml)
+            self.assertIn("simulation_timeout_ms = 3200", config_toml)
+            self.assertIn("simulation_max_stamps = 700000", config_toml)
             self.assertIn("parallel_execution_enabled = true", config_toml)
             self.assertIn("parallel_execution_workers = 5", config_toml)
             self.assertIn(

@@ -79,6 +79,13 @@ def _require_non_negative_int(payload: dict, key: str, *, default: int) -> int:
     return value
 
 
+def _require_positive_int(payload: dict, key: str, *, default: int) -> int:
+    value = payload.get(key, default)
+    if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+        raise ValueError(f"{key} must be a positive integer")
+    return value
+
+
 def _require_str_list(payload: dict, key: str) -> list[str]:
     value = payload.get(key, [])
     if not isinstance(value, list) or any(
@@ -198,6 +205,18 @@ def normalize_node_profile(payload: dict) -> dict:
             payload, "block_policy_interval"
         ),
         "tracer_mode": _require_tracer_mode(payload, "tracer_mode"),
+        "simulation_enabled": _require_bool(
+            payload, "simulation_enabled", default=True
+        ),
+        "simulation_max_concurrency": _require_positive_int(
+            payload, "simulation_max_concurrency", default=2
+        ),
+        "simulation_timeout_ms": _require_positive_int(
+            payload, "simulation_timeout_ms", default=3000
+        ),
+        "simulation_max_stamps": _require_positive_int(
+            payload, "simulation_max_stamps", default=1_000_000
+        ),
         "parallel_execution_enabled": _require_bool(
             payload, "parallel_execution_enabled", default=False
         ),
@@ -249,6 +268,18 @@ def normalize_network_template(payload: dict) -> dict:
             payload, "block_policy_interval"
         ),
         "tracer_mode": _require_tracer_mode(payload, "tracer_mode"),
+        "simulation_enabled": _require_bool(
+            payload, "simulation_enabled", default=True
+        ),
+        "simulation_max_concurrency": _require_positive_int(
+            payload, "simulation_max_concurrency", default=2
+        ),
+        "simulation_timeout_ms": _require_positive_int(
+            payload, "simulation_timeout_ms", default=3000
+        ),
+        "simulation_max_stamps": _require_positive_int(
+            payload, "simulation_max_stamps", default=1_000_000
+        ),
         "parallel_execution_enabled": _require_bool(
             payload, "parallel_execution_enabled", default=False
         ),
@@ -406,6 +437,10 @@ class NodeProfile:
     block_policy_mode: str = "on_demand"
     block_policy_interval: str = "0s"
     tracer_mode: str = "python_line_v1"
+    simulation_enabled: bool = True
+    simulation_max_concurrency: int = 2
+    simulation_timeout_ms: int = 3000
+    simulation_max_stamps: int = 1_000_000
     parallel_execution_enabled: bool = False
     parallel_execution_workers: int = 0
     parallel_execution_min_transactions: int = 8
@@ -430,6 +465,10 @@ class NetworkTemplate:
     block_policy_mode: str = "on_demand"
     block_policy_interval: str = "0s"
     tracer_mode: str = "python_line_v1"
+    simulation_enabled: bool = True
+    simulation_max_concurrency: int = 2
+    simulation_timeout_ms: int = 3000
+    simulation_max_stamps: int = 1_000_000
     parallel_execution_enabled: bool = False
     parallel_execution_workers: int = 0
     parallel_execution_min_transactions: int = 8

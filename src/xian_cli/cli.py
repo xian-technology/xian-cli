@@ -111,6 +111,12 @@ def _validate_non_negative_int(name: str, value: int) -> int:
     return value
 
 
+def _validate_positive_int(name: str, value: int) -> int:
+    if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+        raise ValueError(f"{name} must be a positive integer")
+    return value
+
+
 def _load_template(
     *,
     base_dir: Path,
@@ -548,6 +554,43 @@ def _handle_network_create(args: argparse.Namespace) -> int:
             block_policy_mode=manifest.block_policy_mode,
             block_policy_interval=manifest.block_policy_interval,
             tracer_mode=manifest.tracer_mode,
+            simulation_enabled=_pick_template_value(
+                args.simulation_enabled,
+                None
+                if template is None
+                else template.get("simulation_enabled"),
+                True,
+            ),
+            simulation_max_concurrency=_validate_positive_int(
+                "simulation_max_concurrency",
+                _pick_template_value(
+                    args.simulation_max_concurrency,
+                    None
+                    if template is None
+                    else template.get("simulation_max_concurrency"),
+                    2,
+                ),
+            ),
+            simulation_timeout_ms=_validate_positive_int(
+                "simulation_timeout_ms",
+                _pick_template_value(
+                    args.simulation_timeout_ms,
+                    None
+                    if template is None
+                    else template.get("simulation_timeout_ms"),
+                    3000,
+                ),
+            ),
+            simulation_max_stamps=_validate_positive_int(
+                "simulation_max_stamps",
+                _pick_template_value(
+                    args.simulation_max_stamps,
+                    None
+                    if template is None
+                    else template.get("simulation_max_stamps"),
+                    1_000_000,
+                ),
+            ),
             parallel_execution_enabled=_pick_template_value(
                 args.parallel_execution_enabled,
                 None
@@ -769,6 +812,41 @@ def _handle_network_join(args: argparse.Namespace) -> int:
             args.tracer_mode,
             None if template is None else template.get("tracer_mode"),
             network.get("tracer_mode", "python_line_v1"),
+        ),
+        simulation_enabled=_pick_template_value(
+            args.simulation_enabled,
+            None if template is None else template.get("simulation_enabled"),
+            True,
+        ),
+        simulation_max_concurrency=_validate_positive_int(
+            "simulation_max_concurrency",
+            _pick_template_value(
+                args.simulation_max_concurrency,
+                None
+                if template is None
+                else template.get("simulation_max_concurrency"),
+                2,
+            ),
+        ),
+        simulation_timeout_ms=_validate_positive_int(
+            "simulation_timeout_ms",
+            _pick_template_value(
+                args.simulation_timeout_ms,
+                None
+                if template is None
+                else template.get("simulation_timeout_ms"),
+                3000,
+            ),
+        ),
+        simulation_max_stamps=_validate_positive_int(
+            "simulation_max_stamps",
+            _pick_template_value(
+                args.simulation_max_stamps,
+                None
+                if template is None
+                else template.get("simulation_max_stamps"),
+                1_000_000,
+            ),
         ),
         parallel_execution_enabled=_pick_template_value(
             args.parallel_execution_enabled,
@@ -1234,6 +1312,12 @@ def _initialize_node_from_args(args: argparse.Namespace) -> dict:
                 network.get("tracer_mode", "python_line_v1"),
             )
         ),
+        simulation_enabled=bool(profile.get("simulation_enabled", True)),
+        simulation_max_concurrency=int(
+            profile.get("simulation_max_concurrency", 2)
+        ),
+        simulation_timeout_ms=int(profile.get("simulation_timeout_ms", 3000)),
+        simulation_max_stamps=int(profile.get("simulation_max_stamps", 1_000_000)),
         parallel_execution_enabled=bool(
             profile.get("parallel_execution_enabled", False)
         ),
@@ -2407,6 +2491,39 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     create_parser.add_argument(
+        "--simulation-enabled",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help=(
+            "enable readonly transaction simulation in generated node "
+            "profiles; overrides template defaults"
+        ),
+    )
+    create_parser.add_argument(
+        "--simulation-max-concurrency",
+        type=int,
+        help=(
+            "maximum concurrent simulation requests accepted by generated "
+            "node profiles; overrides template defaults"
+        ),
+    )
+    create_parser.add_argument(
+        "--simulation-timeout-ms",
+        type=int,
+        help=(
+            "simulation timeout in milliseconds for generated node profiles; "
+            "overrides template defaults"
+        ),
+    )
+    create_parser.add_argument(
+        "--simulation-max-stamps",
+        type=int,
+        help=(
+            "stamp budget cap used for readonly simulation in generated node "
+            "profiles; overrides template defaults"
+        ),
+    )
+    create_parser.add_argument(
         "--parallel-execution-enabled",
         action=argparse.BooleanOptionalAction,
         default=None,
@@ -2620,6 +2737,39 @@ def build_parser() -> argparse.ArgumentParser:
         help=(
             "optional node-local tracer override; defaults to the network "
             "manifest value"
+        ),
+    )
+    join_parser.add_argument(
+        "--simulation-enabled",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help=(
+            "optional node-local readonly simulation override; defaults to "
+            "the template value"
+        ),
+    )
+    join_parser.add_argument(
+        "--simulation-max-concurrency",
+        type=int,
+        help=(
+            "optional node-local maximum concurrent simulation requests; "
+            "defaults to the template value"
+        ),
+    )
+    join_parser.add_argument(
+        "--simulation-timeout-ms",
+        type=int,
+        help=(
+            "optional node-local simulation timeout in milliseconds; "
+            "defaults to the template value"
+        ),
+    )
+    join_parser.add_argument(
+        "--simulation-max-stamps",
+        type=int,
+        help=(
+            "optional node-local stamp budget cap for readonly simulation; "
+            "defaults to the template value"
         ),
     )
     join_parser.add_argument(
