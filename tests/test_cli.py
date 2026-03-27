@@ -218,6 +218,11 @@ class NetworkManifestTests(unittest.TestCase):
                         "block_policy_mode": "on_demand",
                         "block_policy_interval": "0s",
                         "tracer_mode": "native_instruction_v1",
+                        "transaction_trace_logging": True,
+                        "app_log_level": "DEBUG",
+                        "app_log_json": True,
+                        "app_log_rotation_hours": 4,
+                        "app_log_retention_days": 10,
                         "simulation_enabled": False,
                         "simulation_max_concurrency": 3,
                         "simulation_timeout_ms": 2500,
@@ -278,6 +283,11 @@ class NetworkManifestTests(unittest.TestCase):
             self.assertEqual(result["template"], "single-node-indexed")
             self.assertEqual(manifest["tracer_mode"], "native_instruction_v1")
             self.assertTrue(profile["service_node"])
+            self.assertTrue(profile["transaction_trace_logging"])
+            self.assertEqual(profile["app_log_level"], "DEBUG")
+            self.assertTrue(profile["app_log_json"])
+            self.assertEqual(profile["app_log_rotation_hours"], 4)
+            self.assertEqual(profile["app_log_retention_days"], 10)
             self.assertFalse(profile["simulation_enabled"])
             self.assertEqual(profile["simulation_max_concurrency"], 3)
             self.assertEqual(profile["simulation_timeout_ms"], 2500)
@@ -472,6 +482,11 @@ class NetworkManifestTests(unittest.TestCase):
                         "block_policy_mode": "on_demand",
                         "block_policy_interval": "0s",
                         "tracer_mode": "native_instruction_v1",
+                        "transaction_trace_logging": True,
+                        "app_log_level": "WARNING",
+                        "app_log_json": True,
+                        "app_log_rotation_hours": 6,
+                        "app_log_retention_days": 12,
                         "simulation_enabled": True,
                         "simulation_max_concurrency": 4,
                         "simulation_timeout_ms": 4000,
@@ -518,6 +533,11 @@ class NetworkManifestTests(unittest.TestCase):
             self.assertEqual(exit_code, 0)
             profile = json.loads(output_path.read_text(encoding="utf-8"))
             self.assertTrue(profile["service_node"])
+            self.assertTrue(profile["transaction_trace_logging"])
+            self.assertEqual(profile["app_log_level"], "WARNING")
+            self.assertTrue(profile["app_log_json"])
+            self.assertEqual(profile["app_log_rotation_hours"], 6)
+            self.assertEqual(profile["app_log_retention_days"], 12)
             self.assertTrue(profile["simulation_enabled"])
             self.assertEqual(profile["simulation_max_concurrency"], 4)
             self.assertEqual(profile["simulation_timeout_ms"], 4000)
@@ -576,6 +596,14 @@ class NetworkManifestTests(unittest.TestCase):
                             "10s",
                             "--tracer-mode",
                             "native_instruction_v1",
+                            "--transaction-trace-logging",
+                            "--app-log-level",
+                            "ERROR",
+                            "--app-log-json",
+                            "--app-log-rotation-hours",
+                            "5",
+                            "--app-log-retention-days",
+                            "15",
                             "--simulation-enabled",
                             "--simulation-max-concurrency",
                             "5",
@@ -598,6 +626,11 @@ class NetworkManifestTests(unittest.TestCase):
             self.assertEqual(profile["block_policy_mode"], "idle_interval")
             self.assertEqual(profile["block_policy_interval"], "10s")
             self.assertEqual(profile["tracer_mode"], "native_instruction_v1")
+            self.assertTrue(profile["transaction_trace_logging"])
+            self.assertEqual(profile["app_log_level"], "ERROR")
+            self.assertTrue(profile["app_log_json"])
+            self.assertEqual(profile["app_log_rotation_hours"], 5)
+            self.assertEqual(profile["app_log_retention_days"], 15)
             self.assertTrue(profile["simulation_enabled"])
             self.assertEqual(profile["simulation_max_concurrency"], 5)
             self.assertEqual(profile["simulation_timeout_ms"], 3500)
@@ -1222,6 +1255,14 @@ class NodeInitTests(unittest.TestCase):
                         ),
                         "--home",
                         str(base_dir / ".cometbft"),
+                        "--transaction-trace-logging",
+                        "--app-log-level",
+                        "WARNING",
+                        "--app-log-json",
+                        "--app-log-rotation-hours",
+                        "8",
+                        "--app-log-retention-days",
+                        "21",
                         "--simulation-enabled",
                         "--simulation-max-concurrency",
                         "4",
@@ -1266,6 +1307,11 @@ class NodeInitTests(unittest.TestCase):
             config_toml = (home / "config" / "config.toml").read_text(
                 encoding="utf-8"
             )
+            self.assertIn("transaction_trace_logging = true", config_toml)
+            self.assertIn('app_log_level = "WARNING"', config_toml)
+            self.assertIn("app_log_json = true", config_toml)
+            self.assertIn("app_log_rotation_hours = 8", config_toml)
+            self.assertIn("app_log_retention_days = 21", config_toml)
             self.assertIn("simulation_enabled = true", config_toml)
             self.assertIn("simulation_max_concurrency = 4", config_toml)
             self.assertIn("simulation_timeout_ms = 3200", config_toml)

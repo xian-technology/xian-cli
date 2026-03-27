@@ -25,6 +25,15 @@ SUPPORTED_MONITORING_PROFILES = {
     "local_stack",
     "service_node",
 }
+SUPPORTED_APP_LOG_LEVELS = {
+    "TRACE",
+    "DEBUG",
+    "INFO",
+    "SUCCESS",
+    "WARNING",
+    "ERROR",
+    "CRITICAL",
+}
 
 
 def _require_str(payload: dict, key: str) -> str:
@@ -140,6 +149,18 @@ def _require_tracer_mode(payload: dict, key: str) -> str:
     return value
 
 
+def _require_app_log_level(payload: dict, key: str) -> str:
+    value = payload.get(key, "INFO")
+    if not isinstance(value, str):
+        raise ValueError(f"{key} must be a string")
+    normalized = value.upper()
+    if normalized not in SUPPORTED_APP_LOG_LEVELS:
+        raise ValueError(
+            f"{key} must be one of {sorted(SUPPORTED_APP_LOG_LEVELS)}"
+        )
+    return normalized
+
+
 def _require_mode(payload: dict) -> str:
     mode = _require_str(payload, "mode")
     if mode not in SUPPORTED_NETWORK_MODES:
@@ -205,6 +226,17 @@ def normalize_node_profile(payload: dict) -> dict:
             payload, "block_policy_interval"
         ),
         "tracer_mode": _require_tracer_mode(payload, "tracer_mode"),
+        "transaction_trace_logging": _require_bool(
+            payload, "transaction_trace_logging", default=False
+        ),
+        "app_log_level": _require_app_log_level(payload, "app_log_level"),
+        "app_log_json": _require_bool(payload, "app_log_json", default=False),
+        "app_log_rotation_hours": _require_positive_int(
+            payload, "app_log_rotation_hours", default=1
+        ),
+        "app_log_retention_days": _require_positive_int(
+            payload, "app_log_retention_days", default=7
+        ),
         "simulation_enabled": _require_bool(
             payload, "simulation_enabled", default=True
         ),
@@ -268,6 +300,17 @@ def normalize_network_template(payload: dict) -> dict:
             payload, "block_policy_interval"
         ),
         "tracer_mode": _require_tracer_mode(payload, "tracer_mode"),
+        "transaction_trace_logging": _require_bool(
+            payload, "transaction_trace_logging", default=False
+        ),
+        "app_log_level": _require_app_log_level(payload, "app_log_level"),
+        "app_log_json": _require_bool(payload, "app_log_json", default=False),
+        "app_log_rotation_hours": _require_positive_int(
+            payload, "app_log_rotation_hours", default=1
+        ),
+        "app_log_retention_days": _require_positive_int(
+            payload, "app_log_retention_days", default=7
+        ),
         "simulation_enabled": _require_bool(
             payload, "simulation_enabled", default=True
         ),
@@ -437,6 +480,11 @@ class NodeProfile:
     block_policy_mode: str = "on_demand"
     block_policy_interval: str = "0s"
     tracer_mode: str = "python_line_v1"
+    transaction_trace_logging: bool = False
+    app_log_level: str = "INFO"
+    app_log_json: bool = False
+    app_log_rotation_hours: int = 1
+    app_log_retention_days: int = 7
     simulation_enabled: bool = True
     simulation_max_concurrency: int = 2
     simulation_timeout_ms: int = 3000
@@ -465,6 +513,11 @@ class NetworkTemplate:
     block_policy_mode: str = "on_demand"
     block_policy_interval: str = "0s"
     tracer_mode: str = "python_line_v1"
+    transaction_trace_logging: bool = False
+    app_log_level: str = "INFO"
+    app_log_json: bool = False
+    app_log_rotation_hours: int = 1
+    app_log_retention_days: int = 7
     simulation_enabled: bool = True
     simulation_max_concurrency: int = 2
     simulation_timeout_ms: int = 3000

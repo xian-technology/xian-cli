@@ -22,6 +22,7 @@ from xian_cli.config_repo import (
     resolve_solution_pack_path,
 )
 from xian_cli.models import (
+    SUPPORTED_APP_LOG_LEVELS,
     SUPPORTED_BLOCK_POLICY_MODES,
     SUPPORTED_RUNTIME_BACKENDS,
     SUPPORTED_TRACER_MODES,
@@ -554,6 +555,43 @@ def _handle_network_create(args: argparse.Namespace) -> int:
             block_policy_mode=manifest.block_policy_mode,
             block_policy_interval=manifest.block_policy_interval,
             tracer_mode=manifest.tracer_mode,
+            transaction_trace_logging=_pick_template_value(
+                args.transaction_trace_logging,
+                None
+                if template is None
+                else template.get("transaction_trace_logging"),
+                False,
+            ),
+            app_log_level=_pick_template_value(
+                args.app_log_level,
+                None if template is None else template.get("app_log_level"),
+                "INFO",
+            ),
+            app_log_json=_pick_template_value(
+                args.app_log_json,
+                None if template is None else template.get("app_log_json"),
+                False,
+            ),
+            app_log_rotation_hours=_validate_positive_int(
+                "app_log_rotation_hours",
+                _pick_template_value(
+                    args.app_log_rotation_hours,
+                    None
+                    if template is None
+                    else template.get("app_log_rotation_hours"),
+                    1,
+                ),
+            ),
+            app_log_retention_days=_validate_positive_int(
+                "app_log_retention_days",
+                _pick_template_value(
+                    args.app_log_retention_days,
+                    None
+                    if template is None
+                    else template.get("app_log_retention_days"),
+                    7,
+                ),
+            ),
             simulation_enabled=_pick_template_value(
                 args.simulation_enabled,
                 None
@@ -812,6 +850,43 @@ def _handle_network_join(args: argparse.Namespace) -> int:
             args.tracer_mode,
             None if template is None else template.get("tracer_mode"),
             network.get("tracer_mode", "python_line_v1"),
+        ),
+        transaction_trace_logging=_pick_template_value(
+            args.transaction_trace_logging,
+            None
+            if template is None
+            else template.get("transaction_trace_logging"),
+            False,
+        ),
+        app_log_level=_pick_template_value(
+            args.app_log_level,
+            None if template is None else template.get("app_log_level"),
+            "INFO",
+        ),
+        app_log_json=_pick_template_value(
+            args.app_log_json,
+            None if template is None else template.get("app_log_json"),
+            False,
+        ),
+        app_log_rotation_hours=_validate_positive_int(
+            "app_log_rotation_hours",
+            _pick_template_value(
+                args.app_log_rotation_hours,
+                None
+                if template is None
+                else template.get("app_log_rotation_hours"),
+                1,
+            ),
+        ),
+        app_log_retention_days=_validate_positive_int(
+            "app_log_retention_days",
+            _pick_template_value(
+                args.app_log_retention_days,
+                None
+                if template is None
+                else template.get("app_log_retention_days"),
+                7,
+            ),
         ),
         simulation_enabled=_pick_template_value(
             args.simulation_enabled,
@@ -1312,6 +1387,13 @@ def _initialize_node_from_args(args: argparse.Namespace) -> dict:
                 network.get("tracer_mode", "python_line_v1"),
             )
         ),
+        transaction_trace_logging=bool(
+            profile.get("transaction_trace_logging", False)
+        ),
+        app_log_level=str(profile.get("app_log_level", "INFO")),
+        app_log_json=bool(profile.get("app_log_json", False)),
+        app_log_rotation_hours=int(profile.get("app_log_rotation_hours", 1)),
+        app_log_retention_days=int(profile.get("app_log_retention_days", 7)),
         simulation_enabled=bool(profile.get("simulation_enabled", True)),
         simulation_max_concurrency=int(
             profile.get("simulation_max_concurrency", 2)
@@ -2493,6 +2575,49 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     create_parser.add_argument(
+        "--transaction-trace-logging",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help=(
+            "emit per-transaction debug summaries in generated bootstrap "
+            "profiles; overrides template defaults"
+        ),
+    )
+    create_parser.add_argument(
+        "--app-log-level",
+        choices=sorted(SUPPORTED_APP_LOG_LEVELS),
+        type=str,
+        help=(
+            "application log level for generated bootstrap profiles; "
+            "overrides template defaults"
+        ),
+    )
+    create_parser.add_argument(
+        "--app-log-json",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help=(
+            "emit structured JSON application logs in generated bootstrap "
+            "profiles; overrides template defaults"
+        ),
+    )
+    create_parser.add_argument(
+        "--app-log-rotation-hours",
+        type=int,
+        help=(
+            "rotate application log files after this many hours in generated "
+            "bootstrap profiles; overrides template defaults"
+        ),
+    )
+    create_parser.add_argument(
+        "--app-log-retention-days",
+        type=int,
+        help=(
+            "retain rotated application logs for this many days in generated "
+            "bootstrap profiles; overrides template defaults"
+        ),
+    )
+    create_parser.add_argument(
         "--simulation-enabled",
         action=argparse.BooleanOptionalAction,
         default=None,
@@ -2739,6 +2864,49 @@ def build_parser() -> argparse.ArgumentParser:
         help=(
             "optional node-local tracer override; defaults to the network "
             "manifest value"
+        ),
+    )
+    join_parser.add_argument(
+        "--transaction-trace-logging",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help=(
+            "optional node-local per-transaction debug logging override; "
+            "defaults to the template value"
+        ),
+    )
+    join_parser.add_argument(
+        "--app-log-level",
+        choices=sorted(SUPPORTED_APP_LOG_LEVELS),
+        type=str,
+        help=(
+            "optional node-local application log level override; defaults "
+            "to the template value"
+        ),
+    )
+    join_parser.add_argument(
+        "--app-log-json",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help=(
+            "optional node-local structured JSON logging override; defaults "
+            "to the template value"
+        ),
+    )
+    join_parser.add_argument(
+        "--app-log-rotation-hours",
+        type=int,
+        help=(
+            "optional node-local log rotation interval override in hours; "
+            "defaults to the template value"
+        ),
+    )
+    join_parser.add_argument(
+        "--app-log-retention-days",
+        type=int,
+        help=(
+            "optional node-local log retention override in days; defaults "
+            "to the template value"
         ),
     )
     join_parser.add_argument(
