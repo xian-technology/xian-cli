@@ -34,6 +34,7 @@ SUPPORTED_APP_LOG_LEVELS = {
     "ERROR",
     "CRITICAL",
 }
+SUPPORTED_RECOVERY_ARTIFACT_KINDS = {"snapshot_url"}
 
 
 def _require_str(payload: dict, key: str) -> str:
@@ -90,6 +91,13 @@ def _require_non_negative_int(payload: dict, key: str, *, default: int) -> int:
 
 def _require_positive_int(payload: dict, key: str, *, default: int) -> int:
     value = payload.get(key, default)
+    if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+        raise ValueError(f"{key} must be a positive integer")
+    return value
+
+
+def _require_positive_int_no_default(payload: dict, key: str) -> int:
+    value = payload.get(key)
     if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
         raise ValueError(f"{key} must be a positive integer")
     return value
@@ -444,6 +452,75 @@ def normalize_solution_pack(payload: dict) -> dict:
     }
 
 
+def normalize_recovery_plan(payload: dict) -> dict:
+    if not isinstance(payload, dict):
+        raise ValueError("recovery plan must be a JSON object")
+
+    artifact = payload.get("artifact")
+    if not isinstance(artifact, dict):
+        raise ValueError("artifact must be a JSON object")
+    artifact_kind = _require_str(artifact, "kind")
+    if artifact_kind not in SUPPORTED_RECOVERY_ARTIFACT_KINDS:
+        raise ValueError(
+            "artifact.kind must be one of "
+            f"{sorted(SUPPORTED_RECOVERY_ARTIFACT_KINDS)}"
+        )
+
+    runtime = payload.get("runtime", {})
+    if not isinstance(runtime, dict):
+        raise ValueError("runtime must be a JSON object when provided")
+
+    follow_up_state_patch = payload.get("follow_up_state_patch")
+    if follow_up_state_patch is not None and not isinstance(
+        follow_up_state_patch, dict
+    ):
+        raise ValueError(
+            "follow_up_state_patch must be a JSON object when provided"
+        )
+
+    normalized = {
+        "schema_version": _require_schema_version(payload),
+        "name": _require_str(payload, "name"),
+        "chain_id": _require_str(payload, "chain_id"),
+        "target_height": _require_positive_int_no_default(
+            payload, "target_height"
+        ),
+        "trusted_block_hash": _require_str(payload, "trusted_block_hash"),
+        "trusted_app_hash": _require_str(payload, "trusted_app_hash"),
+        "reason": _require_str(payload, "reason"),
+        "artifact": {
+            "kind": artifact_kind,
+            "uri": _require_str(artifact, "uri"),
+            "sha256": _require_optional_str(artifact, "sha256"),
+        },
+        "runtime": {
+            "xian_abci_version": _require_optional_str(
+                runtime, "xian_abci_version"
+            ),
+            "cometbft_version": _require_optional_str(
+                runtime, "cometbft_version"
+            ),
+        },
+        "follow_up_state_patch": None,
+    }
+    if follow_up_state_patch is not None:
+        activation_height = _require_positive_int_no_default(
+            follow_up_state_patch, "activation_height"
+        )
+        if activation_height <= normalized["target_height"]:
+            raise ValueError(
+                "follow_up_state_patch.activation_height must be greater than "
+                "target_height"
+            )
+        normalized["follow_up_state_patch"] = {
+            "patch_id": _require_str(follow_up_state_patch, "patch_id"),
+            "bundle_hash": _require_str(follow_up_state_patch, "bundle_hash"),
+            "activation_height": activation_height,
+        }
+
+    return normalized
+
+
 @dataclass(slots=True)
 class NetworkManifest:
     name: str
@@ -654,3 +731,7 @@ def read_network_template(path: Path) -> dict:
 
 def read_solution_pack(path: Path) -> dict:
     return normalize_solution_pack(read_json(path))
+
+
+def read_recovery_plan(path: Path) -> dict:
+    return normalize_recovery_plan(read_json(path))

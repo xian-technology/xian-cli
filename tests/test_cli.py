@@ -2795,6 +2795,303 @@ class SnapshotCommandTests(unittest.TestCase):
                     ]
                 )
 
+    def test_recovery_validate_reports_plan_and_home(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            base_dir = Path(tmp_dir)
+            (base_dir / "networks").mkdir()
+            (base_dir / "nodes").mkdir()
+            home = base_dir / ".cometbft"
+            config_dir = home / "config"
+            config_dir.mkdir(parents=True)
+            (config_dir / "config.toml").write_text("", encoding="utf-8")
+
+            with redirect_stdout(io.StringIO()):
+                main(
+                    [
+                        "network",
+                        "create",
+                        "local-dev",
+                        "--chain-id",
+                        "xian-local-1",
+                        "--output",
+                        str(
+                            base_dir
+                            / "networks"
+                            / "local-dev"
+                            / "manifest.json"
+                        ),
+                    ]
+                )
+                main(
+                    [
+                        "network",
+                        "join",
+                        "validator-1",
+                        "--base-dir",
+                        str(base_dir),
+                        "--network",
+                        "local-dev",
+                        "--home",
+                        str(home),
+                        "--output",
+                        str(base_dir / "nodes" / "validator-1.json"),
+                    ]
+                )
+
+            plan_path = base_dir / "recovery-plan.json"
+            plan_path.write_text(
+                json.dumps(
+                    {
+                        "schema_version": 1,
+                        "name": "metering-incident-20260327",
+                        "chain_id": "xian-local-1",
+                        "target_height": 120,
+                        "trusted_block_hash": "ABCD1234",
+                        "trusted_app_hash": "DCBA4321",
+                        "reason": "Recover pre-divergence state",
+                        "artifact": {
+                            "kind": "snapshot_url",
+                            "uri": "https://example.invalid/recovery.tar.gz",
+                            "sha256": "ab" * 32,
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            stdout = io.StringIO()
+            with redirect_stdout(stdout):
+                exit_code = main(
+                    [
+                        "recovery",
+                        "validate",
+                        str(plan_path),
+                        "validator-1",
+                        "--base-dir",
+                        str(base_dir),
+                    ]
+                )
+
+            self.assertEqual(exit_code, 0)
+            payload = json.loads(stdout.getvalue())
+            self.assertTrue(payload["dry_run"])
+            self.assertEqual(
+                payload["plan"]["name"], "metering-incident-20260327"
+            )
+            self.assertEqual(payload["node"]["home"], str(home))
+            self.assertTrue(
+                payload["validation"]["requires_manual_hash_confirmation"]
+            )
+
+    def test_recovery_apply_requires_confirmation(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            base_dir = Path(tmp_dir)
+            (base_dir / "networks").mkdir()
+            (base_dir / "nodes").mkdir()
+            home = base_dir / ".cometbft"
+            config_dir = home / "config"
+            config_dir.mkdir(parents=True)
+            (config_dir / "config.toml").write_text("", encoding="utf-8")
+
+            with redirect_stdout(io.StringIO()):
+                main(
+                    [
+                        "network",
+                        "create",
+                        "local-dev",
+                        "--chain-id",
+                        "xian-local-1",
+                        "--output",
+                        str(
+                            base_dir
+                            / "networks"
+                            / "local-dev"
+                            / "manifest.json"
+                        ),
+                    ]
+                )
+                main(
+                    [
+                        "network",
+                        "join",
+                        "validator-1",
+                        "--base-dir",
+                        str(base_dir),
+                        "--network",
+                        "local-dev",
+                        "--home",
+                        str(home),
+                        "--output",
+                        str(base_dir / "nodes" / "validator-1.json"),
+                    ]
+                )
+
+            plan_path = base_dir / "recovery-plan.json"
+            plan_path.write_text(
+                json.dumps(
+                    {
+                        "schema_version": 1,
+                        "name": "metering-incident-20260327",
+                        "chain_id": "xian-local-1",
+                        "target_height": 120,
+                        "trusted_block_hash": "ABCD1234",
+                        "trusted_app_hash": "DCBA4321",
+                        "reason": "Recover pre-divergence state",
+                        "artifact": {
+                            "kind": "snapshot_url",
+                            "uri": "https://example.invalid/recovery.tar.gz",
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            with self.assertRaisesRegex(ValueError, "pass --yes"):
+                with redirect_stdout(io.StringIO()):
+                    main(
+                        [
+                            "recovery",
+                            "apply",
+                            str(plan_path),
+                            "validator-1",
+                            "--base-dir",
+                            str(base_dir),
+                        ]
+                    )
+
+    def test_recovery_apply_stops_backs_up_and_restores(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            base_dir = Path(tmp_dir)
+            (base_dir / "networks").mkdir()
+            (base_dir / "nodes").mkdir()
+            stack_dir = base_dir / "xian-stack"
+            stack_dir.mkdir()
+            home = base_dir / ".cometbft"
+            config_dir = home / "config"
+            config_dir.mkdir(parents=True)
+            (config_dir / "config.toml").write_text("", encoding="utf-8")
+
+            with redirect_stdout(io.StringIO()):
+                main(
+                    [
+                        "network",
+                        "create",
+                        "local-dev",
+                        "--chain-id",
+                        "xian-local-1",
+                        "--output",
+                        str(
+                            base_dir
+                            / "networks"
+                            / "local-dev"
+                            / "manifest.json"
+                        ),
+                    ]
+                )
+                main(
+                    [
+                        "network",
+                        "join",
+                        "validator-1",
+                        "--base-dir",
+                        str(base_dir),
+                        "--network",
+                        "local-dev",
+                        "--stack-dir",
+                        str(stack_dir),
+                        "--home",
+                        str(home),
+                        "--output",
+                        str(base_dir / "nodes" / "validator-1.json"),
+                    ]
+                )
+
+            plan_path = base_dir / "recovery-plan.json"
+            plan_path.write_text(
+                json.dumps(
+                    {
+                        "schema_version": 1,
+                        "name": "metering-incident-20260327",
+                        "chain_id": "xian-local-1",
+                        "target_height": 120,
+                        "trusted_block_hash": "ABCD1234",
+                        "trusted_app_hash": "DCBA4321",
+                        "reason": "Recover pre-divergence state",
+                        "artifact": {
+                            "kind": "snapshot_url",
+                            "uri": "https://example.invalid/recovery.tar.gz",
+                            "sha256": "ab" * 32,
+                        },
+                        "follow_up_state_patch": {
+                            "patch_id": "metering-fix-20260327",
+                            "bundle_hash": "ff" * 32,
+                            "activation_height": 140,
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            stop_mock = unittest.mock.Mock(return_value={"status": "stopped"})
+            backup_mock = unittest.mock.Mock(
+                return_value=str(
+                    base_dir / "recovery-backups" / "backup.tar.gz"
+                )
+            )
+            snapshot_mock = unittest.mock.Mock(return_value="snapshot.tar.gz")
+            node_admin = type(
+                "NodeAdmin",
+                (),
+                {"apply_snapshot_archive": staticmethod(snapshot_mock)},
+            )()
+            stdout = io.StringIO()
+            with (
+                patch(
+                    "xian_cli.cli.stop_xian_stack_node",
+                    stop_mock,
+                ),
+                patch(
+                    "xian_cli.cli.shutil.make_archive",
+                    backup_mock,
+                ),
+                patch(
+                    "xian_cli.cli.get_node_admin_module",
+                    return_value=node_admin,
+                ),
+            ):
+                with redirect_stdout(stdout):
+                    exit_code = main(
+                        [
+                            "recovery",
+                            "apply",
+                            str(plan_path),
+                            "validator-1",
+                            "--base-dir",
+                            str(base_dir),
+                            "--yes",
+                        ]
+                    )
+
+            self.assertEqual(exit_code, 0)
+            stop_mock.assert_called_once()
+            backup_mock.assert_called_once()
+            snapshot_mock.assert_called_once_with(
+                "https://example.invalid/recovery.tar.gz",
+                home,
+                expected_sha256="ab" * 32,
+            )
+            payload = json.loads(stdout.getvalue())
+            self.assertFalse(payload["dry_run"])
+            self.assertTrue(payload["stopped_node"])
+            self.assertEqual(
+                payload["backup_archive"],
+                str(base_dir / "recovery-backups" / "backup.tar.gz"),
+            )
+            self.assertEqual(
+                payload["snapshot_restore"]["snapshot_archive_name"],
+                "snapshot.tar.gz",
+            )
+
 
 class RuntimeHelperTests(unittest.TestCase):
     def test_resolve_stack_dir_uses_workspace_fallback(self) -> None:
