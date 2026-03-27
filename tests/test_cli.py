@@ -705,7 +705,9 @@ class NetworkManifestTests(unittest.TestCase):
                     ]
                 )
 
-    def test_network_join_rejects_non_positive_simulation_settings(self) -> None:
+    def test_network_join_rejects_non_positive_simulation_settings(
+        self,
+    ) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             base_dir = Path(tmp_dir)
             configs_dir = base_dir / "xian-configs"
