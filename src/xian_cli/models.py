@@ -119,6 +119,63 @@ def _require_str_list(payload: dict, key: str) -> list[str]:
     return value
 
 
+def _normalize_node_release_manifest(
+    payload: dict,
+    key: str,
+) -> dict | None:
+    value = payload.get(key)
+    if value is None:
+        return None
+    if not isinstance(value, dict):
+        raise ValueError(f"{key} must be an object when provided")
+    if value.get("schema_version") != SCHEMA_VERSION:
+        raise ValueError(
+            f"{key}.schema_version must be {SCHEMA_VERSION}"
+        )
+
+    components_raw = value.get("components")
+    if not isinstance(components_raw, dict) or not components_raw:
+        raise ValueError(f"{key}.components must be a non-empty object")
+    components: dict[str, dict[str, str]] = {}
+    for component_name, component in components_raw.items():
+        if not isinstance(component_name, str) or not component_name:
+            raise ValueError(
+                f"{key}.components keys must be non-empty strings"
+            )
+        if not isinstance(component, dict):
+            raise ValueError(
+                f"{key}.components.{component_name} must be an object"
+            )
+        components[component_name] = {
+            "repository": _require_str(component, "repository"),
+            "ref": _require_str(component, "ref"),
+        }
+
+    build_raw = value.get("build")
+    if not isinstance(build_raw, dict):
+        raise ValueError(f"{key}.build must be an object")
+    build = {
+        "python_image": _require_str(build_raw, "python_image"),
+        "cometbft_version": _require_str(build_raw, "cometbft_version"),
+        "s6_overlay_version": _require_str(build_raw, "s6_overlay_version"),
+    }
+
+    images_raw = value.get("images")
+    if not isinstance(images_raw, dict):
+        raise ValueError(f"{key}.images must be an object")
+    images = {
+        "integrated": _require_str(images_raw, "integrated"),
+        "split": _require_str(images_raw, "split"),
+    }
+
+    return {
+        "schema_version": SCHEMA_VERSION,
+        "components": components,
+        "build": build,
+        "images": images,
+    }
+
+
 def _require_schema_version(payload: dict) -> int:
     schema_version = payload.get("schema_version")
     if schema_version != SCHEMA_VERSION:
@@ -263,6 +320,10 @@ def normalize_network_manifest(payload: dict) -> dict:
         "node_image_mode": node_image_mode,
         "node_integrated_image": node_integrated_image,
         "node_split_image": node_split_image,
+        "node_release_manifest": _normalize_node_release_manifest(
+            payload,
+            "node_release_manifest",
+        ),
     }
 
 
@@ -295,6 +356,10 @@ def normalize_node_profile(payload: dict) -> dict:
         "node_image_mode": node_image_mode,
         "node_integrated_image": node_integrated_image,
         "node_split_image": node_split_image,
+        "node_release_manifest": _normalize_node_release_manifest(
+            payload,
+            "node_release_manifest",
+        ),
         "stack_dir": _require_optional_str(payload, "stack_dir"),
         "seeds": _require_str_list(payload, "seeds"),
         "genesis_url": _require_optional_str(payload, "genesis_url"),
@@ -650,6 +715,7 @@ class NetworkManifest:
     node_image_mode: str = "local_build"
     node_integrated_image: str | None = None
     node_split_image: str | None = None
+    node_release_manifest: dict | None = None
     genesis_source: str | None = None
     snapshot_url: str | None = None
     seed_nodes: list[str] = field(default_factory=list)
@@ -672,6 +738,7 @@ class NodeProfile:
     node_image_mode: str | None = None
     node_integrated_image: str | None = None
     node_split_image: str | None = None
+    node_release_manifest: dict | None = None
     stack_dir: str | None = None
     seeds: list[str] = field(default_factory=list)
     genesis_url: str | None = None

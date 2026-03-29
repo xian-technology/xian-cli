@@ -44,6 +44,11 @@ WORKSPACE_ROOT = Path(__file__).resolve().parents[2]
 CANONICAL_DEVNET_GENESIS = (
     WORKSPACE_ROOT / "xian-configs" / "networks" / "devnet" / "genesis.json"
 )
+CANONICAL_NODE_RELEASE_MANIFEST = json.loads(
+    (
+        WORKSPACE_ROOT / "xian-stack" / "release-manifest.json"
+    ).read_text(encoding="utf-8")
+)
 CANONICAL_RELEASE_INTEGRATED_IMAGE = (
     "ghcr.io/xian-technology/xian-node@sha256:"
     "014527ec7a7e5bc0b63f512421a3d6feedc7b3999c68113d195deb6b41eae6c3"
@@ -178,6 +183,7 @@ class NetworkManifestTests(unittest.TestCase):
             self.assertEqual(manifest["node_image_mode"], "local_build")
             self.assertIsNone(manifest["node_integrated_image"])
             self.assertIsNone(manifest["node_split_image"])
+            self.assertIsNone(manifest["node_release_manifest"])
 
     def test_network_create_defaults_to_network_first_layout(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -476,6 +482,9 @@ class NetworkManifestTests(unittest.TestCase):
                             "ghcr.io/xian-technology/"
                             "xian-node-split@sha256:def"
                         ),
+                        "node_release_manifest": (
+                            CANONICAL_NODE_RELEASE_MANIFEST
+                        ),
                     }
                 ),
                 encoding="utf-8",
@@ -516,6 +525,10 @@ class NetworkManifestTests(unittest.TestCase):
             self.assertEqual(
                 profile["node_split_image"],
                 "ghcr.io/xian-technology/xian-node-split@sha256:def",
+            )
+            self.assertEqual(
+                profile["node_release_manifest"],
+                CANONICAL_NODE_RELEASE_MANIFEST,
             )
 
     def test_network_join_uses_template_defaults(self) -> None:
@@ -623,6 +636,73 @@ class NetworkManifestTests(unittest.TestCase):
             self.assertTrue(profile["monitoring_enabled"])
             self.assertFalse(profile["dashboard_enabled"])
             self.assertEqual(profile["tracer_mode"], "native_instruction_v1")
+
+    def test_network_join_drops_release_manifest_for_local_build_override(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            base_dir = Path(tmp_dir)
+            configs_dir = base_dir / "xian-configs"
+            network_dir = configs_dir / "networks" / "canonical"
+            network_dir.mkdir(parents=True)
+            (network_dir / "manifest.json").write_text(
+                json.dumps(
+                    {
+                        "schema_version": 1,
+                        "name": "canonical",
+                        "chain_id": "xian-canonical-1",
+                        "mode": "join",
+                        "runtime_backend": "xian-stack",
+                        "genesis_source": "./genesis.json",
+                        "snapshot_url": None,
+                        "seed_nodes": [],
+                        "block_policy_mode": "on_demand",
+                        "block_policy_interval": "0s",
+                        "tracer_mode": "python_line_v1",
+                        "node_image_mode": "registry",
+                        "node_integrated_image": (
+                            "ghcr.io/xian-technology/"
+                            "xian-node@sha256:abc"
+                        ),
+                        "node_split_image": (
+                            "ghcr.io/xian-technology/"
+                            "xian-node-split@sha256:def"
+                        ),
+                        "node_release_manifest": (
+                            CANONICAL_NODE_RELEASE_MANIFEST
+                        ),
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            output_path = base_dir / "nodes" / "validator-1.json"
+            with patch.dict(
+                "os.environ", {"XIAN_CONFIGS_DIR": str(configs_dir)}
+            ):
+                with redirect_stdout(io.StringIO()):
+                    exit_code = main(
+                        [
+                            "network",
+                            "join",
+                            "validator-1",
+                            "--base-dir",
+                            str(base_dir),
+                            "--network",
+                            "canonical",
+                            "--node-image-mode",
+                            "local_build",
+                            "--output",
+                            str(output_path),
+                        ]
+                    )
+
+            self.assertEqual(exit_code, 0)
+            profile = json.loads(output_path.read_text(encoding="utf-8"))
+            self.assertEqual(profile["node_image_mode"], "local_build")
+            self.assertIsNone(profile["node_integrated_image"])
+            self.assertIsNone(profile["node_split_image"])
+            self.assertIsNone(profile["node_release_manifest"])
 
     def test_network_join_allows_block_policy_override(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -2125,6 +2205,163 @@ class NodeRuntimeTests(unittest.TestCase):
             )
             self.assertEqual(
                 kwargs["node_split_image"],
+                CANONICAL_RELEASE_SPLIT_IMAGE,
+            )
+
+    def test_node_status_surfaces_release_manifest_provenance(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            base_dir = Path(tmp_dir)
+            (base_dir / "networks" / "mainnet").mkdir(parents=True)
+            (base_dir / "nodes").mkdir()
+            stack_dir = base_dir / "xian-stack"
+            stack_dir.mkdir()
+
+            (base_dir / "networks" / "mainnet" / "manifest.json").write_text(
+                json.dumps(
+                    {
+                        "schema_version": 1,
+                        "name": "mainnet",
+                        "chain_id": "xian-1",
+                        "mode": "join",
+                        "runtime_backend": "xian-stack",
+                        "node_image_mode": "registry",
+                        "node_integrated_image": (
+                            CANONICAL_RELEASE_INTEGRATED_IMAGE
+                        ),
+                        "node_split_image": CANONICAL_RELEASE_SPLIT_IMAGE,
+                        "node_release_manifest": (
+                            CANONICAL_NODE_RELEASE_MANIFEST
+                        ),
+                        "genesis_source": "./genesis.json",
+                        "snapshot_url": None,
+                        "seed_nodes": [],
+                        "block_policy_mode": "on_demand",
+                        "block_policy_interval": "0s",
+                        "tracer_mode": "python_line_v1",
+                    }
+                ),
+                encoding="utf-8",
+            )
+            (base_dir / "nodes" / "validator-1.json").write_text(
+                json.dumps(
+                    {
+                        "schema_version": 1,
+                        "name": "validator-1",
+                        "network": "mainnet",
+                        "moniker": "validator-1",
+                        "runtime_backend": "xian-stack",
+                        "node_image_mode": "registry",
+                        "node_integrated_image": (
+                            CANONICAL_RELEASE_INTEGRATED_IMAGE
+                        ),
+                        "node_split_image": CANONICAL_RELEASE_SPLIT_IMAGE,
+                        "node_release_manifest": (
+                            CANONICAL_NODE_RELEASE_MANIFEST
+                        ),
+                        "stack_dir": str(stack_dir),
+                        "seeds": [],
+                        "genesis_url": None,
+                        "snapshot_url": None,
+                        "service_node": False,
+                        "home": None,
+                        "pruning_enabled": False,
+                        "blocks_to_keep": 100000,
+                        "block_policy_mode": "on_demand",
+                        "block_policy_interval": "0s",
+                        "tracer_mode": "python_line_v1",
+                        "transaction_trace_logging": False,
+                        "app_log_level": "INFO",
+                        "app_log_json": False,
+                        "app_log_rotation_hours": 1,
+                        "app_log_retention_days": 7,
+                        "simulation_enabled": True,
+                        "simulation_max_concurrency": 2,
+                        "simulation_timeout_ms": 3000,
+                        "simulation_max_stamps": 1000000,
+                        "parallel_execution_enabled": False,
+                        "parallel_execution_workers": 0,
+                        "parallel_execution_min_transactions": 8,
+                        "operator_profile": None,
+                        "monitoring_profile": None,
+                        "dashboard_enabled": False,
+                        "monitoring_enabled": False,
+                        "dashboard_host": "127.0.0.1",
+                        "dashboard_port": 8080,
+                        "intentkit_enabled": False,
+                        "intentkit_network_id": None,
+                        "intentkit_host": "127.0.0.1",
+                        "intentkit_port": 38000,
+                        "intentkit_api_port": 38080,
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            backend_status = {
+                "backend_running": True,
+                "compose_services": [
+                    {
+                        "service": "abci",
+                        "state": "running",
+                        "image": CANONICAL_RELEASE_INTEGRATED_IMAGE,
+                    }
+                ],
+            }
+            rpc_status = {
+                "result": {
+                    "sync_info": {
+                        "latest_block_height": "123",
+                        "catching_up": False,
+                    },
+                    "node_info": {
+                        "network": "xian-1",
+                        "other": {"n_peers": "4"},
+                    },
+                }
+            }
+
+            stdout = io.StringIO()
+            with patch(
+                "xian_cli.cli.get_xian_stack_node_status",
+                return_value=backend_status,
+            ):
+                with patch(
+                    "xian_cli.cli.fetch_json",
+                    return_value=rpc_status,
+                ):
+                    with redirect_stdout(stdout):
+                        exit_code = main(
+                            [
+                                "node",
+                                "status",
+                                "validator-1",
+                                "--base-dir",
+                                str(base_dir),
+                            ]
+                        )
+
+            self.assertEqual(exit_code, 0)
+            payload = json.loads(stdout.getvalue())
+            self.assertEqual(
+                payload["node_release_manifest"],
+                CANONICAL_NODE_RELEASE_MANIFEST,
+            )
+            self.assertEqual(
+                payload["summary"]["release_manifest_refs"]["xian-abci"],
+                CANONICAL_NODE_RELEASE_MANIFEST["components"]["xian-abci"][
+                    "ref"
+                ],
+            )
+            self.assertEqual(
+                payload["summary"]["runtime_service_images"]["abci"],
+                CANONICAL_RELEASE_INTEGRATED_IMAGE,
+            )
+            self.assertEqual(
+                payload["summary"]["node_integrated_image"],
+                CANONICAL_RELEASE_INTEGRATED_IMAGE,
+            )
+            self.assertEqual(
+                payload["summary"]["node_split_image"],
                 CANONICAL_RELEASE_SPLIT_IMAGE,
             )
 

@@ -150,6 +150,22 @@ def _effective_node_image_config(
     )
 
 
+def _effective_node_release_manifest(
+    profile: dict[str, object],
+    network: dict[str, object] | None = None,
+) -> dict[str, object] | None:
+    node_image_mode, _, _ = _effective_node_image_config(profile, network)
+    if node_image_mode != "registry":
+        return None
+    profile_manifest = profile.get("node_release_manifest")
+    if isinstance(profile_manifest, dict):
+        return profile_manifest
+    network_manifest = None if network is None else network.get(
+        "node_release_manifest"
+    )
+    return network_manifest if isinstance(network_manifest, dict) else None
+
+
 def _stack_runtime_profile_kwargs(
     profile: dict[str, object],
     network: dict[str, object] | None = None,
@@ -581,6 +597,7 @@ def _handle_network_create(args: argparse.Namespace) -> int:
         node_image_mode=node_image_mode,
         node_integrated_image=node_integrated_image,
         node_split_image=node_split_image,
+        node_release_manifest=None,
     )
     write_json(target, manifest.to_dict(), force=args.force)
 
@@ -616,6 +633,7 @@ def _handle_network_create(args: argparse.Namespace) -> int:
             node_image_mode=manifest.node_image_mode,
             node_integrated_image=manifest.node_integrated_image,
             node_split_image=manifest.node_split_image,
+            node_release_manifest=manifest.node_release_manifest,
             stack_dir=(
                 str(args.stack_dir)
                 if validator["is_bootstrap"] and args.stack_dir is not None
@@ -956,22 +974,27 @@ def _handle_network_join(args: argparse.Namespace) -> int:
     if args.restore_snapshot and not args.init_node:
         raise ValueError("--restore-snapshot requires --init-node")
 
+    requested_node_image_mode = _pick_template_value(
+        args.node_image_mode,
+        None,
+        network.get("node_image_mode") or "local_build",
+    )
     node_image_mode, node_integrated_image, node_split_image = (
         _resolve_node_image_settings(
-            node_image_mode=_pick_template_value(
-                args.node_image_mode,
-                None,
-                network.get("node_image_mode") or "local_build",
-            ),
+            node_image_mode=requested_node_image_mode,
             node_integrated_image=_pick_template_value(
                 args.node_integrated_image,
                 None,
-                network.get("node_integrated_image"),
+                network.get("node_integrated_image")
+                if requested_node_image_mode == "registry"
+                else None,
             ),
             node_split_image=_pick_template_value(
                 args.node_split_image,
                 None,
-                network.get("node_split_image"),
+                network.get("node_split_image")
+                if requested_node_image_mode == "registry"
+                else None,
             ),
         )
     )
@@ -1004,6 +1027,14 @@ def _handle_network_join(args: argparse.Namespace) -> int:
         node_image_mode=node_image_mode,
         node_integrated_image=node_integrated_image,
         node_split_image=node_split_image,
+        node_release_manifest=_effective_node_release_manifest(
+            {
+                "node_image_mode": node_image_mode,
+                "node_integrated_image": node_integrated_image,
+                "node_split_image": node_split_image,
+            },
+            network,
+        ),
         stack_dir=str(args.stack_dir) if args.stack_dir is not None else None,
         seeds=args.seed or [],
         genesis_url=args.genesis_url,
@@ -2228,10 +2259,45 @@ def _summarize_node_status(result: dict[str, object]) -> dict[str, object]:
         "rpc_catching_up": sync_info.get("catching_up"),
         "rpc_network": node_info.get("network"),
         "peer_count": other.get("n_peers"),
+        "node_image_mode": result.get("profile", {}).get("node_image_mode"),
+        "node_integrated_image": result.get("profile", {}).get(
+            "node_integrated_image"
+        ),
+        "node_split_image": result.get("profile", {}).get(
+            "node_split_image"
+        ),
     }
+
+    release_manifest = result.get("node_release_manifest")
+    if isinstance(release_manifest, dict):
+        components = release_manifest.get("components")
+        build = release_manifest.get("build")
+        if isinstance(components, dict):
+            summary["release_manifest_refs"] = {
+                str(name): component.get("ref")
+                for name, component in components.items()
+                if isinstance(name, str) and isinstance(component, dict)
+            }
+        if isinstance(build, dict):
+            summary["release_manifest_build"] = {
+                "python_image": build.get("python_image"),
+                "cometbft_version": build.get("cometbft_version"),
+                "s6_overlay_version": build.get("s6_overlay_version"),
+            }
 
     backend_status = result.get("backend_status")
     if isinstance(backend_status, dict):
+        compose_services = backend_status.get("compose_services")
+        if isinstance(compose_services, list):
+            runtime_images = {
+                str(service.get("service")): service.get("image")
+                for service in compose_services
+                if isinstance(service, dict)
+                and isinstance(service.get("service"), str)
+                and service.get("image")
+            }
+            if runtime_images:
+                summary["runtime_service_images"] = runtime_images
         if summary["dashboard_enabled"]:
             summary["dashboard_reachable"] = backend_status.get(
                 "dashboard_reachable"
@@ -2273,6 +2339,7 @@ def _collect_node_status(
     node_image_mode, node_integrated_image, node_split_image = (
         _effective_node_image_config(profile, network)
     )
+    node_release_manifest = _effective_node_release_manifest(profile, network)
     config_path = home / "config" / "config.toml"
     genesis_path = home / "config" / "genesis.json"
     node_key_path = home / "config" / "node_key.json"
@@ -2302,6 +2369,7 @@ def _collect_node_status(
             "node_image_mode": node_image_mode,
             "node_integrated_image": node_integrated_image,
             "node_split_image": node_split_image,
+            "node_release_manifest": node_release_manifest,
             "service_node": bool(profile.get("service_node")),
             "operator_profile": profile.get("operator_profile"),
             "monitoring_profile": profile.get("monitoring_profile"),
@@ -2311,6 +2379,7 @@ def _collect_node_status(
             "intentkit_network_id": profile.get("intentkit_network_id"),
         },
     }
+    result["node_release_manifest"] = node_release_manifest
     if stack_dir is not None:
         result["stack_dir"] = str(stack_dir)
 
