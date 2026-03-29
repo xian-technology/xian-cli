@@ -14,6 +14,7 @@ SUPPORTED_NETWORK_MODES = {"join", "create"}
 SUPPORTED_RUNTIME_BACKENDS = {"xian-stack"}
 SUPPORTED_BLOCK_POLICY_MODES = {"on_demand", "idle_interval", "periodic"}
 SUPPORTED_TRACER_MODES = {"python_line_v1", "native_instruction_v1"}
+SUPPORTED_NODE_IMAGE_MODES = {"local_build", "registry"}
 SUPPORTED_OPERATOR_PROFILES = {
     "local_development",
     "indexed_development",
@@ -138,6 +139,51 @@ def _require_runtime_backend(payload: dict) -> str:
     return runtime_backend
 
 
+def _require_node_image_mode(payload: dict, key: str) -> str:
+    value = payload.get(key, "local_build")
+    if not isinstance(value, str) or value not in SUPPORTED_NODE_IMAGE_MODES:
+        raise ValueError(
+            f"{key} must be one of {sorted(SUPPORTED_NODE_IMAGE_MODES)}"
+        )
+    return value
+
+
+def _require_optional_node_image_mode(
+    payload: dict, key: str
+) -> str | None:
+    value = payload.get(key)
+    if value is None:
+        return None
+    if not isinstance(value, str) or value not in SUPPORTED_NODE_IMAGE_MODES:
+        raise ValueError(
+            f"{key} must be one of {sorted(SUPPORTED_NODE_IMAGE_MODES)}"
+        )
+    return value
+
+
+def _validate_node_image_config(
+    *,
+    mode: str | None,
+    integrated_image: str | None,
+    split_image: str | None,
+) -> tuple[str | None, str | None, str | None]:
+    if mode != "registry" and (
+        integrated_image is not None or split_image is not None
+    ):
+        raise ValueError(
+            "node_integrated_image and node_split_image require "
+            "node_image_mode=registry"
+        )
+    if mode == "registry" and (
+        integrated_image is None or split_image is None
+    ):
+        raise ValueError(
+            "registry node image mode requires both "
+            "node_integrated_image and node_split_image"
+        )
+    return mode, integrated_image, split_image
+
+
 def _require_block_policy_mode(payload: dict, key: str) -> str:
     value = payload.get(key, "on_demand")
     if not isinstance(value, str) or value not in SUPPORTED_BLOCK_POLICY_MODES:
@@ -188,6 +234,16 @@ def normalize_network_manifest(payload: dict) -> dict:
     if not isinstance(payload, dict):
         raise ValueError("network manifest must be a JSON object")
 
+    node_image_mode, node_integrated_image, node_split_image = (
+        _validate_node_image_config(
+            mode=_require_node_image_mode(payload, "node_image_mode"),
+            integrated_image=_require_optional_str(
+                payload, "node_integrated_image"
+            ),
+            split_image=_require_optional_str(payload, "node_split_image"),
+        )
+    )
+
     return {
         "schema_version": _require_schema_version(payload),
         "name": _require_str(payload, "name"),
@@ -204,12 +260,27 @@ def normalize_network_manifest(payload: dict) -> dict:
             payload, "block_policy_interval"
         ),
         "tracer_mode": _require_tracer_mode(payload, "tracer_mode"),
+        "node_image_mode": node_image_mode,
+        "node_integrated_image": node_integrated_image,
+        "node_split_image": node_split_image,
     }
 
 
 def normalize_node_profile(payload: dict) -> dict:
     if not isinstance(payload, dict):
         raise ValueError("node profile must be a JSON object")
+
+    node_image_mode, node_integrated_image, node_split_image = (
+        _validate_node_image_config(
+            mode=_require_optional_node_image_mode(
+                payload, "node_image_mode"
+            ),
+            integrated_image=_require_optional_str(
+                payload, "node_integrated_image"
+            ),
+            split_image=_require_optional_str(payload, "node_split_image"),
+        )
+    )
 
     return {
         "schema_version": _require_schema_version(payload),
@@ -221,6 +292,9 @@ def normalize_node_profile(payload: dict) -> dict:
             "validator_key_ref",
         ),
         "runtime_backend": _require_runtime_backend(payload),
+        "node_image_mode": node_image_mode,
+        "node_integrated_image": node_integrated_image,
+        "node_split_image": node_split_image,
         "stack_dir": _require_optional_str(payload, "stack_dir"),
         "seeds": _require_str_list(payload, "seeds"),
         "genesis_url": _require_optional_str(payload, "genesis_url"),
@@ -573,6 +647,9 @@ class NetworkManifest:
     chain_id: str
     mode: str = "join"
     runtime_backend: str = "xian-stack"
+    node_image_mode: str = "local_build"
+    node_integrated_image: str | None = None
+    node_split_image: str | None = None
     genesis_source: str | None = None
     snapshot_url: str | None = None
     seed_nodes: list[str] = field(default_factory=list)
@@ -592,6 +669,9 @@ class NodeProfile:
     moniker: str
     validator_key_ref: str | None = None
     runtime_backend: str = "xian-stack"
+    node_image_mode: str | None = None
+    node_integrated_image: str | None = None
+    node_split_image: str | None = None
     stack_dir: str | None = None
     seeds: list[str] = field(default_factory=list)
     genesis_url: str | None = None

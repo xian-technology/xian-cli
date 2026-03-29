@@ -27,6 +27,7 @@ from xian_cli.models import (
     SUPPORTED_APP_LOG_LEVELS,
     SUPPORTED_BLOCK_POLICY_MODES,
     SUPPORTED_INTENTKIT_NETWORK_IDS,
+    SUPPORTED_NODE_IMAGE_MODES,
     SUPPORTED_RUNTIME_BACKENDS,
     SUPPORTED_TRACER_MODES,
     NetworkManifest,
@@ -121,10 +122,45 @@ def _default_intentkit_network_id(network_name: str | None) -> str:
     return "xian-localnet"
 
 
+def _effective_node_image_config(
+    profile: dict[str, object],
+    network: dict[str, object] | None = None,
+) -> tuple[str, str | None, str | None]:
+    network_mode = (
+        None
+        if network is None
+        else network.get("node_image_mode") or "local_build"
+    )
+    return _resolve_node_image_settings(
+        node_image_mode=str(
+            profile.get("node_image_mode") or network_mode or "local_build"
+        ),
+        node_integrated_image=(
+            profile.get("node_integrated_image")
+            or (
+                None
+                if network is None
+                else network.get("node_integrated_image")
+            )
+        ),
+        node_split_image=(
+            profile.get("node_split_image")
+            or (None if network is None else network.get("node_split_image"))
+        ),
+    )
+
+
 def _stack_runtime_profile_kwargs(
     profile: dict[str, object],
+    network: dict[str, object] | None = None,
 ) -> dict[str, object]:
+    node_image_mode, node_integrated_image, node_split_image = (
+        _effective_node_image_config(profile, network)
+    )
     return {
+        "node_image_mode": node_image_mode,
+        "node_integrated_image": node_integrated_image,
+        "node_split_image": node_split_image,
         "service_node": bool(profile.get("service_node")),
         "dashboard_enabled": bool(profile.get("dashboard_enabled")),
         "monitoring_enabled": bool(profile.get("monitoring_enabled")),
@@ -139,6 +175,27 @@ def _stack_runtime_profile_kwargs(
         "intentkit_port": int(profile.get("intentkit_port", 38000)),
         "intentkit_api_port": int(profile.get("intentkit_api_port", 38080)),
     }
+
+
+def _resolve_node_image_settings(
+    *,
+    node_image_mode: str,
+    node_integrated_image: str | None,
+    node_split_image: str | None,
+) -> tuple[str, str | None, str | None]:
+    if node_image_mode not in SUPPORTED_NODE_IMAGE_MODES:
+        raise ValueError(
+            "node_image_mode must be one of "
+            f"{sorted(SUPPORTED_NODE_IMAGE_MODES)}"
+        )
+    if node_image_mode == "registry" and (
+        not node_integrated_image or not node_split_image
+    ):
+        raise ValueError(
+            "registry node image mode requires both "
+            "--node-integrated-image and --node-split-image"
+        )
+    return node_image_mode, node_integrated_image, node_split_image
 
 
 def _validate_non_negative_int(name: str, value: int) -> int:
@@ -482,6 +539,18 @@ def _handle_network_create(args: argparse.Namespace) -> int:
             "pass --generate-validator-key"
         )
 
+    node_image_mode, node_integrated_image, node_split_image = (
+        _resolve_node_image_settings(
+            node_image_mode=_pick_template_value(
+                args.node_image_mode,
+                None,
+                "local_build",
+            ),
+            node_integrated_image=args.node_integrated_image,
+            node_split_image=args.node_split_image,
+        )
+    )
+
     manifest = NetworkManifest(
         name=args.name,
         chain_id=args.chain_id,
@@ -509,6 +578,9 @@ def _handle_network_create(args: argparse.Namespace) -> int:
             None if template is None else template.get("tracer_mode"),
             "python_line_v1",
         ),
+        node_image_mode=node_image_mode,
+        node_integrated_image=node_integrated_image,
+        node_split_image=node_split_image,
     )
     write_json(target, manifest.to_dict(), force=args.force)
 
@@ -541,6 +613,9 @@ def _handle_network_create(args: argparse.Namespace) -> int:
             moniker=validator["moniker"],
             validator_key_ref=validator["validator_key_ref"],
             runtime_backend=manifest.runtime_backend,
+            node_image_mode=manifest.node_image_mode,
+            node_integrated_image=manifest.node_integrated_image,
+            node_split_image=manifest.node_split_image,
             stack_dir=(
                 str(args.stack_dir)
                 if validator["is_bootstrap"] and args.stack_dir is not None
@@ -881,6 +956,26 @@ def _handle_network_join(args: argparse.Namespace) -> int:
     if args.restore_snapshot and not args.init_node:
         raise ValueError("--restore-snapshot requires --init-node")
 
+    node_image_mode, node_integrated_image, node_split_image = (
+        _resolve_node_image_settings(
+            node_image_mode=_pick_template_value(
+                args.node_image_mode,
+                None,
+                network.get("node_image_mode") or "local_build",
+            ),
+            node_integrated_image=_pick_template_value(
+                args.node_integrated_image,
+                None,
+                network.get("node_integrated_image"),
+            ),
+            node_split_image=_pick_template_value(
+                args.node_split_image,
+                None,
+                network.get("node_split_image"),
+            ),
+        )
+    )
+
     validator_key_ref: str | None = None
     if args.validator_key_ref is not None:
         validator_key_ref = _stringify_path_for_profile(
@@ -906,6 +1001,9 @@ def _handle_network_join(args: argparse.Namespace) -> int:
         moniker=args.moniker or args.name,
         validator_key_ref=validator_key_ref,
         runtime_backend=runtime_backend,
+        node_image_mode=node_image_mode,
+        node_integrated_image=node_integrated_image,
+        node_split_image=node_split_image,
         stack_dir=str(args.stack_dir) if args.stack_dir is not None else None,
         seeds=args.seed or [],
         genesis_url=args.genesis_url,
@@ -1593,7 +1691,7 @@ def _handle_recovery_apply(args: argparse.Namespace) -> int:
         stop_result = stop_xian_stack_node(
             stack_dir=stack_dir,
             cometbft_home=home,
-            **_stack_runtime_profile_kwargs(profile),
+            **_stack_runtime_profile_kwargs(profile, network),
         )
 
     backup_archive = None
@@ -1626,7 +1724,7 @@ def _handle_recovery_apply(args: argparse.Namespace) -> int:
         start_result = start_xian_stack_node(
             stack_dir=stack_dir,
             cometbft_home=home,
-            **_stack_runtime_profile_kwargs(profile),
+            **_stack_runtime_profile_kwargs(profile, network),
             wait_for_rpc=not args.no_wait,
             rpc_timeout_seconds=args.rpc_timeout_seconds,
         )
@@ -1882,7 +1980,7 @@ def _handle_node_start(args: argparse.Namespace) -> int:
     result = start_xian_stack_node(
         stack_dir=stack_dir,
         cometbft_home=home,
-        **_stack_runtime_profile_kwargs(profile),
+        **_stack_runtime_profile_kwargs(profile, network),
         wait_for_rpc=not args.skip_health_check,
         rpc_timeout_seconds=args.rpc_timeout_seconds,
     )
@@ -1917,7 +2015,7 @@ def _handle_node_stop(args: argparse.Namespace) -> int:
             runtime_backend=_resolve_runtime_backend(profile, network),
             stack_dir=stack_dir,
         ),
-        **_stack_runtime_profile_kwargs(profile),
+        **_stack_runtime_profile_kwargs(profile, network),
     )
     print(json.dumps(result, indent=2))
     return 0
@@ -2038,15 +2136,22 @@ def _fallback_node_endpoints(
 def _collect_node_endpoints(args: argparse.Namespace) -> dict[str, object]:
     context = _resolve_node_context(args)
     profile = context["profile"]
+    network = context["network"]
     runtime_backend = context["runtime_backend"]
     stack_dir = context["stack_dir"]
     home = context["home"]
     rpc_status_url = getattr(args, "rpc_url", "http://127.0.0.1:26657/status")
+    node_image_mode, node_integrated_image, node_split_image = (
+        _effective_node_image_config(profile, network)
+    )
 
     payload: dict[str, object] = {
         "profile_path": str(context["profile_path"]),
         "network_path": str(context["network_path"]),
         "runtime_backend": runtime_backend,
+        "node_image_mode": node_image_mode,
+        "node_integrated_image": node_integrated_image,
+        "node_split_image": node_split_image,
         "service_node": bool(profile.get("service_node")),
         "operator_profile": profile.get("operator_profile"),
         "monitoring_profile": profile.get("monitoring_profile"),
@@ -2063,7 +2168,7 @@ def _collect_node_endpoints(args: argparse.Namespace) -> dict[str, object]:
             backend_payload = get_xian_stack_node_endpoints(
                 stack_dir=stack_dir,
                 cometbft_home=home,
-                **_stack_runtime_profile_kwargs(profile),
+                **_stack_runtime_profile_kwargs(profile, context["network"]),
             )
             payload["endpoints"] = backend_payload["endpoints"]
             payload["backend_checked"] = True
@@ -2165,6 +2270,9 @@ def _collect_node_status(
     runtime_backend = context["runtime_backend"]
     stack_dir = context["stack_dir"]
     home = context["home"]
+    node_image_mode, node_integrated_image, node_split_image = (
+        _effective_node_image_config(profile, network)
+    )
     config_path = home / "config" / "config.toml"
     genesis_path = home / "config" / "genesis.json"
     node_key_path = home / "config" / "node_key.json"
@@ -2191,6 +2299,9 @@ def _collect_node_status(
         "profile": {
             "name": args.name,
             "network": profile.get("network"),
+            "node_image_mode": node_image_mode,
+            "node_integrated_image": node_integrated_image,
+            "node_split_image": node_split_image,
             "service_node": bool(profile.get("service_node")),
             "operator_profile": profile.get("operator_profile"),
             "monitoring_profile": profile.get("monitoring_profile"),
@@ -2218,7 +2329,7 @@ def _collect_node_status(
             backend_status = get_xian_stack_node_status(
                 stack_dir=stack_dir,
                 cometbft_home=home,
-                **_stack_runtime_profile_kwargs(profile),
+                **_stack_runtime_profile_kwargs(profile, context["network"]),
             )
             result["backend_status"] = backend_status
             result["backend_checked"] = True
@@ -2312,14 +2423,21 @@ def _collect_statesync_readiness(home: Path) -> dict[str, object]:
 def _collect_node_health(args: argparse.Namespace) -> dict[str, object]:
     context = _resolve_node_context(args)
     profile = context["profile"]
+    network = context["network"]
     runtime_backend = context["runtime_backend"]
     stack_dir = context["stack_dir"]
     home = context["home"]
+    node_image_mode, node_integrated_image, node_split_image = (
+        _effective_node_image_config(profile, network)
+    )
 
     payload: dict[str, object] = {
         "profile_path": str(context["profile_path"]),
         "network_path": str(context["network_path"]),
         "runtime_backend": runtime_backend,
+        "node_image_mode": node_image_mode,
+        "node_integrated_image": node_integrated_image,
+        "node_split_image": node_split_image,
         "home": str(home),
         "service_node": bool(profile.get("service_node")),
         "operator_profile": profile.get("operator_profile"),
@@ -2348,7 +2466,7 @@ def _collect_node_health(args: argparse.Namespace) -> dict[str, object]:
         payload["health"] = get_xian_stack_node_health(
             stack_dir=stack_dir,
             cometbft_home=home,
-            **_stack_runtime_profile_kwargs(profile),
+            **_stack_runtime_profile_kwargs(profile, network),
             rpc_url=args.rpc_url,
             check_disk=not args.skip_disk_check,
         )
@@ -2859,6 +2977,23 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     create_parser.add_argument(
+        "--node-image-mode",
+        choices=sorted(SUPPORTED_NODE_IMAGE_MODES),
+        help=(
+            "node image source for generated manifests and profiles; "
+            "use registry for pinned published images or local_build for "
+            "workspace-built images"
+        ),
+    )
+    create_parser.add_argument(
+        "--node-integrated-image",
+        help="pinned integrated node image reference for registry mode",
+    )
+    create_parser.add_argument(
+        "--node-split-image",
+        help="pinned split-runtime node image reference for registry mode",
+    )
+    create_parser.add_argument(
         "--genesis-source",
         help="path or URL for the genesis source used to bootstrap the network",
     )
@@ -3232,6 +3367,22 @@ def build_parser() -> argparse.ArgumentParser:
             "node-local runtime backend override; defaults to the network "
             "manifest value"
         ),
+    )
+    join_parser.add_argument(
+        "--node-image-mode",
+        choices=sorted(SUPPORTED_NODE_IMAGE_MODES),
+        help=(
+            "node image source override; defaults to the network manifest "
+            "value"
+        ),
+    )
+    join_parser.add_argument(
+        "--node-integrated-image",
+        help="explicit integrated node image override for registry mode",
+    )
+    join_parser.add_argument(
+        "--node-split-image",
+        help="explicit split-runtime node image override for registry mode",
     )
     join_parser.add_argument(
         "--stack-dir",

@@ -44,6 +44,14 @@ WORKSPACE_ROOT = Path(__file__).resolve().parents[2]
 CANONICAL_DEVNET_GENESIS = (
     WORKSPACE_ROOT / "xian-configs" / "networks" / "devnet" / "genesis.json"
 )
+CANONICAL_RELEASE_INTEGRATED_IMAGE = (
+    "ghcr.io/xian-technology/xian-node@sha256:"
+    "014527ec7a7e5bc0b63f512421a3d6feedc7b3999c68113d195deb6b41eae6c3"
+)
+CANONICAL_RELEASE_SPLIT_IMAGE = (
+    "ghcr.io/xian-technology/xian-node-split@sha256:"
+    "2351ca938fe147af9bed8e827ac9c86de6686dbac228f3822de7e1b4ac41a54c"
+)
 
 
 class ValidatorKeyTests(unittest.TestCase):
@@ -167,6 +175,9 @@ class NetworkManifestTests(unittest.TestCase):
             self.assertEqual(manifest["block_policy_mode"], "on_demand")
             self.assertEqual(manifest["block_policy_interval"], "0s")
             self.assertEqual(manifest["tracer_mode"], "python_line_v1")
+            self.assertEqual(manifest["node_image_mode"], "local_build")
+            self.assertIsNone(manifest["node_integrated_image"])
+            self.assertIsNone(manifest["node_split_image"])
 
     def test_network_create_defaults_to_network_first_layout(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -200,6 +211,41 @@ class NetworkManifestTests(unittest.TestCase):
             self.assertEqual(manifest["block_policy_mode"], "on_demand")
             self.assertEqual(manifest["block_policy_interval"], "0s")
             self.assertEqual(manifest["tracer_mode"], "python_line_v1")
+            self.assertEqual(manifest["node_image_mode"], "local_build")
+
+    def test_read_network_manifest_rejects_incomplete_registry_image_config(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            manifest_path = Path(tmp_dir) / "manifest.json"
+            manifest_path.write_text(
+                json.dumps(
+                    {
+                        "schema_version": 1,
+                        "name": "canonical",
+                        "chain_id": "xian-canonical-1",
+                        "mode": "join",
+                        "runtime_backend": "xian-stack",
+                        "node_image_mode": "registry",
+                        "node_integrated_image": (
+                            "ghcr.io/xian-technology/"
+                            "xian-node@sha256:abc"
+                        ),
+                        "genesis_source": "./genesis.json",
+                        "snapshot_url": None,
+                        "seed_nodes": [],
+                        "block_policy_mode": "on_demand",
+                        "block_policy_interval": "0s",
+                        "tracer_mode": "python_line_v1",
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            with self.assertRaisesRegex(
+                ValueError, "requires both node_integrated_image"
+            ):
+                read_network_manifest(manifest_path)
 
     def test_network_create_uses_template_defaults(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -339,6 +385,15 @@ class NetworkManifestTests(unittest.TestCase):
             self.assertEqual(profile["block_policy_mode"], "on_demand")
             self.assertEqual(profile["block_policy_interval"], "0s")
             self.assertEqual(profile["tracer_mode"], "python_line_v1")
+            self.assertEqual(profile["node_image_mode"], "registry")
+            self.assertEqual(
+                profile["node_integrated_image"],
+                CANONICAL_RELEASE_INTEGRATED_IMAGE,
+            )
+            self.assertEqual(
+                profile["node_split_image"],
+                CANONICAL_RELEASE_SPLIT_IMAGE,
+            )
 
     def test_network_create_writes_dashboard_settings_to_bootstrap_profile(
         self,
@@ -412,6 +467,15 @@ class NetworkManifestTests(unittest.TestCase):
                         "block_policy_mode": "periodic",
                         "block_policy_interval": "10s",
                         "tracer_mode": "native_instruction_v1",
+                        "node_image_mode": "registry",
+                        "node_integrated_image": (
+                            "ghcr.io/xian-technology/"
+                            "xian-node@sha256:abc"
+                        ),
+                        "node_split_image": (
+                            "ghcr.io/xian-technology/"
+                            "xian-node-split@sha256:def"
+                        ),
                     }
                 ),
                 encoding="utf-8",
@@ -444,6 +508,15 @@ class NetworkManifestTests(unittest.TestCase):
             self.assertEqual(profile["block_policy_mode"], "periodic")
             self.assertEqual(profile["block_policy_interval"], "10s")
             self.assertEqual(profile["tracer_mode"], "native_instruction_v1")
+            self.assertEqual(profile["node_image_mode"], "registry")
+            self.assertEqual(
+                profile["node_integrated_image"],
+                "ghcr.io/xian-technology/xian-node@sha256:abc",
+            )
+            self.assertEqual(
+                profile["node_split_image"],
+                "ghcr.io/xian-technology/xian-node-split@sha256:def",
+            )
 
     def test_network_join_uses_template_defaults(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -1936,6 +2009,124 @@ class NodeRuntimeTests(unittest.TestCase):
             self.assertEqual(kwargs["dashboard_host"], "0.0.0.0")
             self.assertEqual(kwargs["dashboard_port"], 18080)
             self.assertFalse(kwargs["wait_for_rpc"])
+            self.assertEqual(kwargs["node_image_mode"], "local_build")
+            self.assertIsNone(kwargs["node_integrated_image"])
+            self.assertIsNone(kwargs["node_split_image"])
+
+    def test_node_start_inherits_registry_images_from_network(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            base_dir = Path(tmp_dir)
+            (base_dir / "networks" / "mainnet").mkdir(parents=True)
+            (base_dir / "nodes").mkdir()
+            stack_dir = base_dir / "xian-stack"
+            stack_dir.mkdir()
+            config_dir = stack_dir / ".cometbft" / "config"
+            config_dir.mkdir(parents=True)
+            (config_dir / "config.toml").write_text("", encoding="utf-8")
+
+            (base_dir / "networks" / "mainnet" / "manifest.json").write_text(
+                json.dumps(
+                    {
+                        "schema_version": 1,
+                        "name": "mainnet",
+                        "chain_id": "xian-1",
+                        "mode": "join",
+                        "runtime_backend": "xian-stack",
+                        "node_image_mode": "registry",
+                        "node_integrated_image": (
+                            CANONICAL_RELEASE_INTEGRATED_IMAGE
+                        ),
+                        "node_split_image": CANONICAL_RELEASE_SPLIT_IMAGE,
+                        "genesis_source": "./genesis.json",
+                        "snapshot_url": None,
+                        "seed_nodes": [],
+                        "block_policy_mode": "on_demand",
+                        "block_policy_interval": "0s",
+                        "tracer_mode": "python_line_v1",
+                    }
+                ),
+                encoding="utf-8",
+            )
+            (base_dir / "nodes" / "validator-1.json").write_text(
+                json.dumps(
+                    {
+                        "schema_version": 1,
+                        "name": "validator-1",
+                        "network": "mainnet",
+                        "moniker": "validator-1",
+                        "runtime_backend": "xian-stack",
+                        "stack_dir": str(stack_dir),
+                        "seeds": [],
+                        "genesis_url": None,
+                        "snapshot_url": None,
+                        "service_node": False,
+                        "home": None,
+                        "pruning_enabled": False,
+                        "blocks_to_keep": 100000,
+                        "block_policy_mode": "on_demand",
+                        "block_policy_interval": "0s",
+                        "tracer_mode": "python_line_v1",
+                        "transaction_trace_logging": False,
+                        "app_log_level": "INFO",
+                        "app_log_json": False,
+                        "app_log_rotation_hours": 1,
+                        "app_log_retention_days": 7,
+                        "simulation_enabled": True,
+                        "simulation_max_concurrency": 2,
+                        "simulation_timeout_ms": 3000,
+                        "simulation_max_stamps": 1000000,
+                        "parallel_execution_enabled": False,
+                        "parallel_execution_workers": 0,
+                        "parallel_execution_min_transactions": 8,
+                        "operator_profile": None,
+                        "monitoring_profile": None,
+                        "dashboard_enabled": False,
+                        "monitoring_enabled": False,
+                        "dashboard_host": "127.0.0.1",
+                        "dashboard_port": 8080,
+                        "intentkit_enabled": False,
+                        "intentkit_network_id": None,
+                        "intentkit_host": "127.0.0.1",
+                        "intentkit_port": 38000,
+                        "intentkit_api_port": 38080,
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            stdout = io.StringIO()
+            with patch("xian_cli.cli.start_xian_stack_node") as start_node:
+                start_node.return_value = {
+                    "stack_dir": str(stack_dir),
+                    "container_target": "abci-up",
+                    "node_target": "node-start",
+                    "rpc_checked": False,
+                }
+                with redirect_stdout(stdout):
+                    exit_code = main(
+                        [
+                            "node",
+                            "start",
+                            "validator-1",
+                            "--base-dir",
+                            str(base_dir),
+                            "--skip-health-check",
+                        ]
+                    )
+
+            self.assertEqual(exit_code, 0)
+            kwargs = start_node.call_args.kwargs
+            self.assertEqual(kwargs["node_image_mode"], "registry")
+            self.assertEqual(
+                kwargs["node_integrated_image"],
+                CANONICAL_RELEASE_INTEGRATED_IMAGE,
+            )
+            self.assertEqual(
+                kwargs["node_split_image"],
+                CANONICAL_RELEASE_SPLIT_IMAGE,
+            )
 
     def test_node_stop_uses_xian_stack_backend(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -3149,6 +3340,9 @@ class RuntimeHelperTests(unittest.TestCase):
             stack_dir,
             "start",
             cometbft_home=cometbft_home,
+            node_image_mode="local_build",
+            node_integrated_image=None,
+            node_split_image=None,
             service_node=True,
             dashboard_enabled=True,
             monitoring_enabled=True,
@@ -3164,6 +3358,44 @@ class RuntimeHelperTests(unittest.TestCase):
             rpc_url="http://127.0.0.1:26657/status",
         )
         self.assertEqual(result["rpc_status"], rpc_status)
+
+    def test_start_xian_stack_node_passes_registry_image_config(self) -> None:
+        stack_dir = Path("/tmp/xian-stack")
+
+        with patch(
+            "xian_cli.runtime.run_backend_command"
+        ) as run_backend_command:
+            run_backend_command.return_value = {"backend_running": True}
+            start_xian_stack_node(
+                stack_dir=stack_dir,
+                node_image_mode="registry",
+                node_integrated_image="ghcr.io/xian-technology/xian-node@sha256:abc",
+                node_split_image="ghcr.io/xian-technology/xian-node-split@sha256:def",
+                service_node=False,
+                wait_for_rpc=False,
+            )
+
+        run_backend_command.assert_called_once_with(
+            stack_dir,
+            "start",
+            cometbft_home=None,
+            node_image_mode="registry",
+            node_integrated_image="ghcr.io/xian-technology/xian-node@sha256:abc",
+            node_split_image="ghcr.io/xian-technology/xian-node-split@sha256:def",
+            service_node=False,
+            dashboard_enabled=False,
+            monitoring_enabled=False,
+            dashboard_host="127.0.0.1",
+            dashboard_port=8080,
+            intentkit_enabled=False,
+            intentkit_network_id=None,
+            intentkit_host="127.0.0.1",
+            intentkit_port=38000,
+            intentkit_api_port=38080,
+            wait_for_health=False,
+            rpc_timeout_seconds=90.0,
+            rpc_url="http://127.0.0.1:26657/status",
+        )
 
     def test_stop_xian_stack_node_uses_backend_command(self) -> None:
         stack_dir = Path("/tmp/xian-stack")
@@ -3187,6 +3419,9 @@ class RuntimeHelperTests(unittest.TestCase):
             stack_dir,
             "stop",
             cometbft_home=cometbft_home,
+            node_image_mode="local_build",
+            node_integrated_image=None,
+            node_split_image=None,
             service_node=False,
             dashboard_enabled=True,
             monitoring_enabled=True,
@@ -3226,6 +3461,9 @@ class RuntimeHelperTests(unittest.TestCase):
             stack_dir,
             "status",
             cometbft_home=cometbft_home,
+            node_image_mode="local_build",
+            node_integrated_image=None,
+            node_split_image=None,
             service_node=True,
             dashboard_enabled=True,
             monitoring_enabled=True,
@@ -3265,6 +3503,9 @@ class RuntimeHelperTests(unittest.TestCase):
             stack_dir,
             "endpoints",
             cometbft_home=cometbft_home,
+            node_image_mode="local_build",
+            node_integrated_image=None,
+            node_split_image=None,
             service_node=True,
             dashboard_enabled=True,
             monitoring_enabled=True,
@@ -3301,6 +3542,9 @@ class RuntimeHelperTests(unittest.TestCase):
             stack_dir,
             "health",
             cometbft_home=cometbft_home,
+            node_image_mode="local_build",
+            node_integrated_image=None,
+            node_split_image=None,
             service_node=True,
             dashboard_enabled=True,
             monitoring_enabled=True,
