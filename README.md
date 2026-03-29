@@ -5,6 +5,9 @@ handles manifests, node profiles, lifecycle commands, health checks, and local
 bootstrap flows without turning `xian-abci` or `xian-stack` into user-facing
 tools.
 
+The published PyPI package name is `xian-tech-cli`. The installed console
+command remains `xian`.
+
 ## Common Workflows
 
 Create a local network from a template:

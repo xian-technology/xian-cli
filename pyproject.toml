@@ -3,7 +3,7 @@ requires = ["setuptools>=82.0.1"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "xian-cli"
+name = "xian-tech-cli"
 version = "0.1.0"
 description = "Operator CLI for Xian networks and nodes"
 readme = "README.md"
