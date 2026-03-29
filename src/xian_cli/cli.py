@@ -26,6 +26,7 @@ from xian_cli.config_repo import (
 from xian_cli.models import (
     SUPPORTED_APP_LOG_LEVELS,
     SUPPORTED_BLOCK_POLICY_MODES,
+    SUPPORTED_INTENTKIT_NETWORK_IDS,
     SUPPORTED_RUNTIME_BACKENDS,
     SUPPORTED_TRACER_MODES,
     NetworkManifest,
@@ -107,6 +108,37 @@ def _pick_template_value(
     if template_value is not None:
         return template_value
     return default
+
+
+def _default_intentkit_network_id(network_name: str | None) -> str:
+    normalized = (network_name or "").strip().lower()
+    if normalized in {"mainnet", "xian-mainnet"}:
+        return "xian-mainnet"
+    if normalized in {"testnet", "xian-testnet"}:
+        return "xian-testnet"
+    if normalized in {"devnet", "xian-devnet"}:
+        return "xian-devnet"
+    return "xian-localnet"
+
+
+def _stack_runtime_profile_kwargs(
+    profile: dict[str, object],
+) -> dict[str, object]:
+    return {
+        "service_node": bool(profile.get("service_node")),
+        "dashboard_enabled": bool(profile.get("dashboard_enabled")),
+        "monitoring_enabled": bool(profile.get("monitoring_enabled")),
+        "dashboard_host": str(profile.get("dashboard_host", "127.0.0.1")),
+        "dashboard_port": int(profile.get("dashboard_port", 8080)),
+        "intentkit_enabled": bool(profile.get("intentkit_enabled")),
+        "intentkit_network_id": str(
+            profile.get("intentkit_network_id")
+            or _default_intentkit_network_id(profile.get("network"))
+        ),
+        "intentkit_host": str(profile.get("intentkit_host", "127.0.0.1")),
+        "intentkit_port": int(profile.get("intentkit_port", 38000)),
+        "intentkit_api_port": int(profile.get("intentkit_api_port", 38080)),
+    }
 
 
 def _validate_non_negative_int(name: str, value: int) -> int:
@@ -713,6 +745,61 @@ def _handle_network_create(args: argparse.Namespace) -> int:
                 if validator["is_bootstrap"]
                 else 8080
             ),
+            intentkit_enabled=(
+                _pick_template_value(
+                    args.enable_intentkit,
+                    None
+                    if template is None
+                    else template.get("intentkit_enabled"),
+                    False,
+                )
+                if validator["is_bootstrap"]
+                else False
+            ),
+            intentkit_network_id=(
+                _pick_template_value(
+                    args.intentkit_network_id,
+                    None
+                    if template is None
+                    else template.get("intentkit_network_id"),
+                    "xian-localnet",
+                )
+                if validator["is_bootstrap"]
+                else "xian-localnet"
+            ),
+            intentkit_host=(
+                _pick_template_value(
+                    args.intentkit_host,
+                    None
+                    if template is None
+                    else template.get("intentkit_host"),
+                    "127.0.0.1",
+                )
+                if validator["is_bootstrap"]
+                else "127.0.0.1"
+            ),
+            intentkit_port=(
+                _pick_template_value(
+                    args.intentkit_port,
+                    None
+                    if template is None
+                    else template.get("intentkit_port"),
+                    38000,
+                )
+                if validator["is_bootstrap"]
+                else 38000
+            ),
+            intentkit_api_port=(
+                _pick_template_value(
+                    args.intentkit_api_port,
+                    None
+                    if template is None
+                    else template.get("intentkit_api_port"),
+                    38080,
+                )
+                if validator["is_bootstrap"]
+                else 38080
+            ),
         )
         write_json(profile_path, profile.to_dict(), force=args.force)
         validator_result["profile_path"] = str(profile_path)
@@ -978,6 +1065,31 @@ def _handle_network_join(args: argparse.Namespace) -> int:
             args.dashboard_port,
             None if template is None else template.get("dashboard_port"),
             8080,
+        ),
+        intentkit_enabled=_pick_template_value(
+            args.enable_intentkit,
+            None if template is None else template.get("intentkit_enabled"),
+            False,
+        ),
+        intentkit_network_id=_pick_template_value(
+            args.intentkit_network_id,
+            None if template is None else template.get("intentkit_network_id"),
+            _default_intentkit_network_id(network.get("name")),
+        ),
+        intentkit_host=_pick_template_value(
+            args.intentkit_host,
+            None if template is None else template.get("intentkit_host"),
+            "127.0.0.1",
+        ),
+        intentkit_port=_pick_template_value(
+            args.intentkit_port,
+            None if template is None else template.get("intentkit_port"),
+            38000,
+        ),
+        intentkit_api_port=_pick_template_value(
+            args.intentkit_api_port,
+            None if template is None else template.get("intentkit_api_port"),
+            38080,
         ),
     )
     target = args.output or base_dir / "nodes" / f"{args.name}.json"
@@ -1481,11 +1593,7 @@ def _handle_recovery_apply(args: argparse.Namespace) -> int:
         stop_result = stop_xian_stack_node(
             stack_dir=stack_dir,
             cometbft_home=home,
-            service_node=bool(profile.get("service_node")),
-            dashboard_enabled=bool(profile.get("dashboard_enabled")),
-            monitoring_enabled=bool(profile.get("monitoring_enabled")),
-            dashboard_host=str(profile.get("dashboard_host", "127.0.0.1")),
-            dashboard_port=int(profile.get("dashboard_port", 8080)),
+            **_stack_runtime_profile_kwargs(profile),
         )
 
     backup_archive = None
@@ -1518,11 +1626,7 @@ def _handle_recovery_apply(args: argparse.Namespace) -> int:
         start_result = start_xian_stack_node(
             stack_dir=stack_dir,
             cometbft_home=home,
-            service_node=bool(profile.get("service_node")),
-            dashboard_enabled=bool(profile.get("dashboard_enabled")),
-            monitoring_enabled=bool(profile.get("monitoring_enabled")),
-            dashboard_host=str(profile.get("dashboard_host", "127.0.0.1")),
-            dashboard_port=int(profile.get("dashboard_port", 8080)),
+            **_stack_runtime_profile_kwargs(profile),
             wait_for_rpc=not args.no_wait,
             rpc_timeout_seconds=args.rpc_timeout_seconds,
         )
@@ -1778,11 +1882,7 @@ def _handle_node_start(args: argparse.Namespace) -> int:
     result = start_xian_stack_node(
         stack_dir=stack_dir,
         cometbft_home=home,
-        service_node=bool(profile.get("service_node")),
-        dashboard_enabled=bool(profile.get("dashboard_enabled")),
-        monitoring_enabled=bool(profile.get("monitoring_enabled")),
-        dashboard_host=str(profile.get("dashboard_host", "127.0.0.1")),
-        dashboard_port=int(profile.get("dashboard_port", 8080)),
+        **_stack_runtime_profile_kwargs(profile),
         wait_for_rpc=not args.skip_health_check,
         rpc_timeout_seconds=args.rpc_timeout_seconds,
     )
@@ -1817,11 +1917,7 @@ def _handle_node_stop(args: argparse.Namespace) -> int:
             runtime_backend=_resolve_runtime_backend(profile, network),
             stack_dir=stack_dir,
         ),
-        service_node=bool(profile.get("service_node")),
-        dashboard_enabled=bool(profile.get("dashboard_enabled")),
-        monitoring_enabled=bool(profile.get("monitoring_enabled")),
-        dashboard_host=str(profile.get("dashboard_host", "127.0.0.1")),
-        dashboard_port=int(profile.get("dashboard_port", 8080)),
+        **_stack_runtime_profile_kwargs(profile),
     )
     print(json.dumps(result, indent=2))
     return 0
@@ -1925,6 +2021,17 @@ def _fallback_node_endpoints(
     if bool(profile.get("monitoring_enabled")):
         endpoints["prometheus"] = _replace_url_port(base_url, port=9090)
         endpoints["grafana"] = _replace_url_port(base_url, port=3000)
+    if bool(profile.get("intentkit_enabled")):
+        intentkit_host = _display_endpoint_host(
+            str(profile.get("intentkit_host", "127.0.0.1"))
+        )
+        intentkit_port = int(profile.get("intentkit_port", 38000))
+        intentkit_api_port = int(profile.get("intentkit_api_port", 38080))
+        frontend_url = f"http://{intentkit_host}:{intentkit_port}"
+        api_url = f"http://{intentkit_host}:{intentkit_api_port}"
+        endpoints["intentkit"] = frontend_url
+        endpoints["intentkit_api"] = api_url
+        endpoints["intentkit_api_health"] = f"{api_url}/health"
     return endpoints
 
 
@@ -1945,6 +2052,8 @@ def _collect_node_endpoints(args: argparse.Namespace) -> dict[str, object]:
         "monitoring_profile": profile.get("monitoring_profile"),
         "dashboard_enabled": bool(profile.get("dashboard_enabled")),
         "monitoring_enabled": bool(profile.get("monitoring_enabled")),
+        "intentkit_enabled": bool(profile.get("intentkit_enabled")),
+        "intentkit_network_id": profile.get("intentkit_network_id"),
     }
     if stack_dir is not None:
         payload["stack_dir"] = str(stack_dir)
@@ -1954,11 +2063,7 @@ def _collect_node_endpoints(args: argparse.Namespace) -> dict[str, object]:
             backend_payload = get_xian_stack_node_endpoints(
                 stack_dir=stack_dir,
                 cometbft_home=home,
-                service_node=bool(profile.get("service_node")),
-                dashboard_enabled=bool(profile.get("dashboard_enabled")),
-                monitoring_enabled=bool(profile.get("monitoring_enabled")),
-                dashboard_host=str(profile.get("dashboard_host", "127.0.0.1")),
-                dashboard_port=int(profile.get("dashboard_port", 8080)),
+                **_stack_runtime_profile_kwargs(profile),
             )
             payload["endpoints"] = backend_payload["endpoints"]
             payload["backend_checked"] = True
@@ -2009,6 +2114,9 @@ def _summarize_node_status(result: dict[str, object]) -> dict[str, object]:
         "monitoring_enabled": bool(
             result.get("profile", {}).get("monitoring_enabled")
         ),
+        "intentkit_enabled": bool(
+            result.get("profile", {}).get("intentkit_enabled")
+        ),
         "backend_running": result.get("backend_running"),
         "rpc_reachable": result.get("rpc_reachable"),
         "rpc_height": sync_info.get("latest_block_height"),
@@ -2029,6 +2137,16 @@ def _summarize_node_status(result: dict[str, object]) -> dict[str, object]:
             )
             summary["grafana_reachable"] = backend_status.get(
                 "grafana_reachable"
+            )
+        if summary["intentkit_enabled"]:
+            summary["intentkit_running"] = backend_status.get(
+                "intentkit_running"
+            )
+            summary["intentkit_reachable"] = backend_status.get(
+                "intentkit_reachable"
+            )
+            summary["intentkit_api_reachable"] = backend_status.get(
+                "intentkit_api_reachable"
             )
     return summary
 
@@ -2078,6 +2196,8 @@ def _collect_node_status(
             "monitoring_profile": profile.get("monitoring_profile"),
             "dashboard_enabled": bool(profile.get("dashboard_enabled")),
             "monitoring_enabled": bool(profile.get("monitoring_enabled")),
+            "intentkit_enabled": bool(profile.get("intentkit_enabled")),
+            "intentkit_network_id": profile.get("intentkit_network_id"),
         },
     }
     if stack_dir is not None:
@@ -2098,11 +2218,7 @@ def _collect_node_status(
             backend_status = get_xian_stack_node_status(
                 stack_dir=stack_dir,
                 cometbft_home=home,
-                service_node=bool(profile.get("service_node")),
-                dashboard_enabled=bool(profile.get("dashboard_enabled")),
-                monitoring_enabled=bool(profile.get("monitoring_enabled")),
-                dashboard_host=str(profile.get("dashboard_host", "127.0.0.1")),
-                dashboard_port=int(profile.get("dashboard_port", 8080)),
+                **_stack_runtime_profile_kwargs(profile),
             )
             result["backend_status"] = backend_status
             result["backend_checked"] = True
@@ -2210,6 +2326,8 @@ def _collect_node_health(args: argparse.Namespace) -> dict[str, object]:
         "monitoring_profile": profile.get("monitoring_profile"),
         "dashboard_enabled": bool(profile.get("dashboard_enabled")),
         "monitoring_enabled": bool(profile.get("monitoring_enabled")),
+        "intentkit_enabled": bool(profile.get("intentkit_enabled")),
+        "intentkit_network_id": profile.get("intentkit_network_id"),
         "effective_snapshot_url": _resolve_effective_snapshot_url(
             profile=profile,
             network=context["network"],
@@ -2230,11 +2348,7 @@ def _collect_node_health(args: argparse.Namespace) -> dict[str, object]:
         payload["health"] = get_xian_stack_node_health(
             stack_dir=stack_dir,
             cometbft_home=home,
-            service_node=bool(profile.get("service_node")),
-            dashboard_enabled=bool(profile.get("dashboard_enabled")),
-            monitoring_enabled=bool(profile.get("monitoring_enabled")),
-            dashboard_host=str(profile.get("dashboard_host", "127.0.0.1")),
-            dashboard_port=int(profile.get("dashboard_port", 8080)),
+            **_stack_runtime_profile_kwargs(profile),
             rpc_url=args.rpc_url,
             check_disk=not args.skip_disk_check,
         )
@@ -2478,6 +2592,30 @@ def _handle_doctor(args: argparse.Namespace) -> int:
                         ),
                     )
                 )
+            if profile.get("intentkit_enabled"):
+                checks.append(
+                    _run_check(
+                        "intentkit",
+                        lambda: _doctor_service_check(
+                            node_status,
+                            service_name="intentkit",
+                            reachable_key="intentkit_reachable",
+                            error_key="intentkit_probe_error",
+                        ),
+                    )
+                )
+                checks.append(
+                    _run_check(
+                        "intentkit_api",
+                        lambda: _doctor_service_check(
+                            node_status,
+                            service_name="intentkit_api",
+                            reachable_key="intentkit_api_reachable",
+                            error_key="intentkit_api_error",
+                        ),
+                    )
+                )
+            if profile.get("monitoring_enabled"):
                 checks.append(
                     _run_check(
                         "grafana",
@@ -2991,6 +3129,38 @@ def build_parser() -> argparse.ArgumentParser:
         help="host port to publish for the dashboard",
     )
     create_parser.add_argument(
+        "--enable-intentkit",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help=(
+            "start the optional xian-intentkit stack alongside the bootstrap "
+            "node runtime"
+        ),
+    )
+    create_parser.add_argument(
+        "--intentkit-network-id",
+        choices=sorted(SUPPORTED_INTENTKIT_NETWORK_IDS),
+        help=(
+            "xian-intentkit Xian network slot to target for the bootstrap "
+            "node; defaults to xian-localnet for newly created networks"
+        ),
+    )
+    create_parser.add_argument(
+        "--intentkit-host",
+        type=str,
+        help="host interface to bind for the xian-intentkit frontend port",
+    )
+    create_parser.add_argument(
+        "--intentkit-port",
+        type=int,
+        help="host port to publish for the xian-intentkit frontend",
+    )
+    create_parser.add_argument(
+        "--intentkit-api-port",
+        type=int,
+        help="host port to publish for the xian-intentkit API",
+    )
+    create_parser.add_argument(
         "--output",
         type=Path,
         help=(
@@ -3279,6 +3449,36 @@ def build_parser() -> argparse.ArgumentParser:
         "--dashboard-port",
         type=int,
         help="host port to publish for the dashboard",
+    )
+    join_parser.add_argument(
+        "--enable-intentkit",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="start the optional xian-intentkit stack for this node runtime",
+    )
+    join_parser.add_argument(
+        "--intentkit-network-id",
+        choices=sorted(SUPPORTED_INTENTKIT_NETWORK_IDS),
+        help=(
+            "xian-intentkit Xian network slot for this profile; defaults to "
+            "a canonical mapping for mainnet/testnet/devnet and xian-localnet "
+            "for local or private networks"
+        ),
+    )
+    join_parser.add_argument(
+        "--intentkit-host",
+        type=str,
+        help="host interface to bind for the xian-intentkit frontend port",
+    )
+    join_parser.add_argument(
+        "--intentkit-port",
+        type=int,
+        help="host port to publish for the xian-intentkit frontend",
+    )
+    join_parser.add_argument(
+        "--intentkit-api-port",
+        type=int,
+        help="host port to publish for the xian-intentkit API",
     )
     join_parser.add_argument(
         "--output",

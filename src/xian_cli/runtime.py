@@ -89,6 +89,11 @@ def run_backend_command(
     monitoring_enabled: bool = False,
     dashboard_host: str | None = None,
     dashboard_port: int | None = None,
+    intentkit_enabled: bool = False,
+    intentkit_network_id: str | None = None,
+    intentkit_host: str | None = None,
+    intentkit_port: int | None = None,
+    intentkit_api_port: int | None = None,
     wait_for_health: bool | None = None,
     rpc_timeout_seconds: float | None = None,
     rpc_url: str | None = None,
@@ -98,12 +103,22 @@ def run_backend_command(
     cmd.append("--service-node" if service_node else "--no-service-node")
     cmd.append("--dashboard" if dashboard_enabled else "--no-dashboard")
     cmd.append("--monitoring" if monitoring_enabled else "--no-monitoring")
+    cmd.append("--intentkit" if intentkit_enabled else "--no-intentkit")
 
     if dashboard_enabled:
         if dashboard_host is not None:
             cmd.extend(["--dashboard-host", dashboard_host])
         if dashboard_port is not None:
             cmd.extend(["--dashboard-port", str(dashboard_port)])
+    if intentkit_enabled:
+        if intentkit_network_id is not None:
+            cmd.extend(["--intentkit-network-id", intentkit_network_id])
+        if intentkit_host is not None:
+            cmd.extend(["--intentkit-host", intentkit_host])
+        if intentkit_port is not None:
+            cmd.extend(["--intentkit-port", str(intentkit_port)])
+        if intentkit_api_port is not None:
+            cmd.extend(["--intentkit-api-port", str(intentkit_api_port)])
 
     if wait_for_health is not None:
         cmd.append(
@@ -156,6 +171,11 @@ def start_xian_stack_node(
     monitoring_enabled: bool = False,
     dashboard_host: str = "127.0.0.1",
     dashboard_port: int = 8080,
+    intentkit_enabled: bool = False,
+    intentkit_network_id: str | None = None,
+    intentkit_host: str = "127.0.0.1",
+    intentkit_port: int = 38000,
+    intentkit_api_port: int = 38080,
     wait_for_rpc: bool = True,
     rpc_timeout_seconds: float = DEFAULT_RPC_TIMEOUT_SECONDS,
 ) -> dict:
@@ -168,6 +188,11 @@ def start_xian_stack_node(
         monitoring_enabled=monitoring_enabled,
         dashboard_host=dashboard_host,
         dashboard_port=dashboard_port,
+        intentkit_enabled=intentkit_enabled,
+        intentkit_network_id=intentkit_network_id,
+        intentkit_host=intentkit_host,
+        intentkit_port=intentkit_port,
+        intentkit_api_port=intentkit_api_port,
         wait_for_health=wait_for_rpc,
         rpc_timeout_seconds=rpc_timeout_seconds,
         rpc_url="http://127.0.0.1:26657/status",
@@ -183,6 +208,11 @@ def stop_xian_stack_node(
     monitoring_enabled: bool = False,
     dashboard_host: str = "127.0.0.1",
     dashboard_port: int = 8080,
+    intentkit_enabled: bool = False,
+    intentkit_network_id: str | None = None,
+    intentkit_host: str = "127.0.0.1",
+    intentkit_port: int = 38000,
+    intentkit_api_port: int = 38080,
 ) -> dict:
     return run_backend_command(
         stack_dir,
@@ -193,6 +223,11 @@ def stop_xian_stack_node(
         monitoring_enabled=monitoring_enabled,
         dashboard_host=dashboard_host,
         dashboard_port=dashboard_port,
+        intentkit_enabled=intentkit_enabled,
+        intentkit_network_id=intentkit_network_id,
+        intentkit_host=intentkit_host,
+        intentkit_port=intentkit_port,
+        intentkit_api_port=intentkit_api_port,
     )
 
 
@@ -205,6 +240,11 @@ def get_xian_stack_node_status(
     monitoring_enabled: bool = False,
     dashboard_host: str = "127.0.0.1",
     dashboard_port: int = 8080,
+    intentkit_enabled: bool = False,
+    intentkit_network_id: str | None = None,
+    intentkit_host: str = "127.0.0.1",
+    intentkit_port: int = 38000,
+    intentkit_api_port: int = 38080,
 ) -> dict:
     return run_backend_command(
         stack_dir,
@@ -215,6 +255,11 @@ def get_xian_stack_node_status(
         monitoring_enabled=monitoring_enabled,
         dashboard_host=dashboard_host,
         dashboard_port=dashboard_port,
+        intentkit_enabled=intentkit_enabled,
+        intentkit_network_id=intentkit_network_id,
+        intentkit_host=intentkit_host,
+        intentkit_port=intentkit_port,
+        intentkit_api_port=intentkit_api_port,
     )
 
 
@@ -227,6 +272,11 @@ def get_xian_stack_node_endpoints(
     monitoring_enabled: bool = False,
     dashboard_host: str = "127.0.0.1",
     dashboard_port: int = 8080,
+    intentkit_enabled: bool = False,
+    intentkit_network_id: str | None = None,
+    intentkit_host: str = "127.0.0.1",
+    intentkit_port: int = 38000,
+    intentkit_api_port: int = 38080,
 ) -> dict:
     return run_backend_command(
         stack_dir,
@@ -237,6 +287,11 @@ def get_xian_stack_node_endpoints(
         monitoring_enabled=monitoring_enabled,
         dashboard_host=dashboard_host,
         dashboard_port=dashboard_port,
+        intentkit_enabled=intentkit_enabled,
+        intentkit_network_id=intentkit_network_id,
+        intentkit_host=intentkit_host,
+        intentkit_port=intentkit_port,
+        intentkit_api_port=intentkit_api_port,
     )
 
 
@@ -249,6 +304,11 @@ def get_xian_stack_node_health(
     monitoring_enabled: bool = False,
     dashboard_host: str = "127.0.0.1",
     dashboard_port: int = 8080,
+    intentkit_enabled: bool = False,
+    intentkit_network_id: str | None = None,
+    intentkit_host: str = "127.0.0.1",
+    intentkit_port: int = 38000,
+    intentkit_api_port: int = 38080,
     rpc_url: str = "http://127.0.0.1:26657/status",
     check_disk: bool = True,
 ) -> dict:
@@ -261,6 +321,11 @@ def get_xian_stack_node_health(
         monitoring_enabled=monitoring_enabled,
         dashboard_host=dashboard_host,
         dashboard_port=dashboard_port,
+        intentkit_enabled=intentkit_enabled,
+        intentkit_network_id=intentkit_network_id,
+        intentkit_host=intentkit_host,
+        intentkit_port=intentkit_port,
+        intentkit_api_port=intentkit_api_port,
         rpc_url=rpc_url,
         check_disk=check_disk,
     )

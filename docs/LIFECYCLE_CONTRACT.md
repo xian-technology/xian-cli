@@ -198,6 +198,11 @@ The node profile is the machine-local source of truth. Target fields:
   "pruning_enabled": false,
   "blocks_to_keep": 100000,
   "monitoring_enabled": false,
+  "intentkit_enabled": false,
+  "intentkit_network_id": "xian-mainnet",
+  "intentkit_host": "127.0.0.1",
+  "intentkit_port": 38000,
+  "intentkit_api_port": 38080,
   "block_policy_mode": "on_demand",
   "block_policy_interval": "0s"
 }
@@ -218,8 +223,15 @@ Rules:
 - `network create` may generate a local `genesis.json`, but that file remains a
   derived network artifact rather than a place to hide node-local state
 - templates may provide defaults for runtime backend, tracing, bootstrap
-  validator names, service-node mode, dashboard exposure, monitoring, and
-  pruning, but explicit CLI flags should still win
+  validator names, service-node mode, dashboard exposure, monitoring,
+  `xian-intentkit` exposure, and pruning, but explicit CLI flags should still
+  win
+- `intentkit_network_id` selects the Xian network slot inside
+  `xian-intentkit`; canonical networks map to `xian-mainnet`, `xian-testnet`,
+  or `xian-devnet`, while local and private stack-managed networks default to
+  `xian-localnet`
+- stack-managed `xian-intentkit` uses the node's resolved RPC endpoint and
+  chain ID to generate `xian-intentkit/deployment/.env`
 - `network join` may generate validator key material, but it should still write
   files under the workspace and store only a reference in the profile
 - node profiles should not duplicate network-owned seeds, snapshot URLs, or
@@ -252,11 +264,19 @@ Rules:
   - start
   - stop
   - status
+  - optional stack-managed `xian-intentkit` bring-up and shutdown through the
+    same start/stop/status/endpoints/health surface
   - localnet-init
   - localnet-build
   - localnet-up
   - localnet-down
   - localnet-status
+
+### `xian-intentkit`
+
+- remains an independent repo with its own Compose topology and env contract
+- should not be copied into `xian-stack`; the stack owns only the thin adapter
+  layer, generated env handoff, and published local ports
 
 These are now exposed through the machine-readable `scripts/backend.py`
 wrapper in `xian-stack`. Internally that wrapper may still call `make` and

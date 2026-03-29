@@ -58,7 +58,8 @@ uv run xian snapshot restore mainnet-node
 - network template and solution-pack discovery
 - network creation and network join flows
 - node initialization, start, stop, and status
-- endpoint and health discovery
+- endpoint and health discovery, including optional dashboard, monitoring, and
+  stack-managed `xian-intentkit`
 - snapshot restore and doctor diagnostics
 - solution-pack starter flows built on `xian-configs`
 

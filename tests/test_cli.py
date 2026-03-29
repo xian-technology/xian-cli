@@ -2869,6 +2869,8 @@ class SnapshotCommandTests(unittest.TestCase):
                         "validator-1",
                         "--base-dir",
                         str(base_dir),
+                        "--rpc-url",
+                        "http://127.0.0.1:1/status",
                     ]
                 )
 
@@ -3068,6 +3070,8 @@ class SnapshotCommandTests(unittest.TestCase):
                             "validator-1",
                             "--base-dir",
                             str(base_dir),
+                            "--rpc-url",
+                            "http://127.0.0.1:1/status",
                             "--yes",
                         ]
                     )
@@ -3150,6 +3154,11 @@ class RuntimeHelperTests(unittest.TestCase):
             monitoring_enabled=True,
             dashboard_host="0.0.0.0",
             dashboard_port=18080,
+            intentkit_enabled=False,
+            intentkit_network_id=None,
+            intentkit_host="127.0.0.1",
+            intentkit_port=38000,
+            intentkit_api_port=38080,
             wait_for_health=True,
             rpc_timeout_seconds=12.5,
             rpc_url="http://127.0.0.1:26657/status",
@@ -3183,6 +3192,11 @@ class RuntimeHelperTests(unittest.TestCase):
             monitoring_enabled=True,
             dashboard_host="0.0.0.0",
             dashboard_port=18080,
+            intentkit_enabled=False,
+            intentkit_network_id=None,
+            intentkit_host="127.0.0.1",
+            intentkit_port=38000,
+            intentkit_api_port=38080,
         )
         self.assertEqual(result["container_target"], "abci-down")
 
@@ -3217,6 +3231,11 @@ class RuntimeHelperTests(unittest.TestCase):
             monitoring_enabled=True,
             dashboard_host="0.0.0.0",
             dashboard_port=18080,
+            intentkit_enabled=False,
+            intentkit_network_id=None,
+            intentkit_host="127.0.0.1",
+            intentkit_port=38000,
+            intentkit_api_port=38080,
         )
 
     def test_get_xian_stack_node_endpoints_uses_backend_command(self) -> None:
@@ -3251,6 +3270,11 @@ class RuntimeHelperTests(unittest.TestCase):
             monitoring_enabled=True,
             dashboard_host="0.0.0.0",
             dashboard_port=18080,
+            intentkit_enabled=False,
+            intentkit_network_id=None,
+            intentkit_host="127.0.0.1",
+            intentkit_port=38000,
+            intentkit_api_port=38080,
         )
 
     def test_get_xian_stack_node_health_uses_backend_command(self) -> None:
@@ -3282,6 +3306,11 @@ class RuntimeHelperTests(unittest.TestCase):
             monitoring_enabled=True,
             dashboard_host="0.0.0.0",
             dashboard_port=18080,
+            intentkit_enabled=False,
+            intentkit_network_id=None,
+            intentkit_host="127.0.0.1",
+            intentkit_port=38000,
+            intentkit_api_port=38080,
             rpc_url="http://127.0.0.1:26657/status",
             check_disk=False,
         )

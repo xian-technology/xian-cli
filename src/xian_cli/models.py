@@ -25,6 +25,12 @@ SUPPORTED_MONITORING_PROFILES = {
     "local_stack",
     "service_node",
 }
+SUPPORTED_INTENTKIT_NETWORK_IDS = {
+    "xian-mainnet",
+    "xian-testnet",
+    "xian-devnet",
+    "xian-localnet",
+}
 SUPPORTED_APP_LOG_LEVELS = {
     "TRACE",
     "DEBUG",
@@ -288,6 +294,26 @@ def normalize_node_profile(payload: dict) -> dict:
         if "dashboard_host" in payload
         else "127.0.0.1",
         "dashboard_port": _require_int(payload, "dashboard_port", default=8080),
+        "intentkit_enabled": _require_bool(
+            payload, "intentkit_enabled", default=False
+        ),
+        "intentkit_network_id": _require_optional_choice(
+            payload,
+            "intentkit_network_id",
+            supported=SUPPORTED_INTENTKIT_NETWORK_IDS,
+            default=None,
+        ),
+        "intentkit_host": _require_str(payload, "intentkit_host")
+        if "intentkit_host" in payload
+        else "127.0.0.1",
+        "intentkit_port": _require_int(
+            payload,
+            "intentkit_port",
+            default=38000,
+        ),
+        "intentkit_api_port": _require_int(
+            payload, "intentkit_api_port", default=38080
+        ),
     }
 
 
@@ -367,6 +393,26 @@ def normalize_network_template(payload: dict) -> dict:
         if "dashboard_host" in payload
         else "127.0.0.1",
         "dashboard_port": _require_int(payload, "dashboard_port", default=8080),
+        "intentkit_enabled": _require_bool(
+            payload, "intentkit_enabled", default=False
+        ),
+        "intentkit_network_id": _require_optional_choice(
+            payload,
+            "intentkit_network_id",
+            supported=SUPPORTED_INTENTKIT_NETWORK_IDS,
+            default=None,
+        ),
+        "intentkit_host": _require_str(payload, "intentkit_host")
+        if "intentkit_host" in payload
+        else "127.0.0.1",
+        "intentkit_port": _require_int(
+            payload,
+            "intentkit_port",
+            default=38000,
+        ),
+        "intentkit_api_port": _require_int(
+            payload, "intentkit_api_port", default=38080
+        ),
         "pruning_enabled": _require_bool(
             payload, "pruning_enabled", default=False
         ),
@@ -575,6 +621,11 @@ class NodeProfile:
     monitoring_enabled: bool = False
     dashboard_host: str = "127.0.0.1"
     dashboard_port: int = 8080
+    intentkit_enabled: bool = False
+    intentkit_network_id: str | None = None
+    intentkit_host: str = "127.0.0.1"
+    intentkit_port: int = 38000
+    intentkit_api_port: int = 38080
     schema_version: int = SCHEMA_VERSION
 
     def to_dict(self) -> dict:
@@ -611,6 +662,11 @@ class NetworkTemplate:
     monitoring_enabled: bool = False
     dashboard_host: str = "127.0.0.1"
     dashboard_port: int = 8080
+    intentkit_enabled: bool = False
+    intentkit_network_id: str | None = None
+    intentkit_host: str = "127.0.0.1"
+    intentkit_port: int = 38000
+    intentkit_api_port: int = 38080
     pruning_enabled: bool = False
     blocks_to_keep: int = 100000
     schema_version: int = SCHEMA_VERSION
