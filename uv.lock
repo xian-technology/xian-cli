@@ -836,7 +836,7 @@ wheels = [
 ]
 
 [[package]]
-name = "xian-abci"
+name = "xian-tech-abci"
 source = { editable = "../xian-abci" }
 dependencies = [
     { name = "aiohttp" },
@@ -845,8 +845,8 @@ dependencies = [
     { name = "prometheus-client" },
     { name = "protobuf" },
     { name = "pynacl" },
-    { name = "xian-contracting" },
     { name = "xian-tech-accounts" },
+    { name = "xian-tech-contracting" },
     { name = "xian-tech-runtime-types" },
 ]
 
@@ -858,9 +858,9 @@ requires-dist = [
     { name = "prometheus-client", specifier = ">=0.22.1,<0.23" },
     { name = "protobuf", specifier = "==6.33.5" },
     { name = "pynacl", specifier = ">=1.6.2,<2" },
-    { name = "xian-contracting", editable = "../xian-contracting" },
-    { name = "xian-native-tracer", marker = "extra == 'native'", editable = "../xian-contracting/packages/xian-native-tracer" },
     { name = "xian-tech-accounts", editable = "../xian-contracting/packages/xian-accounts" },
+    { name = "xian-tech-contracting", editable = "../xian-contracting" },
+    { name = "xian-tech-native-tracer", marker = "extra == 'native'", editable = "../xian-contracting/packages/xian-native-tracer" },
     { name = "xian-tech-runtime-types", editable = "../xian-contracting/packages/xian-runtime-types" },
 ]
 provides-extras = ["native"]
@@ -869,37 +869,6 @@ provides-extras = ["native"]
 dev = [
     { name = "grpcio-tools", specifier = "==1.78.0" },
     { name = "parameterized", specifier = ">=0.9.0,<0.10" },
-    { name = "pytest", specifier = ">=9.0.2,<10" },
-    { name = "pytest-cov", specifier = ">=7.0.0,<8" },
-    { name = "ruff", specifier = ">=0.15.6,<0.16" },
-]
-
-[[package]]
-name = "xian-contracting"
-version = "1.0.1"
-source = { editable = "../xian-contracting" }
-dependencies = [
-    { name = "autopep8" },
-    { name = "cachetools" },
-    { name = "lmdb" },
-    { name = "pynacl" },
-    { name = "xian-tech-runtime-types" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "autopep8", specifier = ">=1.5.7,<2" },
-    { name = "cachetools", specifier = ">=5,<8" },
-    { name = "lmdb", specifier = ">=1.6,<2" },
-    { name = "pynacl", specifier = ">=1.5.0,<2" },
-    { name = "xian-native-tracer", marker = "extra == 'native'", editable = "../xian-contracting/packages/xian-native-tracer" },
-    { name = "xian-tech-runtime-types", editable = "../xian-contracting/packages/xian-runtime-types" },
-    { name = "xian-zk", marker = "extra == 'zk'", editable = "../xian-contracting/packages/xian-zk" },
-]
-provides-extras = ["native", "zk"]
-
-[package.metadata.requires-dev]
-dev = [
     { name = "pytest", specifier = ">=9.0.2,<10" },
     { name = "pytest-cov", specifier = ">=7.0.0,<8" },
     { name = "ruff", specifier = ">=0.15.6,<0.16" },
@@ -922,7 +891,7 @@ version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "pynacl" },
-    { name = "xian-abci" },
+    { name = "xian-tech-abci" },
 ]
 
 [package.dev-dependencies]
@@ -935,7 +904,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "pynacl", specifier = ">=1.6.2,<2" },
-    { name = "xian-abci", editable = "../xian-abci" },
+    { name = "xian-tech-abci", editable = "../xian-abci" },
 ]
 
 [package.metadata.requires-dev]
@@ -943,6 +912,37 @@ dev = [
     { name = "pytest", specifier = ">=9.0.2,<10" },
     { name = "pytest-cov", specifier = ">=7.0.0,<8" },
     { name = "ruff", specifier = ">=0.15.5,<0.16" },
+]
+
+[[package]]
+name = "xian-tech-contracting"
+version = "1.0.1"
+source = { editable = "../xian-contracting" }
+dependencies = [
+    { name = "autopep8" },
+    { name = "cachetools" },
+    { name = "lmdb" },
+    { name = "pynacl" },
+    { name = "xian-tech-runtime-types" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "autopep8", specifier = ">=1.5.7,<2" },
+    { name = "cachetools", specifier = ">=5,<8" },
+    { name = "lmdb", specifier = ">=1.6,<2" },
+    { name = "pynacl", specifier = ">=1.5.0,<2" },
+    { name = "xian-tech-native-tracer", marker = "extra == 'native'", editable = "../xian-contracting/packages/xian-native-tracer" },
+    { name = "xian-tech-runtime-types", editable = "../xian-contracting/packages/xian-runtime-types" },
+    { name = "xian-tech-zk", marker = "extra == 'zk'", editable = "../xian-contracting/packages/xian-zk" },
+]
+provides-extras = ["native", "zk"]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "pytest", specifier = ">=9.0.2,<10" },
+    { name = "pytest-cov", specifier = ">=7.0.0,<8" },
+    { name = "ruff", specifier = ">=0.15.6,<0.16" },
 ]
 
 [[package]]

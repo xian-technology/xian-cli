@@ -20,7 +20,7 @@ def get_node_setup_module():
     except RuntimeError as exc:
         raise RuntimeError(
             "xian-abci helpers are required for node init; "
-            "install xian-abci in the current environment"
+            "install xian-tech-abci in the current environment"
         ) from exc
 
 
@@ -31,7 +31,7 @@ def get_node_admin_module():
     except RuntimeError as exc:
         raise RuntimeError(
             "xian-abci helpers are required for snapshot restore; "
-            "install xian-abci in the current environment"
+            "install xian-tech-abci in the current environment"
         ) from exc
 
 
@@ -42,5 +42,5 @@ def get_genesis_builder_module():
     except RuntimeError as exc:
         raise RuntimeError(
             "xian-abci helpers are required for network creation; "
-            "install xian-abci in the current environment"
+            "install xian-tech-abci in the current environment"
         ) from exc

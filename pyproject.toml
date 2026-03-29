@@ -10,7 +10,7 @@ readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "pynacl>=1.6.2,<2",
-    "xian-abci",
+    "xian-tech-abci",
 ]
 
 [dependency-groups]
@@ -40,6 +40,6 @@ target-version = "py312"
 select = ["E", "F", "I"]
 
 [tool.uv.sources]
-xian-abci = { path = "../xian-abci", editable = true }
-xian-contracting = { path = "../xian-contracting", editable = true }
-xian-py = { path = "../xian-py", editable = true }
+xian-tech-abci = { path = "../xian-abci", editable = true }
+xian-tech-contracting = { path = "../xian-contracting", editable = true }
+xian-tech-py = { path = "../xian-py", editable = true }
