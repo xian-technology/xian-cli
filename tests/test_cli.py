@@ -45,9 +45,9 @@ CANONICAL_DEVNET_GENESIS = (
     WORKSPACE_ROOT / "xian-configs" / "networks" / "devnet" / "genesis.json"
 )
 CANONICAL_NODE_RELEASE_MANIFEST = json.loads(
-    (
-        WORKSPACE_ROOT / "xian-stack" / "release-manifest.json"
-    ).read_text(encoding="utf-8")
+    (WORKSPACE_ROOT / "xian-stack" / "release-manifest.json").read_text(
+        encoding="utf-8"
+    )
 )
 CANONICAL_RELEASE_INTEGRATED_IMAGE = (
     "ghcr.io/xian-technology/xian-node@sha256:"
@@ -234,8 +234,7 @@ class NetworkManifestTests(unittest.TestCase):
                         "runtime_backend": "xian-stack",
                         "node_image_mode": "registry",
                         "node_integrated_image": (
-                            "ghcr.io/xian-technology/"
-                            "xian-node@sha256:abc"
+                            "ghcr.io/xian-technology/xian-node@sha256:abc"
                         ),
                         "genesis_source": "./genesis.json",
                         "snapshot_url": None,
@@ -475,12 +474,10 @@ class NetworkManifestTests(unittest.TestCase):
                         "tracer_mode": "native_instruction_v1",
                         "node_image_mode": "registry",
                         "node_integrated_image": (
-                            "ghcr.io/xian-technology/"
-                            "xian-node@sha256:abc"
+                            "ghcr.io/xian-technology/xian-node@sha256:abc"
                         ),
                         "node_split_image": (
-                            "ghcr.io/xian-technology/"
-                            "xian-node-split@sha256:def"
+                            "ghcr.io/xian-technology/xian-node-split@sha256:def"
                         ),
                         "node_release_manifest": (
                             CANONICAL_NODE_RELEASE_MANIFEST
@@ -661,12 +658,10 @@ class NetworkManifestTests(unittest.TestCase):
                         "tracer_mode": "python_line_v1",
                         "node_image_mode": "registry",
                         "node_integrated_image": (
-                            "ghcr.io/xian-technology/"
-                            "xian-node@sha256:abc"
+                            "ghcr.io/xian-technology/xian-node@sha256:abc"
                         ),
                         "node_split_image": (
-                            "ghcr.io/xian-technology/"
-                            "xian-node-split@sha256:def"
+                            "ghcr.io/xian-technology/xian-node-split@sha256:def"
                         ),
                         "node_release_manifest": (
                             CANONICAL_NODE_RELEASE_MANIFEST
