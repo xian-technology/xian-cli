@@ -160,8 +160,8 @@ def _effective_node_release_manifest(
     profile_manifest = profile.get("node_release_manifest")
     if isinstance(profile_manifest, dict):
         return profile_manifest
-    network_manifest = None if network is None else network.get(
-        "node_release_manifest"
+    network_manifest = (
+        None if network is None else network.get("node_release_manifest")
     )
     return network_manifest if isinstance(network_manifest, dict) else None
 
@@ -2263,9 +2263,7 @@ def _summarize_node_status(result: dict[str, object]) -> dict[str, object]:
         "node_integrated_image": result.get("profile", {}).get(
             "node_integrated_image"
         ),
-        "node_split_image": result.get("profile", {}).get(
-            "node_split_image"
-        ),
+        "node_split_image": result.get("profile", {}).get("node_split_image"),
     }
 
     release_manifest = result.get("node_release_manifest")
@@ -3441,8 +3439,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--node-image-mode",
         choices=sorted(SUPPORTED_NODE_IMAGE_MODES),
         help=(
-            "node image source override; defaults to the network manifest "
-            "value"
+            "node image source override; defaults to the network manifest value"
         ),
     )
     join_parser.add_argument(

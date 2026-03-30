@@ -129,9 +129,7 @@ def _normalize_node_release_manifest(
     if not isinstance(value, dict):
         raise ValueError(f"{key} must be an object when provided")
     if value.get("schema_version") != SCHEMA_VERSION:
-        raise ValueError(
-            f"{key}.schema_version must be {SCHEMA_VERSION}"
-        )
+        raise ValueError(f"{key}.schema_version must be {SCHEMA_VERSION}")
 
     components_raw = value.get("components")
     if not isinstance(components_raw, dict) or not components_raw:
@@ -139,9 +137,7 @@ def _normalize_node_release_manifest(
     components: dict[str, dict[str, str]] = {}
     for component_name, component in components_raw.items():
         if not isinstance(component_name, str) or not component_name:
-            raise ValueError(
-                f"{key}.components keys must be non-empty strings"
-            )
+            raise ValueError(f"{key}.components keys must be non-empty strings")
         if not isinstance(component, dict):
             raise ValueError(
                 f"{key}.components.{component_name} must be an object"
@@ -205,9 +201,7 @@ def _require_node_image_mode(payload: dict, key: str) -> str:
     return value
 
 
-def _require_optional_node_image_mode(
-    payload: dict, key: str
-) -> str | None:
+def _require_optional_node_image_mode(payload: dict, key: str) -> str | None:
     value = payload.get(key)
     if value is None:
         return None
@@ -231,9 +225,7 @@ def _validate_node_image_config(
             "node_integrated_image and node_split_image require "
             "node_image_mode=registry"
         )
-    if mode == "registry" and (
-        integrated_image is None or split_image is None
-    ):
+    if mode == "registry" and (integrated_image is None or split_image is None):
         raise ValueError(
             "registry node image mode requires both "
             "node_integrated_image and node_split_image"
@@ -333,9 +325,7 @@ def normalize_node_profile(payload: dict) -> dict:
 
     node_image_mode, node_integrated_image, node_split_image = (
         _validate_node_image_config(
-            mode=_require_optional_node_image_mode(
-                payload, "node_image_mode"
-            ),
+            mode=_require_optional_node_image_mode(payload, "node_image_mode"),
             integrated_image=_require_optional_str(
                 payload, "node_integrated_image"
             ),
