@@ -1315,6 +1315,62 @@ def _load_genesis_payload(
     return read_json(genesis_path)
 
 
+def _build_preset_genesis_payload(
+    *,
+    base_dir: Path,
+    chain_id: str,
+    genesis_preset: str,
+    genesis_time: str | None,
+    configs_dir: Path | None,
+) -> dict:
+    genesis_builder = get_genesis_builder_module()
+    resolved_configs_dir = resolve_configs_dir(base_dir, explicit=configs_dir)
+    return genesis_builder.build_bundle_network_genesis(
+        chain_id=chain_id,
+        network=genesis_preset,
+        contracts_dir=resolved_configs_dir / "contracts",
+        genesis_time=genesis_time,
+    )
+
+
+def _resolve_effective_genesis_payload(
+    *,
+    profile: dict,
+    network: dict,
+    base_dir: Path,
+    manifest_path: Path,
+    configs_dir: Path | None,
+) -> tuple[dict, str]:
+    genesis_source = profile.get("genesis_url") or network.get("genesis_source")
+    if genesis_source:
+        return (
+            _load_genesis_payload(
+                genesis_source,
+                base_dir=base_dir,
+                manifest_path=manifest_path,
+            ),
+            genesis_source,
+        )
+
+    genesis_preset = network.get("genesis_preset")
+    if genesis_preset:
+        return (
+            _build_preset_genesis_payload(
+                base_dir=base_dir,
+                chain_id=network["chain_id"],
+                genesis_preset=genesis_preset,
+                genesis_time=network.get("genesis_time"),
+                configs_dir=configs_dir,
+            ),
+            f"preset:{genesis_preset}",
+        )
+
+    raise ValueError(
+        "no genesis source configured; set genesis_source or genesis_preset "
+        "in the network manifest"
+    )
+
+
 def _extract_priv_validator_key(payload: dict) -> dict:
     if "priv_validator_key" in payload:
         return payload["priv_validator_key"]
@@ -1853,17 +1909,12 @@ def _initialize_node_from_args(args: argparse.Namespace) -> dict:
     validator_key_payload = _extract_priv_validator_key(
         read_json(validator_key_ref)
     )
-    genesis_source = profile.get("genesis_url") or network.get("genesis_source")
-    if not genesis_source:
-        raise ValueError(
-            "no genesis source configured; "
-            "set genesis_source in the network manifest"
-        )
-
-    genesis = _load_genesis_payload(
-        genesis_source,
+    genesis, effective_genesis_source = _resolve_effective_genesis_payload(
+        profile=profile,
+        network=network,
         base_dir=base_dir,
         manifest_path=network_path,
+        configs_dir=args.configs_dir,
     )
 
     if genesis.get("chain_id") and genesis["chain_id"] != network["chain_id"]:
@@ -1952,6 +2003,7 @@ def _initialize_node_from_args(args: argparse.Namespace) -> dict:
         explicit_snapshot_url=getattr(args, "snapshot_url", None),
     )
     result["effective_snapshot_url"] = effective_snapshot_url
+    result["effective_genesis_source"] = effective_genesis_source
     result["snapshot_restored"] = False
     if getattr(args, "restore_snapshot", False):
         snapshot_result = _restore_snapshot(
@@ -2354,7 +2406,13 @@ def _collect_node_status(
         "node_key_present": node_key_path.exists(),
         "priv_validator_state_present": validator_state_path.exists(),
         "effective_genesis_source": (
-            profile.get("genesis_url") or network.get("genesis_source")
+            profile.get("genesis_url")
+            or network.get("genesis_source")
+            or (
+                None
+                if network.get("genesis_preset") is None
+                else f"preset:{network['genesis_preset']}"
+            )
         ),
         "effective_snapshot_url": _resolve_effective_snapshot_url(
             profile=profile,

@@ -41,8 +41,11 @@ from xian_cli.runtime import (
 )
 
 WORKSPACE_ROOT = Path(__file__).resolve().parents[2]
-CANONICAL_DEVNET_GENESIS = (
-    WORKSPACE_ROOT / "xian-configs" / "networks" / "devnet" / "genesis.json"
+TEST_FIXTURE_GENESIS = (
+    Path(__file__).resolve().parent / "fixtures" / "genesis.json"
+)
+CANONICAL_DEVNET_MANIFEST = (
+    WORKSPACE_ROOT / "xian-configs" / "networks" / "devnet" / "manifest.json"
 )
 CANONICAL_NODE_RELEASE_MANIFEST = json.loads(
     (WORKSPACE_ROOT / "xian-stack" / "release-manifest.json").read_text(
@@ -219,6 +222,14 @@ class NetworkManifestTests(unittest.TestCase):
             self.assertEqual(manifest["tracer_mode"], "python_line_v1")
             self.assertEqual(manifest["node_image_mode"], "local_build")
 
+    def test_read_network_manifest_accepts_preset_built_genesis(self) -> None:
+        manifest = read_network_manifest(CANONICAL_DEVNET_MANIFEST)
+        self.assertIsNone(manifest["genesis_source"])
+        self.assertEqual(manifest["genesis_preset"], "devnet")
+        self.assertEqual(
+            manifest["genesis_time"], "2026-03-30T00:00:00.000000Z"
+        )
+
     def test_read_network_manifest_rejects_incomplete_registry_image_config(
         self,
     ) -> None:
@@ -314,7 +325,7 @@ class NetworkManifestTests(unittest.TestCase):
                         "single-node-indexed",
                         "--generate-validator-key",
                         "--genesis-source",
-                        str(CANONICAL_DEVNET_GENESIS),
+                        str(TEST_FIXTURE_GENESIS),
                     ]
                 )
 
@@ -363,7 +374,7 @@ class NetworkManifestTests(unittest.TestCase):
                         "join",
                         "validator-1",
                         "--network",
-                        "mainnet",
+                        "devnet",
                         "--seed",
                         "abc@127.0.0.1:26656",
                         "--service-node",
@@ -380,25 +391,19 @@ class NetworkManifestTests(unittest.TestCase):
             profile = json.loads(output_path.read_text(encoding="utf-8"))
             self.assertEqual(profile["schema_version"], 1)
             self.assertEqual(profile["name"], "validator-1")
-            self.assertEqual(profile["network"], "mainnet")
+            self.assertEqual(profile["network"], "devnet")
             self.assertEqual(profile["moniker"], "validator-1")
             self.assertEqual(profile["seeds"], ["abc@127.0.0.1:26656"])
             self.assertTrue(profile["service_node"])
             self.assertTrue(profile["dashboard_enabled"])
             self.assertEqual(profile["dashboard_host"], "0.0.0.0")
             self.assertEqual(profile["dashboard_port"], 18080)
-            self.assertEqual(profile["block_policy_mode"], "on_demand")
-            self.assertEqual(profile["block_policy_interval"], "0s")
-            self.assertEqual(profile["tracer_mode"], "python_line_v1")
-            self.assertEqual(profile["node_image_mode"], "registry")
-            self.assertEqual(
-                profile["node_integrated_image"],
-                CANONICAL_RELEASE_INTEGRATED_IMAGE,
-            )
-            self.assertEqual(
-                profile["node_split_image"],
-                CANONICAL_RELEASE_SPLIT_IMAGE,
-            )
+            self.assertEqual(profile["block_policy_mode"], "idle_interval")
+            self.assertEqual(profile["block_policy_interval"], "5s")
+            self.assertEqual(profile["tracer_mode"], "native_instruction_v1")
+            self.assertEqual(profile["node_image_mode"], "local_build")
+            self.assertIsNone(profile["node_integrated_image"])
+            self.assertIsNone(profile["node_split_image"])
 
     def test_network_create_writes_dashboard_settings_to_bootstrap_profile(
         self,
@@ -435,7 +440,7 @@ class NetworkManifestTests(unittest.TestCase):
                         "--validator-key-ref",
                         str(key_dir / "validator_key_info.json"),
                         "--genesis-source",
-                        str(CANONICAL_DEVNET_GENESIS),
+                        str(TEST_FIXTURE_GENESIS),
                         "--enable-dashboard",
                         "--dashboard-host",
                         "0.0.0.0",
@@ -1026,7 +1031,7 @@ class NetworkManifestTests(unittest.TestCase):
                         "--base-dir",
                         tmp_dir,
                         "--network",
-                        "mainnet",
+                        "devnet",
                         "--validator-key-dir",
                         "keys/validator-1",
                     ]
@@ -1046,7 +1051,7 @@ class NetworkManifestTests(unittest.TestCase):
                         "--base-dir",
                         tmp_dir,
                         "--network",
-                        "mainnet",
+                        "devnet",
                         "--restore-snapshot",
                     ]
                 )
@@ -1056,7 +1061,7 @@ class NetworkManifestTests(unittest.TestCase):
             base_dir = Path(tmp_dir)
             (base_dir / "networks").mkdir()
 
-            genesis_source = CANONICAL_DEVNET_GENESIS
+            genesis_source = TEST_FIXTURE_GENESIS
 
             with redirect_stdout(io.StringIO()):
                 main(
@@ -1346,6 +1351,71 @@ class AbciBridgeTests(unittest.TestCase):
 
 
 class NodeInitTests(unittest.TestCase):
+    def test_node_init_materializes_home_from_canonical_preset_manifest(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            base_dir = Path(tmp_dir)
+            (base_dir / "nodes").mkdir()
+            (base_dir / "keys" / "validator-1").mkdir(parents=True)
+
+            with redirect_stdout(io.StringIO()):
+                main(
+                    [
+                        "keys",
+                        "validator",
+                        "generate",
+                        "--out-dir",
+                        str(base_dir / "keys" / "validator-1"),
+                    ]
+                )
+
+            stdout = io.StringIO()
+            with redirect_stdout(stdout):
+                exit_code = main(
+                    [
+                        "network",
+                        "join",
+                        "validator-1",
+                        "--base-dir",
+                        str(base_dir),
+                        "--configs-dir",
+                        str(WORKSPACE_ROOT / "xian-configs"),
+                        "--network",
+                        "devnet",
+                        "--validator-key-ref",
+                        str(
+                            base_dir
+                            / "keys"
+                            / "validator-1"
+                            / "validator_key_info.json"
+                        ),
+                        "--init-node",
+                        "--home",
+                        str(base_dir / ".cometbft"),
+                        "--output",
+                        str(base_dir / "nodes" / "validator-1.json"),
+                    ]
+                )
+
+            self.assertEqual(exit_code, 0)
+            result = json.loads(stdout.getvalue())
+            home = Path(result["node_init"]["home"])
+            rendered_genesis = json.loads(
+                (home / "config" / "genesis.json").read_text(encoding="utf-8")
+            )
+
+            self.assertEqual(rendered_genesis["chain_id"], "xian-devnet-1")
+            self.assertEqual(
+                result["node_init"]["effective_genesis_source"],
+                "preset:devnet",
+            )
+            self.assertEqual(len(rendered_genesis["validators"]), 2)
+            self.assertEqual(
+                rendered_genesis["abci_genesis"]["origin"],
+                {"sender": "", "signature": ""},
+            )
+
     def test_node_init_materializes_home(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             base_dir = Path(tmp_dir)
@@ -1353,7 +1423,7 @@ class NodeInitTests(unittest.TestCase):
             (base_dir / "nodes").mkdir()
             (base_dir / "keys" / "validator-1").mkdir(parents=True)
 
-            genesis_source = CANONICAL_DEVNET_GENESIS
+            genesis_source = TEST_FIXTURE_GENESIS
 
             with redirect_stdout(io.StringIO()):
                 main(
@@ -1666,7 +1736,7 @@ class NodeInitTests(unittest.TestCase):
             key_dir = base_dir / "keys" / "validator-1"
             key_dir.mkdir(parents=True)
 
-            genesis_source = CANONICAL_DEVNET_GENESIS
+            genesis_source = TEST_FIXTURE_GENESIS
 
             with redirect_stdout(io.StringIO()):
                 main(
@@ -1740,7 +1810,7 @@ class NodeInitTests(unittest.TestCase):
             (base_dir / "nodes").mkdir()
             (base_dir / "keys" / "validator-1").mkdir(parents=True)
 
-            genesis_source = CANONICAL_DEVNET_GENESIS
+            genesis_source = TEST_FIXTURE_GENESIS
 
             with redirect_stdout(io.StringIO()):
                 main(
@@ -1907,7 +1977,7 @@ class NodeInitTests(unittest.TestCase):
             key_dir.mkdir(parents=True)
             home = base_dir / ".cometbft"
 
-            genesis_source = CANONICAL_DEVNET_GENESIS
+            genesis_source = TEST_FIXTURE_GENESIS
 
             with redirect_stdout(io.StringIO()):
                 main(
@@ -2018,7 +2088,7 @@ class NodeRuntimeTests(unittest.TestCase):
                         "--chain-id",
                         "xian-local-1",
                         "--genesis-source",
-                        str(CANONICAL_DEVNET_GENESIS),
+                        str(TEST_FIXTURE_GENESIS),
                         "--output",
                         str(
                             base_dir
@@ -2377,7 +2447,7 @@ class NodeRuntimeTests(unittest.TestCase):
                         "--chain-id",
                         "xian-local-1",
                         "--genesis-source",
-                        str(CANONICAL_DEVNET_GENESIS),
+                        str(TEST_FIXTURE_GENESIS),
                         "--output",
                         str(
                             base_dir
@@ -2629,7 +2699,7 @@ class NodeRuntimeTests(unittest.TestCase):
                         "--chain-id",
                         "xian-local-1",
                         "--genesis-source",
-                        str(CANONICAL_DEVNET_GENESIS),
+                        str(TEST_FIXTURE_GENESIS),
                         "--output",
                         str(
                             base_dir
@@ -2970,7 +3040,7 @@ class DoctorTests(unittest.TestCase):
                         "--chain-id",
                         "xian-local-1",
                         "--genesis-source",
-                        str(CANONICAL_DEVNET_GENESIS),
+                        str(TEST_FIXTURE_GENESIS),
                         "--output",
                         str(
                             base_dir

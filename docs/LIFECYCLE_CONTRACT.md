@@ -102,7 +102,7 @@ For the current stack, this means building or starting the Docker runtime and en
 - Owner: `xian-cli`
 - Helpers: `xian-abci`
 - Inputs:
-  - join flow: genesis URL/file or bundled network source, optional snapshot URL
+  - join flow: genesis URL/file or deterministic preset manifest, optional snapshot URL
   - create flow: contract preset, founder key, network preset, validator set inputs
 - Outputs: materialized CometBFT genesis and optional snapshot payload
 
@@ -163,15 +163,16 @@ The network manifest is the network-level source of truth. Target fields:
 ```json
 {
   "schema_version": 1,
-  "name": "mainnet",
-  "chain_id": "xian-mainnet-1",
+  "name": "devnet",
+  "chain_id": "xian-devnet-1",
   "mode": "join",
   "runtime_backend": "xian-stack",
-  "genesis_source": "https://example/genesis.json",
-  "snapshot_url": "https://example/snapshot.tar.gz",
-  "seed_nodes": ["node_id@host:26656"],
-  "block_policy_mode": "on_demand",
-  "block_policy_interval": "0s"
+  "genesis_preset": "devnet",
+  "genesis_time": "2026-03-30T00:00:00.000000Z",
+  "snapshot_url": null,
+  "seed_nodes": [],
+  "block_policy_mode": "idle_interval",
+  "block_policy_interval": "5s"
 }
 ```
 
@@ -189,7 +190,7 @@ The node profile is the machine-local source of truth. Target fields:
 {
   "schema_version": 1,
   "name": "validator-1",
-  "network": "mainnet",
+  "network": "devnet",
   "moniker": "validator-1",
   "validator_key_ref": "./keys/validator-1/validator_key_info.json",
   "home": "~/.cometbft",
@@ -199,7 +200,7 @@ The node profile is the machine-local source of truth. Target fields:
   "blocks_to_keep": 100000,
   "monitoring_enabled": false,
   "intentkit_enabled": false,
-  "intentkit_network_id": "xian-mainnet",
+  "intentkit_network_id": "xian-devnet",
   "intentkit_host": "127.0.0.1",
   "intentkit_port": 38000,
   "intentkit_api_port": 38080,
@@ -222,6 +223,9 @@ Rules:
   changes whether time advances while the chain is idle
 - `network create` may generate a local `genesis.json`, but that file remains a
   derived network artifact rather than a place to hide node-local state
+- canonical preset manifests build genesis deterministically from a contract
+  bundle plus a fixed `genesis_time`; they do not carry a checked-in
+  `genesis.json`
 - templates may provide defaults for runtime backend, tracing, bootstrap
   validator names, service-node mode, dashboard exposure, monitoring,
   `xian-intentkit` exposure, and pruning, but explicit CLI flags should still

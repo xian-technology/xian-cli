@@ -293,6 +293,11 @@ def normalize_network_manifest(payload: dict) -> dict:
         )
     )
 
+    genesis_preset = _require_optional_str(payload, "genesis_preset")
+    genesis_time = _require_optional_str(payload, "genesis_time")
+    if genesis_time is not None and genesis_preset is None:
+        raise ValueError("genesis_time requires genesis_preset")
+
     return {
         "schema_version": _require_schema_version(payload),
         "name": _require_str(payload, "name"),
@@ -300,6 +305,8 @@ def normalize_network_manifest(payload: dict) -> dict:
         "mode": _require_mode(payload),
         "runtime_backend": _require_runtime_backend(payload),
         "genesis_source": _require_optional_str(payload, "genesis_source"),
+        "genesis_preset": genesis_preset,
+        "genesis_time": genesis_time,
         "snapshot_url": _require_optional_str(payload, "snapshot_url"),
         "seed_nodes": _require_str_list(payload, "seed_nodes"),
         "block_policy_mode": _require_block_policy_mode(
@@ -707,6 +714,8 @@ class NetworkManifest:
     node_split_image: str | None = None
     node_release_manifest: dict | None = None
     genesis_source: str | None = None
+    genesis_preset: str | None = None
+    genesis_time: str | None = None
     snapshot_url: str | None = None
     seed_nodes: list[str] = field(default_factory=list)
     block_policy_mode: str = "on_demand"

@@ -20,22 +20,22 @@ uv run xian node start local-dev
 uv run xian node status local-dev
 ```
 
-Join an existing network with a local profile:
+Join a preset-backed shared network with a local profile:
 
 ```bash
-uv run xian network join mainnet-node --network mainnet \
+uv run xian network join devnet-node --network devnet \
   --template embedded-backend --generate-validator-key \
   --init-node --restore-snapshot
-uv run xian node health mainnet-node
-uv run xian node endpoints mainnet-node
+uv run xian node health devnet-node
+uv run xian node endpoints devnet-node
 ```
 
 Inspect or recover a configured node:
 
 ```bash
-uv run xian doctor mainnet-node
-uv run xian doctor mainnet-node --skip-live-checks
-uv run xian snapshot restore mainnet-node
+uv run xian doctor devnet-node
+uv run xian doctor devnet-node --skip-live-checks
+uv run xian snapshot restore devnet-node
 ```
 
 ## Principles
@@ -71,7 +71,7 @@ uv run xian snapshot restore mainnet-node
 - `xian keys ...`: generate validator and account material
 - `xian network template ...`: inspect reusable network templates
 - `xian network create ...`: create a local/operator-managed network profile
-- `xian network join ...`: join an existing canonical or remote network
+- `xian network join ...`: join an existing preset-backed or remote network
 - `xian node ...`: initialize, start, stop, inspect, and recover a node profile
 - `xian doctor ...`: run broader local diagnostics
 - `xian solution-pack ...`: discover starter flows built on top of the golden
