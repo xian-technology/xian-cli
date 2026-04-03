@@ -8,6 +8,46 @@ tools.
 The published PyPI package name is `xian-tech-cli`. The installed console
 command remains `xian`.
 
+## Install
+
+For local development in a sibling-repo workspace:
+
+```bash
+uv sync --group dev
+uv run xian --help
+```
+
+For an isolated operator install from a published release:
+
+```bash
+uv tool install xian-tech-cli
+xian --help
+```
+
+`pipx install xian-tech-cli` is also a valid operator install path if you
+prefer `pipx` over `uv`.
+
+For a bootstrap installer that prefers `uv`, then `pipx`, then
+`python3 -m pip --user`:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/xian-technology/xian-cli/main/scripts/install.sh | sh
+```
+
+On Windows PowerShell:
+
+```powershell
+irm https://raw.githubusercontent.com/xian-technology/xian-cli/main/scripts/install.ps1 | iex
+```
+
+Set `XIAN_CLI_VERSION` before invoking either installer if you want to pin a
+specific release.
+
+The CLI itself is Python-packaged today, but it is the canonical operator
+surface for Xian. Runtime-heavy commands still expect access to `xian-stack`
+and canonical manifests from `xian-configs`, either via the default sibling
+workspace layout or explicit `--stack-dir` and `--configs-dir` flags.
+
 ## Common Workflows
 
 Create a local network from a template:
@@ -91,4 +131,5 @@ uv run pytest
 - [AGENTS.md](AGENTS.md)
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
 - [docs/BACKLOG.md](docs/BACKLOG.md)
+- [docs/DISTRIBUTION.md](docs/DISTRIBUTION.md)
 - [docs/LIFECYCLE_CONTRACT.md](docs/LIFECYCLE_CONTRACT.md)

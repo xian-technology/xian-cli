@@ -6,5 +6,5 @@ Start with:
 
 - `ARCHITECTURE.md`
 - `BACKLOG.md`
+- `DISTRIBUTION.md`
 - `LIFECYCLE_CONTRACT.md`
-

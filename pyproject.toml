@@ -4,13 +4,24 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "xian-tech-cli"
-version = "0.1.0"
+version = "0.1.1"
 description = "Operator CLI for Xian networks and nodes"
 readme = "README.md"
+license = "Apache-2.0"
+authors = [{ name = "Xian Core Team" }]
 requires-python = ">=3.12"
 dependencies = [
     "pynacl>=1.6.2,<2",
     "xian-tech-abci",
+]
+keywords = ["blockchain", "cometbft", "cli", "operator", "xian"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: System Administrators",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
 ]
 
 [dependency-groups]
@@ -22,6 +33,9 @@ dev = [
 
 [project.scripts]
 xian = "xian_cli.cli:main"
+
+[project.urls]
+Repository = "https://github.com/xian-technology/xian-cli"
 
 [tool.setuptools]
 package-dir = {"" = "src"}

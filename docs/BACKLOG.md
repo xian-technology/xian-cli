@@ -10,4 +10,5 @@ Current themes:
 
 - richer operator workflows over stable backend contracts
 - keeping manifest/profile shape aligned with the stack and configs repos
-
+- improving release/install discipline so `xian-cli` feels like the canonical
+  operator product without a rewrite
