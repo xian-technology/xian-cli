@@ -97,6 +97,9 @@ def run_backend_command(
     intentkit_host: str | None = None,
     intentkit_port: int | None = None,
     intentkit_api_port: int | None = None,
+    shielded_relayer_enabled: bool = False,
+    shielded_relayer_host: str | None = None,
+    shielded_relayer_port: int | None = None,
     wait_for_health: bool | None = None,
     rpc_timeout_seconds: float | None = None,
     rpc_url: str | None = None,
@@ -113,6 +116,11 @@ def run_backend_command(
     cmd.append("--dashboard" if dashboard_enabled else "--no-dashboard")
     cmd.append("--monitoring" if monitoring_enabled else "--no-monitoring")
     cmd.append("--intentkit" if intentkit_enabled else "--no-intentkit")
+    cmd.append(
+        "--shielded-relayer"
+        if shielded_relayer_enabled
+        else "--no-shielded-relayer"
+    )
 
     if dashboard_enabled:
         if dashboard_host is not None:
@@ -128,6 +136,13 @@ def run_backend_command(
             cmd.extend(["--intentkit-port", str(intentkit_port)])
         if intentkit_api_port is not None:
             cmd.extend(["--intentkit-api-port", str(intentkit_api_port)])
+    if shielded_relayer_enabled:
+        if shielded_relayer_host is not None:
+            cmd.extend(["--shielded-relayer-host", shielded_relayer_host])
+        if shielded_relayer_port is not None:
+            cmd.extend(
+                ["--shielded-relayer-port", str(shielded_relayer_port)]
+            )
 
     if wait_for_health is not None:
         cmd.append(
@@ -188,6 +203,9 @@ def start_xian_stack_node(
     intentkit_host: str = "127.0.0.1",
     intentkit_port: int = 38000,
     intentkit_api_port: int = 38080,
+    shielded_relayer_enabled: bool = False,
+    shielded_relayer_host: str = "127.0.0.1",
+    shielded_relayer_port: int = 38180,
     wait_for_rpc: bool = True,
     rpc_timeout_seconds: float = DEFAULT_RPC_TIMEOUT_SECONDS,
 ) -> dict:
@@ -208,6 +226,9 @@ def start_xian_stack_node(
         intentkit_host=intentkit_host,
         intentkit_port=intentkit_port,
         intentkit_api_port=intentkit_api_port,
+        shielded_relayer_enabled=shielded_relayer_enabled,
+        shielded_relayer_host=shielded_relayer_host,
+        shielded_relayer_port=shielded_relayer_port,
         wait_for_health=wait_for_rpc,
         rpc_timeout_seconds=rpc_timeout_seconds,
         rpc_url="http://127.0.0.1:26657/status",
@@ -231,6 +252,9 @@ def stop_xian_stack_node(
     intentkit_host: str = "127.0.0.1",
     intentkit_port: int = 38000,
     intentkit_api_port: int = 38080,
+    shielded_relayer_enabled: bool = False,
+    shielded_relayer_host: str = "127.0.0.1",
+    shielded_relayer_port: int = 38180,
 ) -> dict:
     return run_backend_command(
         stack_dir,
@@ -249,6 +273,9 @@ def stop_xian_stack_node(
         intentkit_host=intentkit_host,
         intentkit_port=intentkit_port,
         intentkit_api_port=intentkit_api_port,
+        shielded_relayer_enabled=shielded_relayer_enabled,
+        shielded_relayer_host=shielded_relayer_host,
+        shielded_relayer_port=shielded_relayer_port,
     )
 
 
@@ -269,6 +296,9 @@ def get_xian_stack_node_status(
     intentkit_host: str = "127.0.0.1",
     intentkit_port: int = 38000,
     intentkit_api_port: int = 38080,
+    shielded_relayer_enabled: bool = False,
+    shielded_relayer_host: str = "127.0.0.1",
+    shielded_relayer_port: int = 38180,
 ) -> dict:
     return run_backend_command(
         stack_dir,
@@ -287,6 +317,9 @@ def get_xian_stack_node_status(
         intentkit_host=intentkit_host,
         intentkit_port=intentkit_port,
         intentkit_api_port=intentkit_api_port,
+        shielded_relayer_enabled=shielded_relayer_enabled,
+        shielded_relayer_host=shielded_relayer_host,
+        shielded_relayer_port=shielded_relayer_port,
     )
 
 
@@ -307,6 +340,9 @@ def get_xian_stack_node_endpoints(
     intentkit_host: str = "127.0.0.1",
     intentkit_port: int = 38000,
     intentkit_api_port: int = 38080,
+    shielded_relayer_enabled: bool = False,
+    shielded_relayer_host: str = "127.0.0.1",
+    shielded_relayer_port: int = 38180,
 ) -> dict:
     return run_backend_command(
         stack_dir,
@@ -325,6 +361,9 @@ def get_xian_stack_node_endpoints(
         intentkit_host=intentkit_host,
         intentkit_port=intentkit_port,
         intentkit_api_port=intentkit_api_port,
+        shielded_relayer_enabled=shielded_relayer_enabled,
+        shielded_relayer_host=shielded_relayer_host,
+        shielded_relayer_port=shielded_relayer_port,
     )
 
 
@@ -345,6 +384,9 @@ def get_xian_stack_node_health(
     intentkit_host: str = "127.0.0.1",
     intentkit_port: int = 38000,
     intentkit_api_port: int = 38080,
+    shielded_relayer_enabled: bool = False,
+    shielded_relayer_host: str = "127.0.0.1",
+    shielded_relayer_port: int = 38180,
     rpc_url: str = "http://127.0.0.1:26657/status",
     check_disk: bool = True,
 ) -> dict:
@@ -365,6 +407,9 @@ def get_xian_stack_node_health(
         intentkit_host=intentkit_host,
         intentkit_port=intentkit_port,
         intentkit_api_port=intentkit_api_port,
+        shielded_relayer_enabled=shielded_relayer_enabled,
+        shielded_relayer_host=shielded_relayer_host,
+        shielded_relayer_port=shielded_relayer_port,
         rpc_url=rpc_url,
         check_disk=check_disk,
     )
