@@ -186,7 +186,72 @@ def _stack_runtime_profile_kwargs(
         "intentkit_host": str(profile.get("intentkit_host", "127.0.0.1")),
         "intentkit_port": int(profile.get("intentkit_port", 38000)),
         "intentkit_api_port": int(profile.get("intentkit_api_port", 38080)),
+        "shielded_relayer_enabled": bool(
+            profile.get("shielded_relayer_enabled")
+        ),
+        "shielded_relayer_host": str(
+            profile.get("shielded_relayer_host", "127.0.0.1")
+        ),
+        "shielded_relayer_port": int(
+            profile.get("shielded_relayer_port", 38180)
+        ),
     }
+
+
+def _network_shielded_relayer_endpoints(
+    network: dict[str, object] | None,
+) -> dict[str, object]:
+    relayers_raw = []
+    if isinstance(network, dict):
+        list_value = network.get("shielded_relayers")
+        if isinstance(list_value, list):
+            relayers_raw = [
+                item for item in list_value if isinstance(item, dict)
+            ]
+        elif isinstance(network.get("shielded_relayer"), dict):
+            relayers_raw = [network["shielded_relayer"]]
+    if not relayers_raw:
+        return {}
+    relayers = sorted(
+        relayers_raw,
+        key=lambda item: (
+            int(item.get("priority", 100)),
+            str(item.get("id", "")),
+            str(item.get("base_url", "")),
+        ),
+    )
+    catalog: list[dict[str, object]] = []
+    for relayer in relayers:
+        base_url = relayer.get("base_url")
+        if not isinstance(base_url, str) or not base_url:
+            continue
+        normalized_base = base_url.rstrip("/")
+        catalog.append(
+            {
+                "id": relayer.get("id"),
+                "base_url": normalized_base,
+                "auth_scheme": relayer.get("auth_scheme"),
+                "public_info": relayer.get("public_info"),
+                "public_quote": relayer.get("public_quote"),
+                "public_job_lookup": relayer.get("public_job_lookup"),
+                "priority": relayer.get("priority", 100),
+                "submission_kinds": relayer.get("submission_kinds", []),
+                "endpoints": {
+                    "shielded_relayer": normalized_base,
+                    "shielded_relayer_info": f"{normalized_base}/v1/info",
+                    "shielded_relayer_metrics": f"{normalized_base}/metrics",
+                    "shielded_relayer_quote": f"{normalized_base}/v1/quote",
+                    "shielded_relayer_jobs": f"{normalized_base}/v1/jobs",
+                },
+            }
+        )
+    if not catalog:
+        return {}
+    primary = catalog[0]
+    endpoints = dict(primary["endpoints"])
+    endpoints["shielded_relayer_primary_id"] = str(primary.get("id") or "")
+    endpoints["shielded_relayers"] = catalog
+    return endpoints
 
 
 def _resolve_node_image_settings(
@@ -889,6 +954,39 @@ def _handle_network_create(args: argparse.Namespace) -> int:
                 if validator["is_bootstrap"]
                 else 38080
             ),
+            shielded_relayer_enabled=(
+                _pick_template_value(
+                    None,
+                    None
+                    if template is None
+                    else template.get("shielded_relayer_enabled"),
+                    False,
+                )
+                if validator["is_bootstrap"]
+                else False
+            ),
+            shielded_relayer_host=(
+                _pick_template_value(
+                    None,
+                    None
+                    if template is None
+                    else template.get("shielded_relayer_host"),
+                    "127.0.0.1",
+                )
+                if validator["is_bootstrap"]
+                else "127.0.0.1"
+            ),
+            shielded_relayer_port=(
+                _pick_template_value(
+                    None,
+                    None
+                    if template is None
+                    else template.get("shielded_relayer_port"),
+                    38180,
+                )
+                if validator["is_bootstrap"]
+                else 38180
+            ),
         )
         write_json(profile_path, profile.to_dict(), force=args.force)
         validator_result["profile_path"] = str(profile_path)
@@ -1215,6 +1313,21 @@ def _handle_network_join(args: argparse.Namespace) -> int:
             args.intentkit_api_port,
             None if template is None else template.get("intentkit_api_port"),
             38080,
+        ),
+        shielded_relayer_enabled=_pick_template_value(
+            None,
+            None if template is None else template.get("shielded_relayer_enabled"),
+            False,
+        ),
+        shielded_relayer_host=_pick_template_value(
+            None,
+            None if template is None else template.get("shielded_relayer_host"),
+            "127.0.0.1",
+        ),
+        shielded_relayer_port=_pick_template_value(
+            None,
+            None if template is None else template.get("shielded_relayer_port"),
+            38180,
         ),
     )
     target = args.output or base_dir / "nodes" / f"{args.name}.json"
@@ -2170,6 +2283,7 @@ def _fallback_node_endpoints(
     *,
     rpc_status_url: str,
     profile: NodeProfile,
+    network: dict[str, object] | None = None,
 ) -> dict[str, str]:
     base_url = _rpc_base_url(rpc_status_url)
     endpoints = {
@@ -2209,6 +2323,20 @@ def _fallback_node_endpoints(
         endpoints["intentkit"] = frontend_url
         endpoints["intentkit_api"] = api_url
         endpoints["intentkit_api_health"] = f"{api_url}/health"
+    if bool(profile.get("shielded_relayer_enabled")):
+        relayer_host = _display_endpoint_host(
+            str(profile.get("shielded_relayer_host", "127.0.0.1"))
+        )
+        relayer_port = int(profile.get("shielded_relayer_port", 38180))
+        relayer_url = f"http://{relayer_host}:{relayer_port}"
+        endpoints["shielded_relayer"] = relayer_url
+        endpoints["shielded_relayer_health"] = f"{relayer_url}/health"
+        endpoints["shielded_relayer_info"] = f"{relayer_url}/v1/info"
+        endpoints["shielded_relayer_metrics"] = f"{relayer_url}/metrics"
+        endpoints["shielded_relayer_quote"] = f"{relayer_url}/v1/quote"
+        endpoints["shielded_relayer_jobs"] = f"{relayer_url}/v1/jobs"
+    else:
+        endpoints.update(_network_shielded_relayer_endpoints(network))
     return endpoints
 
 
@@ -2237,6 +2365,9 @@ def _collect_node_endpoints(args: argparse.Namespace) -> dict[str, object]:
         "dashboard_enabled": bool(profile.get("dashboard_enabled")),
         "monitoring_enabled": bool(profile.get("monitoring_enabled")),
         "intentkit_enabled": bool(profile.get("intentkit_enabled")),
+        "shielded_relayer_enabled": bool(
+            profile.get("shielded_relayer_enabled")
+        ),
         "intentkit_network_id": profile.get("intentkit_network_id"),
     }
     if stack_dir is not None:
@@ -2259,6 +2390,7 @@ def _collect_node_endpoints(args: argparse.Namespace) -> dict[str, object]:
     payload["endpoints"] = _fallback_node_endpoints(
         rpc_status_url=rpc_status_url,
         profile=profile,
+        network=network,
     )
     return payload
 
@@ -2300,6 +2432,9 @@ def _summarize_node_status(result: dict[str, object]) -> dict[str, object]:
         ),
         "intentkit_enabled": bool(
             result.get("profile", {}).get("intentkit_enabled")
+        ),
+        "shielded_relayer_enabled": bool(
+            result.get("profile", {}).get("shielded_relayer_enabled")
         ),
         "backend_running": result.get("backend_running"),
         "rpc_reachable": result.get("rpc_reachable"),
@@ -2364,6 +2499,13 @@ def _summarize_node_status(result: dict[str, object]) -> dict[str, object]:
             )
             summary["intentkit_api_reachable"] = backend_status.get(
                 "intentkit_api_reachable"
+            )
+        if summary["shielded_relayer_enabled"]:
+            summary["shielded_relayer_running"] = backend_status.get(
+                "shielded_relayer_running"
+            )
+            summary["shielded_relayer_reachable"] = backend_status.get(
+                "shielded_relayer_reachable"
             )
     return summary
 

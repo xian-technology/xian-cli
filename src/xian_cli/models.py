@@ -32,6 +32,11 @@ SUPPORTED_INTENTKIT_NETWORK_IDS = {
     "xian-devnet",
     "xian-localnet",
 }
+SUPPORTED_SHIELDED_RELAYER_AUTH_SCHEMES = {"none", "bearer"}
+SUPPORTED_SHIELDED_RELAYER_SUBMISSION_KINDS = {
+    "shielded_note_relay_transfer",
+    "shielded_command",
+}
 SUPPORTED_APP_LOG_LEVELS = {
     "TRACE",
     "DEBUG",
@@ -172,6 +177,96 @@ def _normalize_node_release_manifest(
     }
 
 
+def _normalize_shielded_relayer_entry(
+    payload: dict,
+    key: str,
+    *,
+    default_id: str,
+) -> dict:
+    if not isinstance(payload, dict):
+        raise ValueError(f"{key} must be an object")
+    submission_kinds = _require_str_list(payload, "submission_kinds")
+    if submission_kinds:
+        invalid_kinds = sorted(
+            set(submission_kinds)
+            - SUPPORTED_SHIELDED_RELAYER_SUBMISSION_KINDS
+        )
+        if invalid_kinds:
+            raise ValueError(
+                f"{key}.submission_kinds contains unsupported values: "
+                f"{invalid_kinds}"
+            )
+    return {
+        "id": _require_optional_str(payload, "id") or default_id,
+        "base_url": _require_str(payload, "base_url"),
+        "auth_scheme": _require_optional_choice(
+            payload,
+            "auth_scheme",
+            supported=SUPPORTED_SHIELDED_RELAYER_AUTH_SCHEMES,
+            default="none",
+        )
+        or "none",
+        "public_info": _require_bool(payload, "public_info", default=True),
+        "public_quote": _require_bool(payload, "public_quote", default=False),
+        "public_job_lookup": _require_bool(
+            payload, "public_job_lookup", default=False
+        ),
+        "priority": _require_non_negative_int(payload, "priority", default=100),
+        "submission_kinds": (
+            submission_kinds
+            if submission_kinds
+            else sorted(SUPPORTED_SHIELDED_RELAYER_SUBMISSION_KINDS)
+        ),
+    }
+
+
+def _normalize_shielded_relayer_manifest(payload: dict, key: str) -> dict | None:
+    value = payload.get(key)
+    if value is None:
+        return None
+    return _normalize_shielded_relayer_entry(
+        value,
+        key,
+        default_id="primary",
+    )
+
+
+def _normalize_shielded_relayers_manifest(
+    payload: dict,
+) -> tuple[dict | None, list[dict]]:
+    legacy = _normalize_shielded_relayer_manifest(payload, "shielded_relayer")
+    relayers_raw = payload.get("shielded_relayers")
+    if relayers_raw is None:
+        return legacy, [] if legacy is None else [legacy]
+    if not isinstance(relayers_raw, list):
+        raise ValueError("shielded_relayers must be a list when provided")
+    relayers = [
+        _normalize_shielded_relayer_entry(
+            item,
+            f"shielded_relayers[{index}]",
+            default_id=f"relayer-{index + 1}",
+        )
+        for index, item in enumerate(relayers_raw)
+    ]
+    seen_ids: set[str] = set()
+    for relayer in relayers:
+        relayer_id = relayer["id"]
+        if relayer_id in seen_ids:
+            raise ValueError(
+                f"shielded_relayers contains duplicate id: {relayer_id}"
+            )
+        seen_ids.add(relayer_id)
+    sorted_relayers = sorted(
+        relayers,
+        key=lambda item: (
+            int(item["priority"]),
+            str(item["id"]),
+            str(item["base_url"]),
+        ),
+    )
+    return legacy or (sorted_relayers[0] if sorted_relayers else None), sorted_relayers
+
+
 def _require_schema_version(payload: dict) -> int:
     schema_version = payload.get("schema_version")
     if schema_version != SCHEMA_VERSION:
@@ -282,6 +377,9 @@ def _require_mode(payload: dict) -> str:
 def normalize_network_manifest(payload: dict) -> dict:
     if not isinstance(payload, dict):
         raise ValueError("network manifest must be a JSON object")
+    shielded_relayer, shielded_relayers = (
+        _normalize_shielded_relayers_manifest(payload)
+    )
 
     node_image_mode, node_integrated_image, node_split_image = (
         _validate_node_image_config(
@@ -319,6 +417,8 @@ def normalize_network_manifest(payload: dict) -> dict:
         "node_image_mode": node_image_mode,
         "node_integrated_image": node_integrated_image,
         "node_split_image": node_split_image,
+        "shielded_relayer": shielded_relayer,
+        "shielded_relayers": shielded_relayers,
         "node_release_manifest": _normalize_node_release_manifest(
             payload,
             "node_release_manifest",
@@ -450,6 +550,17 @@ def normalize_node_profile(payload: dict) -> dict:
         "intentkit_api_port": _require_int(
             payload, "intentkit_api_port", default=38080
         ),
+        "shielded_relayer_enabled": _require_bool(
+            payload, "shielded_relayer_enabled", default=False
+        ),
+        "shielded_relayer_host": _require_str(payload, "shielded_relayer_host")
+        if "shielded_relayer_host" in payload
+        else "127.0.0.1",
+        "shielded_relayer_port": _require_int(
+            payload,
+            "shielded_relayer_port",
+            default=38180,
+        ),
     }
 
 
@@ -548,6 +659,17 @@ def normalize_network_template(payload: dict) -> dict:
         ),
         "intentkit_api_port": _require_int(
             payload, "intentkit_api_port", default=38080
+        ),
+        "shielded_relayer_enabled": _require_bool(
+            payload, "shielded_relayer_enabled", default=False
+        ),
+        "shielded_relayer_host": _require_str(payload, "shielded_relayer_host")
+        if "shielded_relayer_host" in payload
+        else "127.0.0.1",
+        "shielded_relayer_port": _require_int(
+            payload,
+            "shielded_relayer_port",
+            default=38180,
         ),
         "pruning_enabled": _require_bool(
             payload, "pruning_enabled", default=False
@@ -712,6 +834,8 @@ class NetworkManifest:
     node_image_mode: str = "local_build"
     node_integrated_image: str | None = None
     node_split_image: str | None = None
+    shielded_relayer: dict | None = None
+    shielded_relayers: list[dict] = field(default_factory=list)
     node_release_manifest: dict | None = None
     genesis_source: str | None = None
     genesis_preset: str | None = None
@@ -772,6 +896,9 @@ class NodeProfile:
     intentkit_host: str = "127.0.0.1"
     intentkit_port: int = 38000
     intentkit_api_port: int = 38080
+    shielded_relayer_enabled: bool = False
+    shielded_relayer_host: str = "127.0.0.1"
+    shielded_relayer_port: int = 38180
     schema_version: int = SCHEMA_VERSION
 
     def to_dict(self) -> dict:
@@ -813,6 +940,9 @@ class NetworkTemplate:
     intentkit_host: str = "127.0.0.1"
     intentkit_port: int = 38000
     intentkit_api_port: int = 38080
+    shielded_relayer_enabled: bool = False
+    shielded_relayer_host: str = "127.0.0.1"
+    shielded_relayer_port: int = 38180
     pruning_enabled: bool = False
     blocks_to_keep: int = 100000
     schema_version: int = SCHEMA_VERSION
