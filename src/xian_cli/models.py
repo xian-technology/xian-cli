@@ -496,8 +496,8 @@ def normalize_node_profile(payload: dict) -> dict:
         "simulation_timeout_ms": _require_positive_int(
             payload, "simulation_timeout_ms", default=3000
         ),
-        "simulation_max_stamps": _require_positive_int(
-            payload, "simulation_max_stamps", default=1_000_000
+        "simulation_max_chi": _require_positive_int(
+            payload, "simulation_max_chi", default=1_000_000
         ),
         "parallel_execution_enabled": _require_bool(
             payload, "parallel_execution_enabled", default=False
@@ -601,8 +601,8 @@ def normalize_network_template(payload: dict) -> dict:
         "simulation_timeout_ms": _require_positive_int(
             payload, "simulation_timeout_ms", default=3000
         ),
-        "simulation_max_stamps": _require_positive_int(
-            payload, "simulation_max_stamps", default=1_000_000
+        "simulation_max_chi": _require_positive_int(
+            payload, "simulation_max_chi", default=1_000_000
         ),
         "parallel_execution_enabled": _require_bool(
             payload, "parallel_execution_enabled", default=False
@@ -881,7 +881,7 @@ class NodeProfile:
     simulation_enabled: bool = True
     simulation_max_concurrency: int = 2
     simulation_timeout_ms: int = 3000
-    simulation_max_stamps: int = 1_000_000
+    simulation_max_chi: int = 1_000_000
     parallel_execution_enabled: bool = False
     parallel_execution_workers: int = 0
     parallel_execution_min_transactions: int = 8
@@ -922,7 +922,7 @@ class NetworkTemplate:
     simulation_enabled: bool = True
     simulation_max_concurrency: int = 2
     simulation_timeout_ms: int = 3000
-    simulation_max_stamps: int = 1_000_000
+    simulation_max_chi: int = 1_000_000
     parallel_execution_enabled: bool = False
     parallel_execution_workers: int = 0
     parallel_execution_min_transactions: int = 8

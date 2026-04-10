@@ -470,10 +470,10 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     create_parser.add_argument(
-        "--simulation-max-stamps",
+        "--simulation-max-chi",
         type=int,
         help=(
-            "stamp budget cap used for readonly simulation in generated node "
+            "chi budget cap used for readonly simulation in generated node "
             "profiles; overrides template defaults"
         ),
     )
@@ -809,10 +809,10 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     join_parser.add_argument(
-        "--simulation-max-stamps",
+        "--simulation-max-chi",
         type=int,
         help=(
-            "optional node-local stamp budget cap for readonly simulation; "
+            "optional node-local chi budget cap for readonly simulation; "
             "defaults to the template value"
         ),
     )

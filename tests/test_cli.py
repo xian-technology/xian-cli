@@ -288,7 +288,7 @@ class NetworkManifestTests(unittest.TestCase):
                         "simulation_enabled": False,
                         "simulation_max_concurrency": 3,
                         "simulation_timeout_ms": 2500,
-                        "simulation_max_stamps": 500000,
+                        "simulation_max_chi": 500000,
                         "parallel_execution_enabled": True,
                         "parallel_execution_workers": 4,
                         "parallel_execution_min_transactions": 12,
@@ -353,7 +353,7 @@ class NetworkManifestTests(unittest.TestCase):
             self.assertFalse(profile["simulation_enabled"])
             self.assertEqual(profile["simulation_max_concurrency"], 3)
             self.assertEqual(profile["simulation_timeout_ms"], 2500)
-            self.assertEqual(profile["simulation_max_stamps"], 500000)
+            self.assertEqual(profile["simulation_max_chi"], 500000)
             self.assertTrue(profile["parallel_execution_enabled"])
             self.assertEqual(profile["parallel_execution_workers"], 4)
             self.assertEqual(profile["parallel_execution_min_transactions"], 12)
@@ -578,7 +578,7 @@ class NetworkManifestTests(unittest.TestCase):
                         "simulation_enabled": True,
                         "simulation_max_concurrency": 4,
                         "simulation_timeout_ms": 4000,
-                        "simulation_max_stamps": 800000,
+                        "simulation_max_chi": 800000,
                         "parallel_execution_enabled": True,
                         "parallel_execution_workers": 3,
                         "parallel_execution_min_transactions": 9,
@@ -629,7 +629,7 @@ class NetworkManifestTests(unittest.TestCase):
             self.assertTrue(profile["simulation_enabled"])
             self.assertEqual(profile["simulation_max_concurrency"], 4)
             self.assertEqual(profile["simulation_timeout_ms"], 4000)
-            self.assertEqual(profile["simulation_max_stamps"], 800000)
+            self.assertEqual(profile["simulation_max_chi"], 800000)
             self.assertTrue(profile["parallel_execution_enabled"])
             self.assertEqual(profile["parallel_execution_workers"], 3)
             self.assertEqual(profile["parallel_execution_min_transactions"], 9)
@@ -762,7 +762,7 @@ class NetworkManifestTests(unittest.TestCase):
                             "5",
                             "--simulation-timeout-ms",
                             "3500",
-                            "--simulation-max-stamps",
+                            "--simulation-max-chi",
                             "900000",
                             "--parallel-execution-enabled",
                             "--parallel-execution-workers",
@@ -787,7 +787,7 @@ class NetworkManifestTests(unittest.TestCase):
             self.assertTrue(profile["simulation_enabled"])
             self.assertEqual(profile["simulation_max_concurrency"], 5)
             self.assertEqual(profile["simulation_timeout_ms"], 3500)
-            self.assertEqual(profile["simulation_max_stamps"], 900000)
+            self.assertEqual(profile["simulation_max_chi"], 900000)
             self.assertTrue(profile["parallel_execution_enabled"])
             self.assertEqual(profile["parallel_execution_workers"], 6)
             self.assertEqual(profile["parallel_execution_min_transactions"], 14)
@@ -1486,7 +1486,7 @@ class NodeInitTests(unittest.TestCase):
                         "4",
                         "--simulation-timeout-ms",
                         "3200",
-                        "--simulation-max-stamps",
+                        "--simulation-max-chi",
                         "700000",
                         "--parallel-execution-enabled",
                         "--parallel-execution-workers",
@@ -1533,7 +1533,7 @@ class NodeInitTests(unittest.TestCase):
             self.assertIn("simulation_enabled = true", config_toml)
             self.assertIn("simulation_max_concurrency = 4", config_toml)
             self.assertIn("simulation_timeout_ms = 3200", config_toml)
-            self.assertIn("simulation_max_stamps = 700000", config_toml)
+            self.assertIn("simulation_max_chi = 700000", config_toml)
             self.assertIn("parallel_execution_enabled = true", config_toml)
             self.assertIn("parallel_execution_workers = 5", config_toml)
             self.assertIn(
@@ -2221,7 +2221,7 @@ class NodeRuntimeTests(unittest.TestCase):
                         "simulation_enabled": True,
                         "simulation_max_concurrency": 2,
                         "simulation_timeout_ms": 3000,
-                        "simulation_max_stamps": 1000000,
+                        "simulation_max_chi": 1000000,
                         "parallel_execution_enabled": False,
                         "parallel_execution_workers": 0,
                         "parallel_execution_min_transactions": 8,
@@ -2342,7 +2342,7 @@ class NodeRuntimeTests(unittest.TestCase):
                         "simulation_enabled": True,
                         "simulation_max_concurrency": 2,
                         "simulation_timeout_ms": 3000,
-                        "simulation_max_stamps": 1000000,
+                        "simulation_max_chi": 1000000,
                         "parallel_execution_enabled": False,
                         "parallel_execution_workers": 0,
                         "parallel_execution_min_transactions": 8,

@@ -808,13 +808,13 @@ def _handle_network_create(args: argparse.Namespace) -> int:
                     3000,
                 ),
             ),
-            simulation_max_stamps=_validate_positive_int(
-                "simulation_max_stamps",
+            simulation_max_chi=_validate_positive_int(
+                "simulation_max_chi",
                 _pick_template_value(
-                    args.simulation_max_stamps,
+                    args.simulation_max_chi,
                     None
                     if template is None
-                    else template.get("simulation_max_stamps"),
+                    else template.get("simulation_max_chi"),
                     1_000_000,
                 ),
             ),
@@ -1226,13 +1226,13 @@ def _handle_network_join(args: argparse.Namespace) -> int:
                 3000,
             ),
         ),
-        simulation_max_stamps=_validate_positive_int(
-            "simulation_max_stamps",
+        simulation_max_chi=_validate_positive_int(
+            "simulation_max_chi",
             _pick_template_value(
-                args.simulation_max_stamps,
+                args.simulation_max_chi,
                 None
                 if template is None
-                else template.get("simulation_max_stamps"),
+                else template.get("simulation_max_chi"),
                 1_000_000,
             ),
         ),
@@ -2080,8 +2080,8 @@ def _initialize_node_from_args(args: argparse.Namespace) -> dict:
             profile.get("simulation_max_concurrency", 2)
         ),
         simulation_timeout_ms=int(profile.get("simulation_timeout_ms", 3000)),
-        simulation_max_stamps=int(
-            profile.get("simulation_max_stamps", 1_000_000)
+        simulation_max_chi=int(
+            profile.get("simulation_max_chi", 1_000_000)
         ),
         parallel_execution_enabled=bool(
             profile.get("parallel_execution_enabled", False)
