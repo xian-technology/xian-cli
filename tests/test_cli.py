@@ -3655,6 +3655,9 @@ class RuntimeHelperTests(unittest.TestCase):
             intentkit_host="127.0.0.1",
             intentkit_port=38000,
             intentkit_api_port=38080,
+            shielded_relayer_enabled=False,
+            shielded_relayer_host="127.0.0.1",
+            shielded_relayer_port=38180,
             wait_for_health=True,
             rpc_timeout_seconds=12.5,
             rpc_url="http://127.0.0.1:26657/status",
@@ -3694,6 +3697,9 @@ class RuntimeHelperTests(unittest.TestCase):
             intentkit_host="127.0.0.1",
             intentkit_port=38000,
             intentkit_api_port=38080,
+            shielded_relayer_enabled=False,
+            shielded_relayer_host="127.0.0.1",
+            shielded_relayer_port=38180,
             wait_for_health=False,
             rpc_timeout_seconds=90.0,
             rpc_url="http://127.0.0.1:26657/status",
@@ -3734,6 +3740,9 @@ class RuntimeHelperTests(unittest.TestCase):
             intentkit_host="127.0.0.1",
             intentkit_port=38000,
             intentkit_api_port=38080,
+            shielded_relayer_enabled=False,
+            shielded_relayer_host="127.0.0.1",
+            shielded_relayer_port=38180,
         )
         self.assertEqual(result["container_target"], "abci-down")
 
@@ -3776,6 +3785,9 @@ class RuntimeHelperTests(unittest.TestCase):
             intentkit_host="127.0.0.1",
             intentkit_port=38000,
             intentkit_api_port=38080,
+            shielded_relayer_enabled=False,
+            shielded_relayer_host="127.0.0.1",
+            shielded_relayer_port=38180,
         )
 
     def test_get_xian_stack_node_endpoints_uses_backend_command(self) -> None:
@@ -3818,6 +3830,9 @@ class RuntimeHelperTests(unittest.TestCase):
             intentkit_host="127.0.0.1",
             intentkit_port=38000,
             intentkit_api_port=38080,
+            shielded_relayer_enabled=False,
+            shielded_relayer_host="127.0.0.1",
+            shielded_relayer_port=38180,
         )
 
     def test_get_xian_stack_node_health_uses_backend_command(self) -> None:
@@ -3857,6 +3872,9 @@ class RuntimeHelperTests(unittest.TestCase):
             intentkit_host="127.0.0.1",
             intentkit_port=38000,
             intentkit_api_port=38080,
+            shielded_relayer_enabled=False,
+            shielded_relayer_host="127.0.0.1",
+            shielded_relayer_port=38180,
             rpc_url="http://127.0.0.1:26657/status",
             check_disk=False,
         )
