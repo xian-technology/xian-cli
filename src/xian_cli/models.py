@@ -188,8 +188,7 @@ def _normalize_shielded_relayer_entry(
     submission_kinds = _require_str_list(payload, "submission_kinds")
     if submission_kinds:
         invalid_kinds = sorted(
-            set(submission_kinds)
-            - SUPPORTED_SHIELDED_RELAYER_SUBMISSION_KINDS
+            set(submission_kinds) - SUPPORTED_SHIELDED_RELAYER_SUBMISSION_KINDS
         )
         if invalid_kinds:
             raise ValueError(
@@ -220,7 +219,9 @@ def _normalize_shielded_relayer_entry(
     }
 
 
-def _normalize_shielded_relayer_manifest(payload: dict, key: str) -> dict | None:
+def _normalize_shielded_relayer_manifest(
+    payload: dict, key: str
+) -> dict | None:
     value = payload.get(key)
     if value is None:
         return None
@@ -264,7 +265,9 @@ def _normalize_shielded_relayers_manifest(
             str(item["base_url"]),
         ),
     )
-    return legacy or (sorted_relayers[0] if sorted_relayers else None), sorted_relayers
+    return legacy or (
+        sorted_relayers[0] if sorted_relayers else None
+    ), sorted_relayers
 
 
 def _require_schema_version(payload: dict) -> int:
@@ -377,8 +380,8 @@ def _require_mode(payload: dict) -> str:
 def normalize_network_manifest(payload: dict) -> dict:
     if not isinstance(payload, dict):
         raise ValueError("network manifest must be a JSON object")
-    shielded_relayer, shielded_relayers = (
-        _normalize_shielded_relayers_manifest(payload)
+    shielded_relayer, shielded_relayers = _normalize_shielded_relayers_manifest(
+        payload
     )
 
     node_image_mode, node_integrated_image, node_split_image = (

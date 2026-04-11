@@ -1316,7 +1316,9 @@ def _handle_network_join(args: argparse.Namespace) -> int:
         ),
         shielded_relayer_enabled=_pick_template_value(
             None,
-            None if template is None else template.get("shielded_relayer_enabled"),
+            None
+            if template is None
+            else template.get("shielded_relayer_enabled"),
             False,
         ),
         shielded_relayer_host=_pick_template_value(
@@ -2080,9 +2082,7 @@ def _initialize_node_from_args(args: argparse.Namespace) -> dict:
             profile.get("simulation_max_concurrency", 2)
         ),
         simulation_timeout_ms=int(profile.get("simulation_timeout_ms", 3000)),
-        simulation_max_chi=int(
-            profile.get("simulation_max_chi", 1_000_000)
-        ),
+        simulation_max_chi=int(profile.get("simulation_max_chi", 1_000_000)),
         parallel_execution_enabled=bool(
             profile.get("parallel_execution_enabled", False)
         ),

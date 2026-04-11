@@ -140,9 +140,7 @@ def run_backend_command(
         if shielded_relayer_host is not None:
             cmd.extend(["--shielded-relayer-host", shielded_relayer_host])
         if shielded_relayer_port is not None:
-            cmd.extend(
-                ["--shielded-relayer-port", str(shielded_relayer_port)]
-            )
+            cmd.extend(["--shielded-relayer-port", str(shielded_relayer_port)])
 
     if wait_for_health is not None:
         cmd.append(
