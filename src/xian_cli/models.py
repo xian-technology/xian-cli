@@ -409,6 +409,9 @@ def normalize_network_manifest(payload: dict) -> dict:
         "genesis_preset": genesis_preset,
         "genesis_time": genesis_time,
         "snapshot_url": _require_optional_str(payload, "snapshot_url"),
+        "snapshot_signing_keys": _require_str_list(
+            payload, "snapshot_signing_keys"
+        ),
         "seed_nodes": _require_str_list(payload, "seed_nodes"),
         "block_policy_mode": _require_block_policy_mode(
             payload, "block_policy_mode"
@@ -464,6 +467,9 @@ def normalize_node_profile(payload: dict) -> dict:
         "seeds": _require_str_list(payload, "seeds"),
         "genesis_url": _require_optional_str(payload, "genesis_url"),
         "snapshot_url": _require_optional_str(payload, "snapshot_url"),
+        "snapshot_signing_keys": _require_str_list(
+            payload, "snapshot_signing_keys"
+        ),
         "service_node": _require_bool(payload, "service_node", default=False),
         "home": _require_optional_str(payload, "home"),
         "pruning_enabled": _require_bool(
@@ -844,6 +850,7 @@ class NetworkManifest:
     genesis_preset: str | None = None
     genesis_time: str | None = None
     snapshot_url: str | None = None
+    snapshot_signing_keys: list[str] = field(default_factory=list)
     seed_nodes: list[str] = field(default_factory=list)
     block_policy_mode: str = "on_demand"
     block_policy_interval: str = "0s"
@@ -869,6 +876,7 @@ class NodeProfile:
     seeds: list[str] = field(default_factory=list)
     genesis_url: str | None = None
     snapshot_url: str | None = None
+    snapshot_signing_keys: list[str] = field(default_factory=list)
     service_node: bool = False
     home: str | None = None
     pruning_enabled: bool = False

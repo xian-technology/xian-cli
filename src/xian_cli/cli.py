@@ -639,6 +639,7 @@ def _handle_network_create(args: argparse.Namespace) -> int:
         ),
         genesis_source=genesis_source,
         snapshot_url=args.snapshot_url,
+        snapshot_signing_keys=args.snapshot_signing_key or [],
         seed_nodes=args.seed or [],
         block_policy_mode=_pick_template_value(
             args.block_policy_mode,
@@ -704,6 +705,11 @@ def _handle_network_create(args: argparse.Namespace) -> int:
             genesis_url=None,
             snapshot_url=(
                 args.snapshot_url if validator["is_bootstrap"] else None
+            ),
+            snapshot_signing_keys=(
+                list(args.snapshot_signing_key or [])
+                if validator["is_bootstrap"]
+                else []
             ),
             service_node=(
                 _pick_template_value(
@@ -1133,6 +1139,7 @@ def _handle_network_join(args: argparse.Namespace) -> int:
         seeds=args.seed or [],
         genesis_url=args.genesis_url,
         snapshot_url=args.snapshot_url,
+        snapshot_signing_keys=args.snapshot_signing_key or [],
         service_node=_pick_template_value(
             args.service_node,
             None if template is None else template.get("service_node"),
@@ -1623,6 +1630,20 @@ def _resolve_effective_snapshot_url(
     )
 
 
+def _resolve_effective_snapshot_signing_keys(
+    *,
+    profile: dict,
+    network: dict,
+) -> list[str]:
+    profile_keys = profile.get("snapshot_signing_keys")
+    if isinstance(profile_keys, list) and profile_keys:
+        return list(profile_keys)
+    network_keys = network.get("snapshot_signing_keys")
+    if isinstance(network_keys, list):
+        return list(network_keys)
+    return []
+
+
 def _restore_snapshot(
     *,
     base_dir: Path,
@@ -1654,6 +1675,10 @@ def _restore_snapshot(
         network=network,
         explicit_snapshot_url=explicit_snapshot_url,
     )
+    snapshot_signing_keys = _resolve_effective_snapshot_signing_keys(
+        profile=profile,
+        network=network,
+    )
     if not snapshot_url:
         raise ValueError(
             "no snapshot source configured; "
@@ -1662,7 +1687,10 @@ def _restore_snapshot(
 
     node_admin = get_node_admin_module()
     snapshot_archive_name = node_admin.apply_snapshot_archive(
-        snapshot_url, home
+        snapshot_url,
+        home,
+        trusted_manifest_public_keys=snapshot_signing_keys,
+        expected_chain_id=network.get("chain_id"),
     )
     return {
         "home": str(home),

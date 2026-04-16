@@ -78,6 +78,9 @@ uv run xian doctor devnet-node --skip-live-checks
 uv run xian snapshot restore devnet-node
 ```
 
+For remote snapshot bootstrap, prefer a signed snapshot manifest plus trusted
+snapshot signing keys in the network manifest or node profile.
+
 ## Principles
 
 - `xian-cli` owns operator UX. Deterministic node logic stays in `xian-abci`,

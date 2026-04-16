@@ -307,6 +307,14 @@ def build_parser() -> argparse.ArgumentParser:
     )
     create_parser.add_argument("--snapshot-url", help="optional snapshot URL")
     create_parser.add_argument(
+        "--snapshot-signing-key",
+        action="append",
+        help=(
+            "trusted Ed25519 public key for signed snapshot manifests; "
+            "may be repeated"
+        ),
+    )
+    create_parser.add_argument(
         "--seed",
         action="append",
         help="seed in <node_id>@<host>:26656 format; may be repeated",
@@ -672,6 +680,14 @@ def build_parser() -> argparse.ArgumentParser:
     join_parser.add_argument(
         "--snapshot-url",
         help="node-local snapshot URL override",
+    )
+    join_parser.add_argument(
+        "--snapshot-signing-key",
+        action="append",
+        help=(
+            "trusted Ed25519 public key for signed snapshot manifests; "
+            "may be repeated"
+        ),
     )
     join_parser.add_argument(
         "--init-node",

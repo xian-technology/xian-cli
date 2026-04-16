@@ -1990,7 +1990,9 @@ class NodeInitTests(unittest.TestCase):
                         "--genesis-source",
                         str(genesis_source),
                         "--snapshot-url",
-                        "https://example.invalid/snapshot.tar.gz",
+                        "https://example.invalid/snapshot-manifest.json",
+                        "--snapshot-signing-key",
+                        "a" * 64,
                         "--output",
                         str(
                             base_dir
@@ -2052,14 +2054,16 @@ class NodeInitTests(unittest.TestCase):
 
             self.assertEqual(exit_code, 0)
             snapshot_mock.assert_called_once_with(
-                "https://example.invalid/snapshot.tar.gz",
+                "https://example.invalid/snapshot-manifest.json",
                 home,
+                trusted_manifest_public_keys=["a" * 64],
+                expected_chain_id="xian-testnet-12",
             )
             result = json.loads(stdout.getvalue())
             self.assertTrue(result["snapshot_restored"])
             self.assertEqual(
                 result["effective_snapshot_url"],
-                "https://example.invalid/snapshot.tar.gz",
+                "https://example.invalid/snapshot-manifest.json",
             )
             self.assertEqual(
                 result["snapshot"]["snapshot_archive_name"],
@@ -3169,7 +3173,9 @@ class SnapshotCommandTests(unittest.TestCase):
                         "--chain-id",
                         "xian-local-1",
                         "--snapshot-url",
-                        "https://example.invalid/network-snapshot.tar.gz",
+                        "https://example.invalid/network-snapshot-manifest.json",
+                        "--snapshot-signing-key",
+                        "b" * 64,
                         "--output",
                         str(
                             base_dir
@@ -3219,14 +3225,16 @@ class SnapshotCommandTests(unittest.TestCase):
 
             self.assertEqual(exit_code, 0)
             snapshot_mock.assert_called_once_with(
-                "https://example.invalid/network-snapshot.tar.gz",
+                "https://example.invalid/network-snapshot-manifest.json",
                 home,
+                trusted_manifest_public_keys=["b" * 64],
+                expected_chain_id="xian-local-1",
             )
             result = json.loads(stdout.getvalue())
             self.assertEqual(result["home"], str(home))
             self.assertEqual(
                 result["snapshot_url"],
-                "https://example.invalid/network-snapshot.tar.gz",
+                "https://example.invalid/network-snapshot-manifest.json",
             )
             self.assertEqual(
                 result["snapshot_archive_name"],
