@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import argparse
 import importlib
 import io
 import json
@@ -11,10 +12,14 @@ from pathlib import Path
 from unittest.mock import patch
 from urllib.error import URLError
 
+from xian_accounts import Ed25519Account
+from xian_py.models import IndexedBlock, TransactionReceipt
 from xian_runtime_types.decimal import ContractingDecimal
 from xian_runtime_types.time import Datetime
 
 import xian_cli.abci_bridge as abci_bridge
+import xian_cli.client.handlers as client_handlers
+import xian_cli.output as cli_output
 from xian_cli.cli import _fallback_node_endpoints, main
 from xian_cli.config_repo import (
     resolve_configs_dir,
@@ -99,6 +104,595 @@ class ValidatorKeyTests(unittest.TestCase):
                 priv_validator_payload["address"],
                 metadata_payload["priv_validator_key"]["address"],
             )
+
+
+class _FakeContextClient:
+    def __init__(self, **responses):
+        self.responses = responses
+        self.send_tx_calls = []
+        self.send_calls = []
+        self.call_calls = []
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        return False
+
+    def get_balance(self, address: str, contract: str = "currency"):
+        return self.responses["balance"]
+
+    def get_tx(self, tx_hash: str):
+        return self.responses["tx"]
+
+    def get_block(self, height: int):
+        return self.responses["block"]
+
+    def get_block_by_hash(self, block_hash: str):
+        return self.responses["block"]
+
+    def call(self, contract: str, function: str, kwargs: dict):
+        self.call_calls.append((contract, function, kwargs))
+        return self.responses["call"]
+
+    def simulate(self, contract: str, function: str, kwargs: dict):
+        return self.responses["simulate"]
+
+    def send_tx(self, **kwargs):
+        self.send_tx_calls.append(kwargs)
+        return self.responses["send_tx"]
+
+    def send(self, amount, to_address, token="currency", **kwargs):
+        self.send_calls.append(
+            {
+                "amount": amount,
+                "to_address": to_address,
+                "token": token,
+                **kwargs,
+            }
+        )
+        return self.responses["send"]
+
+
+class ClientCommandTests(unittest.TestCase):
+    def test_resolve_node_url_prefers_argument(self) -> None:
+        args = argparse.Namespace(node_url="http://node.example")
+        self.assertEqual(
+            client_handlers._resolve_node_url(args),
+            "http://node.example",
+        )
+
+    def test_resolve_node_url_uses_environment(self) -> None:
+        args = argparse.Namespace(node_url=None)
+        with patch.dict("os.environ", {"XIAN_NODE_URL": "http://env-node"}):
+            self.assertEqual(
+                client_handlers._resolve_node_url(args),
+                "http://env-node",
+            )
+
+    def test_resolve_node_url_requires_value(self) -> None:
+        args = argparse.Namespace(node_url=None)
+        with patch.dict("os.environ", {}, clear=True):
+            with self.assertRaisesRegex(ValueError, "node URL is required"):
+                client_handlers._resolve_node_url(args)
+
+    def test_resolve_chain_id_uses_environment(self) -> None:
+        args = argparse.Namespace(chain_id=None)
+        with patch.dict("os.environ", {"XIAN_CHAIN_ID": "xian-1"}):
+            self.assertEqual(
+                client_handlers._resolve_chain_id(args),
+                "xian-1",
+            )
+
+    def test_load_private_key_from_file(self) -> None:
+        account = Ed25519Account.generate()
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            key_path = Path(tmp_dir) / "wallet.key"
+            key_path.write_text(account.private_key + "\n", encoding="utf-8")
+            args = argparse.Namespace(
+                private_key=None,
+                private_key_env=None,
+                private_key_file=str(key_path),
+            )
+            self.assertEqual(
+                client_handlers._load_private_key_from_args(args),
+                account.private_key,
+            )
+
+    def test_load_private_key_from_env(self) -> None:
+        account = Ed25519Account.generate()
+        args = argparse.Namespace(
+            private_key=None,
+            private_key_env="XIAN_PRIVATE_KEY",
+            private_key_file=None,
+        )
+        with patch.dict(
+            "os.environ",
+            {"XIAN_PRIVATE_KEY": account.private_key},
+        ):
+            self.assertEqual(
+                client_handlers._load_private_key_from_args(args),
+                account.private_key,
+            )
+
+    def test_load_private_key_requires_single_source(self) -> None:
+        account = Ed25519Account.generate()
+        args = argparse.Namespace(
+            private_key=account.private_key,
+            private_key_env="XIAN_PRIVATE_KEY",
+            private_key_file=None,
+        )
+        with patch.dict(
+            "os.environ",
+            {"XIAN_PRIVATE_KEY": account.private_key},
+        ):
+            with self.assertRaisesRegex(ValueError, "provide only one"):
+                client_handlers._load_private_key_from_args(args)
+
+    def test_load_private_key_requires_value(self) -> None:
+        args = argparse.Namespace(
+            private_key=None,
+            private_key_env=None,
+            private_key_file=None,
+        )
+        with self.assertRaisesRegex(ValueError, "private key is required"):
+            client_handlers._load_private_key_from_args(args)
+
+    def test_make_client_constructs_xian(self) -> None:
+        args = argparse.Namespace(
+            node_url="http://node.example",
+            chain_id="xian-1",
+        )
+        wallet = object()
+        with patch(
+            "xian_cli.client.handlers.Xian",
+            return_value="client",
+        ) as ctor:
+            client = client_handlers._make_client(args, wallet=wallet)
+
+        self.assertEqual(client, "client")
+        ctor.assert_called_once_with(
+            "http://node.example",
+            chain_id="xian-1",
+            wallet=wallet,
+        )
+
+    def test_parse_json_object_rejects_invalid_json(self) -> None:
+        with self.assertRaisesRegex(ValueError, "must be valid JSON"):
+            client_handlers._parse_json_object(
+                "{bad",
+                flag_name="--kwargs-json",
+            )
+
+    def test_client_wallet_generate_hides_private_key_by_default(self) -> None:
+        stdout = io.StringIO()
+        with redirect_stdout(stdout):
+            exit_code = main(["client", "wallet", "generate"])
+
+        self.assertEqual(exit_code, 0)
+        payload = json.loads(stdout.getvalue())
+        self.assertEqual(payload["address"], payload["public_key"])
+        self.assertNotIn("private_key", payload)
+
+    def test_client_wallet_generate_can_emit_and_write_private_key(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            out_path = Path(tmp_dir) / "wallet.key"
+            stdout = io.StringIO()
+            with redirect_stdout(stdout):
+                exit_code = main(
+                    [
+                        "client",
+                        "wallet",
+                        "generate",
+                        "--include-private-key",
+                        "--private-key-out",
+                        str(out_path),
+                    ]
+                )
+
+            self.assertEqual(exit_code, 0)
+            payload = json.loads(stdout.getvalue())
+            self.assertEqual(len(payload["private_key"]), 64)
+            self.assertEqual(
+                out_path.read_text(encoding="utf-8").strip(),
+                payload["private_key"],
+            )
+
+    def test_client_query_nonce(self) -> None:
+        with patch(
+            "xian_cli.client.handlers.tx_api.get_nonce", return_value=12
+        ) as get_nonce:
+            stdout = io.StringIO()
+            with redirect_stdout(stdout):
+                exit_code = main(
+                    [
+                        "client",
+                        "query",
+                        "nonce",
+                        "--node-url",
+                        "http://node.example",
+                        "alice",
+                    ]
+                )
+
+        self.assertEqual(exit_code, 0)
+        payload = json.loads(stdout.getvalue())
+        self.assertEqual(payload, {"address": "alice", "next_nonce": 12})
+        get_nonce.assert_called_once_with("http://node.example", "alice")
+
+    def test_client_query_balance_serializes_runtime_types(self) -> None:
+        fake_client = _FakeContextClient(balance=ContractingDecimal("12.50"))
+        with patch(
+            "xian_cli.client.handlers._make_client",
+            return_value=fake_client,
+        ):
+            stdout = io.StringIO()
+            with redirect_stdout(stdout):
+                exit_code = main(
+                    [
+                        "client",
+                        "query",
+                        "balance",
+                        "--node-url",
+                        "http://node.example",
+                        "alice",
+                        "--contract",
+                        "currency",
+                    ]
+                )
+
+        self.assertEqual(exit_code, 0)
+        payload = json.loads(stdout.getvalue())
+        self.assertEqual(payload["balance"], "12.5")
+        self.assertEqual(payload["address"], "alice")
+        self.assertEqual(payload["contract"], "currency")
+
+    def test_client_query_tx_serializes_receipt_dataclass(self) -> None:
+        receipt = TransactionReceipt.from_lookup(
+            {
+                "success": True,
+                "tx_hash": "ABC123",
+                "message": {"ok": True},
+                "transaction": {"hash": "ABC123"},
+                "execution": {"status_code": 0},
+            }
+        )
+        fake_client = _FakeContextClient(tx=receipt)
+        with patch(
+            "xian_cli.client.handlers._make_client",
+            return_value=fake_client,
+        ):
+            stdout = io.StringIO()
+            with redirect_stdout(stdout):
+                exit_code = main(
+                    [
+                        "client",
+                        "query",
+                        "tx",
+                        "--node-url",
+                        "http://node.example",
+                        "ABC123",
+                    ]
+                )
+
+        self.assertEqual(exit_code, 0)
+        payload = json.loads(stdout.getvalue())
+        self.assertTrue(payload["success"])
+        self.assertEqual(payload["tx_hash"], "ABC123")
+        self.assertEqual(payload["execution"]["status_code"], 0)
+
+    def test_client_query_block_by_height_serializes_dataclass(self) -> None:
+        block = IndexedBlock.from_dict(
+            {
+                "height": 7,
+                "hash": "BLOCK123",
+                "tx_count": 2,
+                "app_hash": "APP123",
+                "block_time_iso": "2026-01-02T03:04:05Z",
+            }
+        )
+        fake_client = _FakeContextClient(block=block)
+        with patch(
+            "xian_cli.client.handlers._make_client",
+            return_value=fake_client,
+        ):
+            stdout = io.StringIO()
+            with redirect_stdout(stdout):
+                exit_code = main(
+                    [
+                        "client",
+                        "query",
+                        "block",
+                        "--node-url",
+                        "http://node.example",
+                        "--height",
+                        "7",
+                    ]
+                )
+
+        self.assertEqual(exit_code, 0)
+        payload = json.loads(stdout.getvalue())
+        self.assertEqual(payload["height"], 7)
+        self.assertEqual(payload["block_hash"], "BLOCK123")
+
+    def test_client_query_block_by_hash_uses_hash_lookup(self) -> None:
+        block = IndexedBlock.from_dict({"height": 7, "hash": "BLOCK123"})
+        fake_client = _FakeContextClient(block=block)
+        with patch(
+            "xian_cli.client.handlers._make_client",
+            return_value=fake_client,
+        ):
+            stdout = io.StringIO()
+            with redirect_stdout(stdout):
+                exit_code = main(
+                    [
+                        "client",
+                        "query",
+                        "block",
+                        "--node-url",
+                        "http://node.example",
+                        "--block-hash",
+                        "BLOCK123",
+                    ]
+                )
+
+        self.assertEqual(exit_code, 0)
+        payload = json.loads(stdout.getvalue())
+        self.assertEqual(payload["block_hash"], "BLOCK123")
+
+    def test_client_call_passes_json_kwargs(self) -> None:
+        fake_client = _FakeContextClient(call={"ok": True})
+        with patch(
+            "xian_cli.client.handlers._make_client",
+            return_value=fake_client,
+        ):
+            stdout = io.StringIO()
+            with redirect_stdout(stdout):
+                exit_code = main(
+                    [
+                        "client",
+                        "call",
+                        "--node-url",
+                        "http://node.example",
+                        "currency",
+                        "balance_of",
+                        "--kwargs-json",
+                        '{"address":"alice"}',
+                    ]
+                )
+
+        self.assertEqual(exit_code, 0)
+        payload = json.loads(stdout.getvalue())
+        self.assertEqual(payload["result"], {"ok": True})
+        self.assertEqual(
+            fake_client.call_calls,
+            [("currency", "balance_of", {"address": "alice"})],
+        )
+
+    def test_client_call_rejects_non_object_kwargs(self) -> None:
+        with self.assertRaisesRegex(ValueError, "must decode to a JSON object"):
+            main(
+                [
+                    "client",
+                    "call",
+                    "--node-url",
+                    "http://node.example",
+                    "currency",
+                    "balance_of",
+                    "--kwargs-json",
+                    '["alice"]',
+                ]
+            )
+
+    def test_client_simulate_returns_payload(self) -> None:
+        fake_client = _FakeContextClient(
+            simulate={"status_code": 0, "chi_used": 17}
+        )
+        with patch(
+            "xian_cli.client.handlers._make_client",
+            return_value=fake_client,
+        ):
+            stdout = io.StringIO()
+            with redirect_stdout(stdout):
+                exit_code = main(
+                    [
+                        "client",
+                        "simulate",
+                        "--node-url",
+                        "http://node.example",
+                        "currency",
+                        "transfer",
+                        "--kwargs-json",
+                        '{"amount":1,"to":"bob"}',
+                    ]
+                )
+
+        self.assertEqual(exit_code, 0)
+        payload = json.loads(stdout.getvalue())
+        self.assertEqual(payload["status_code"], 0)
+        self.assertEqual(payload["chi_used"], 17)
+
+    def test_client_tx_send_uses_submission_args(self) -> None:
+        fake_client = _FakeContextClient(
+            send_tx={
+                "submitted": True,
+                "tx_hash": "ABC123",
+                "mode": "checktx",
+            }
+        )
+        with (
+            patch(
+                "xian_cli.client.handlers._make_client",
+                return_value=fake_client,
+            ),
+            patch(
+                "xian_cli.client.handlers._build_wallet",
+                return_value=object(),
+            ),
+        ):
+            stdout = io.StringIO()
+            with redirect_stdout(stdout):
+                exit_code = main(
+                    [
+                        "client",
+                        "tx",
+                        "send",
+                        "--node-url",
+                        "http://node.example",
+                        "currency",
+                        "approve",
+                        "--kwargs-json",
+                        '{"to":"bob","amount":7}',
+                        "--mode",
+                        "checktx",
+                        "--wait-for-tx",
+                        "--timeout-seconds",
+                        "5",
+                        "--chi",
+                        "123",
+                    ]
+                )
+
+        self.assertEqual(exit_code, 0)
+        payload = json.loads(stdout.getvalue())
+        self.assertEqual(payload["tx_hash"], "ABC123")
+        self.assertEqual(len(fake_client.send_tx_calls), 1)
+        call = fake_client.send_tx_calls[0]
+        self.assertEqual(call["contract"], "currency")
+        self.assertEqual(call["function"], "approve")
+        self.assertEqual(call["kwargs"], {"to": "bob", "amount": 7})
+        self.assertEqual(call["mode"], "checktx")
+        self.assertTrue(call["wait_for_tx"])
+        self.assertEqual(call["timeout_seconds"], 5.0)
+        self.assertEqual(call["chi"], 123)
+
+    def test_client_tx_transfer(self) -> None:
+        fake_client = _FakeContextClient(
+            send={
+                "submitted": True,
+                "tx_hash": "XYZ789",
+                "mode": "async",
+            }
+        )
+        with (
+            patch(
+                "xian_cli.client.handlers._make_client",
+                return_value=fake_client,
+            ),
+            patch(
+                "xian_cli.client.handlers._build_wallet",
+                return_value=object(),
+            ),
+        ):
+            stdout = io.StringIO()
+            with redirect_stdout(stdout):
+                exit_code = main(
+                    [
+                        "client",
+                        "tx",
+                        "transfer",
+                        "--node-url",
+                        "http://node.example",
+                        "bob",
+                        "1.25",
+                        "--token",
+                        "currency",
+                    ]
+                )
+
+        self.assertEqual(exit_code, 0)
+        payload = json.loads(stdout.getvalue())
+        self.assertEqual(payload["tx_hash"], "XYZ789")
+        self.assertEqual(len(fake_client.send_calls), 1)
+        call = fake_client.send_calls[0]
+        self.assertEqual(call["amount"], "1.25")
+        self.assertEqual(call["to_address"], "bob")
+        self.assertEqual(call["token"], "currency")
+
+    def test_client_tx_transfer_uses_private_key_env(self) -> None:
+        account = Ed25519Account.generate()
+        fake_client = _FakeContextClient(
+            send={"submitted": True, "tx_hash": "XYZ789", "mode": "async"}
+        )
+        with (
+            patch(
+                "xian_cli.client.handlers._make_client",
+                return_value=fake_client,
+            ),
+            patch.dict(
+                "os.environ",
+                {
+                    "XIAN_PRIVATE_KEY": account.private_key,
+                    "XIAN_NODE_URL": "http://node.example",
+                },
+            ),
+        ):
+            stdout = io.StringIO()
+            with redirect_stdout(stdout):
+                exit_code = main(
+                    [
+                        "client",
+                        "tx",
+                        "transfer",
+                        "--private-key-env",
+                        "XIAN_PRIVATE_KEY",
+                        "bob",
+                        "2",
+                    ]
+                )
+
+        self.assertEqual(exit_code, 0)
+        payload = json.loads(stdout.getvalue())
+        self.assertEqual(payload["tx_hash"], "XYZ789")
+
+    def test_client_tx_send_requires_private_key(self) -> None:
+        with self.assertRaisesRegex(ValueError, "private key is required"):
+            main(
+                [
+                    "client",
+                    "tx",
+                    "send",
+                    "--node-url",
+                    "http://node.example",
+                    "currency",
+                    "approve",
+                ]
+            )
+
+
+class ClientOutputTests(unittest.TestCase):
+    def test_to_jsonable_handles_runtime_types_and_bytes(self) -> None:
+        receipt = TransactionReceipt.from_lookup(
+            {
+                "success": True,
+                "tx_hash": "ABC123",
+                "message": ContractingDecimal("1.5"),
+                "transaction": {"created": Datetime(2026, 1, 2, 3, 4, 5)},
+                "execution": {"payload": b"hello", "raw": b"\xff"},
+            }
+        )
+
+        payload = cli_output.to_jsonable(receipt)
+        self.assertEqual(payload["message"], "1.5")
+        self.assertEqual(
+            payload["transaction"]["created"],
+            "2026-01-02 03:04:05",
+        )
+        self.assertEqual(payload["execution"]["payload"], "hello")
+        self.assertEqual(payload["execution"]["raw"], "ff")
+
+    def test_emit_json_writes_newline_terminated_json(self) -> None:
+        stdout = io.StringIO()
+        with redirect_stdout(stdout):
+            cli_output.emit_json({"ok": True})
+
+        self.assertEqual(stdout.getvalue(), '{\n  "ok": true\n}\n')
+
+    def test_to_jsonable_handles_lists_and_tuples(self) -> None:
+        payload = cli_output.to_jsonable({"items": [1, ("a", b"\xff")]})
+        self.assertEqual(payload, {"items": [1, ["a", "ff"]]})
 
 
 class NetworkManifestTests(unittest.TestCase):

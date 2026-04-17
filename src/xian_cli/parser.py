@@ -18,12 +18,15 @@ def build_parser() -> argparse.ArgumentParser:
     # Import handlers lazily so parser wiring can live outside cli.py
     # without creating an import cycle at module import time.
     from xian_cli import cli
+    from xian_cli.client.parser import register_client_commands
 
     parser = argparse.ArgumentParser(
         prog="xian",
         description="Operator CLI for Xian networks and nodes",
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
+
+    register_client_commands(subparsers)
 
     keys_parser = subparsers.add_parser("keys", help="key management")
     keys_subparsers = keys_parser.add_subparsers(

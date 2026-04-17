@@ -13,6 +13,7 @@ requires-python = ">=3.12"
 dependencies = [
     "pynacl>=1.6.2,<2",
     "xian-tech-abci",
+    "xian-tech-py",
 ]
 keywords = ["blockchain", "cometbft", "cli", "operator", "xian"]
 classifiers = [

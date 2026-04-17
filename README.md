@@ -1,9 +1,9 @@
 # xian-cli
 
-`xian-cli` is the operator-facing control plane for Xian networks and nodes. It
-handles manifests, node profiles, lifecycle commands, health checks, and local
-bootstrap flows without turning `xian-abci` or `xian-stack` into user-facing
-tools.
+`xian-cli` is the operator-facing and automation-facing control plane for Xian.
+It handles manifests, node profiles, lifecycle commands, health checks, local
+bootstrap flows, and JSON-first client commands without turning `xian-abci`,
+`xian-py`, or `xian-stack` into user-facing tools.
 
 The published PyPI package name is `xian-tech-cli`. The installed console
 command remains `xian`.
@@ -81,6 +81,17 @@ uv run xian snapshot restore devnet-node
 For remote snapshot bootstrap, prefer a signed snapshot manifest plus trusted
 snapshot signing keys in the network manifest or node profile.
 
+Drive a node directly for wallet, query, and transaction automation:
+
+```bash
+uv run xian client wallet generate --include-private-key
+uv run xian client query nonce --node-url http://127.0.0.1:26657 <address>
+uv run xian client tx transfer \
+  --node-url http://127.0.0.1:26657 \
+  --private-key-env XIAN_PRIVATE_KEY \
+  <recipient> 1.25
+```
+
 ## Principles
 
 - `xian-cli` owns operator UX. Deterministic node logic stays in `xian-abci`,
@@ -108,6 +119,7 @@ snapshot signing keys in the network manifest or node profile.
   stack-managed `xian-intentkit`
 - snapshot restore and doctor diagnostics
 - solution-pack starter flows built on `xian-configs`
+- wallet, query, call/simulate, and transaction automation through `xian-py`
 
 ## Command Groups
 
@@ -116,6 +128,7 @@ snapshot signing keys in the network manifest or node profile.
 - `xian network create ...`: create a local/operator-managed network profile
 - `xian network join ...`: join an existing preset-backed or remote network
 - `xian node ...`: initialize, start, stop, inspect, and recover a node profile
+- `xian client ...`: wallet, query, call/simulate, and transaction automation
 - `xian doctor ...`: run broader local diagnostics
 - `xian solution-pack ...`: discover starter flows built on top of the golden
   path
