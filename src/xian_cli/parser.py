@@ -580,6 +580,14 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     create_parser.add_argument("--force", action="store_true")
+    create_parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help=(
+            "validate inputs and print the planned manifest path and profile "
+            "without writing files"
+        ),
+    )
     create_parser.set_defaults(handler=cli._handle_network_create)
 
     join_parser = network_subparsers.add_parser(
@@ -921,6 +929,14 @@ def build_parser() -> argparse.ArgumentParser:
         help="output file path; defaults to ./nodes/<name>.json",
     )
     join_parser.add_argument("--force", action="store_true")
+    join_parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help=(
+            "validate inputs and print the planned node profile path without "
+            "writing files"
+        ),
+    )
     join_parser.set_defaults(handler=cli._handle_network_join)
 
     node_parser = subparsers.add_parser("node", help="node lifecycle")

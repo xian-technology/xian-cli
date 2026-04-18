@@ -49,6 +49,32 @@ from xian_cli.runtime import (
 )
 
 
+def _block_age_seconds(block_time: object) -> float | None:
+    """
+    Seconds elapsed since ``block_time`` (CometBFT's ISO-8601 latest_block_time).
+
+    Surfaces sync lag in ``node status`` — fresh blocks return a small value,
+    a stalled chain returns a large one. Returns None if the input is missing
+    or unparseable so the caller can omit the field instead of showing 0.
+    """
+    if not isinstance(block_time, str) or not block_time:
+        return None
+    try:
+        # CometBFT emits e.g. "2024-01-01T12:00:00.123456789Z" — Python's
+        # datetime can't parse sub-microsecond precision or the trailing Z,
+        # so normalize before handing to fromisoformat.
+        normalized = block_time.rstrip("Z")
+        if "." in normalized:
+            head, frac = normalized.split(".", 1)
+            frac = frac[:6]
+            normalized = f"{head}.{frac}"
+        parsed = datetime.fromisoformat(normalized).replace(tzinfo=UTC)
+    except ValueError:
+        return None
+    delta = datetime.now(UTC) - parsed
+    return max(delta.total_seconds(), 0.0)
+
+
 def _write_validator_material_files(
     *,
     out_dir: Path,
@@ -556,6 +582,23 @@ def _handle_network_create(args: argparse.Namespace) -> int:
     if args.init_node and args.bootstrap_node is None:
         if template is None or template.get("bootstrap_node_name") is None:
             raise ValueError("--init-node requires --bootstrap-node")
+    if getattr(args, "dry_run", False):
+        # All argument validation has passed; summarize the planned layout
+        # without writing files or generating keys. If the user then drops
+        # the --dry-run flag, the same inputs will run the real flow.
+        dry_plan: dict[str, object] = {
+            "dry_run": True,
+            "name": args.name,
+            "template": template["name"] if template else None,
+            "manifest_path": str(target),
+            "network_dir": str(network_dir),
+            "bootstrap_node": args.bootstrap_node,
+            "generate_validator_key": bool(args.generate_validator_key),
+            "init_node": bool(args.init_node),
+            "genesis_source": args.genesis_source,
+        }
+        print(json.dumps(dry_plan, indent=2))
+        return 0
     bootstrap_name, validator_names = _collect_creation_validator_names(
         args,
         template=template,
@@ -1073,6 +1116,25 @@ def _handle_network_join(args: argparse.Namespace) -> int:
         )
     if args.restore_snapshot and not args.init_node:
         raise ValueError("--restore-snapshot requires --init-node")
+
+    if getattr(args, "dry_run", False):
+        target_profile = _resolve_output_path(
+            base_dir=base_dir,
+            explicit_output=args.output,
+            default_path=base_dir / "nodes" / f"{args.name}.json",
+        )
+        dry_plan: dict[str, object] = {
+            "dry_run": True,
+            "name": args.name,
+            "network": args.network,
+            "network_manifest": str(network_path),
+            "node_profile_path": str(target_profile),
+            "generate_validator_key": bool(args.generate_validator_key),
+            "init_node": bool(args.init_node),
+            "restore_snapshot": bool(args.restore_snapshot),
+        }
+        print(json.dumps(dry_plan, indent=2))
+        return 0
 
     requested_node_image_mode = _pick_template_value(
         args.node_image_mode,
@@ -2467,6 +2529,10 @@ def _summarize_node_status(result: dict[str, object]) -> dict[str, object]:
         "backend_running": result.get("backend_running"),
         "rpc_reachable": result.get("rpc_reachable"),
         "rpc_height": sync_info.get("latest_block_height"),
+        "rpc_latest_block_time": sync_info.get("latest_block_time"),
+        "rpc_block_age_seconds": _block_age_seconds(
+            sync_info.get("latest_block_time")
+        ),
         "rpc_catching_up": sync_info.get("catching_up"),
         "rpc_network": node_info.get("network"),
         "peer_count": other.get("n_peers"),
