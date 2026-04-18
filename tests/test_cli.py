@@ -67,6 +67,26 @@ CANONICAL_RELEASE_SPLIT_IMAGE = (
 )
 
 
+def _normalized_release_manifest(manifest: dict) -> dict:
+    build = manifest["build"]
+    return {
+        "schema_version": manifest["schema_version"],
+        "components": manifest["components"],
+        "build": {
+            "python_image": build["python_image"],
+            "go_image": build["go_image"],
+            "cometbft_version": build["cometbft_version"],
+            "cometbft_source_url": build["cometbft_source_url"],
+            "cometbft_source_sha256": build["cometbft_source_sha256"],
+            "s6_overlay_version": build["s6_overlay_version"],
+            "s6_overlay_noarch_sha256": build["s6_overlay_noarch_sha256"],
+            "s6_overlay_x86_64_sha256": build["s6_overlay_x86_64_sha256"],
+            "s6_overlay_aarch64_sha256": build["s6_overlay_aarch64_sha256"],
+        },
+        "images": manifest["images"],
+    }
+
+
 class ValidatorKeyTests(unittest.TestCase):
     def test_generate_validator_material_shape(self) -> None:
         payload = (
@@ -816,6 +836,38 @@ class NetworkManifestTests(unittest.TestCase):
             self.assertEqual(manifest["tracer_mode"], "python_line_v1")
             self.assertEqual(manifest["node_image_mode"], "local_build")
 
+    def test_network_create_dry_run_validates_without_writing_files(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            base_dir = Path(tmp_dir)
+            stdout = io.StringIO()
+            with redirect_stdout(stdout):
+                exit_code = main(
+                    [
+                        "network",
+                        "create",
+                        "local-dev",
+                        "--base-dir",
+                        str(base_dir),
+                        "--chain-id",
+                        "xian-local-1",
+                        "--dry-run",
+                    ]
+                )
+
+            self.assertEqual(exit_code, 0)
+            payload = json.loads(stdout.getvalue())
+            manifest_path = (
+                base_dir / "networks" / "local-dev" / "manifest.json"
+            )
+            self.assertTrue(payload["dry_run"])
+            self.assertEqual(
+                payload["manifest_path"],
+                str(manifest_path.resolve()),
+            )
+            self.assertFalse(manifest_path.exists())
+
     def test_read_network_manifest_accepts_preset_built_genesis(self) -> None:
         manifest = read_network_manifest(CANONICAL_DEVNET_MANIFEST)
         self.assertIsNone(manifest["genesis_source"])
@@ -1065,6 +1117,34 @@ class NetworkManifestTests(unittest.TestCase):
             self.assertIsNone(profile["node_integrated_image"])
             self.assertIsNone(profile["node_split_image"])
 
+    def test_network_join_dry_run_validates_without_writing_profile(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            base_dir = Path(tmp_dir)
+            stdout = io.StringIO()
+            with redirect_stdout(stdout):
+                exit_code = main(
+                    [
+                        "network",
+                        "join",
+                        "validator-1",
+                        "--base-dir",
+                        str(base_dir),
+                        "--network",
+                        "devnet",
+                        "--dry-run",
+                    ]
+                )
+
+            self.assertEqual(exit_code, 0)
+            payload = json.loads(stdout.getvalue())
+            profile_path = base_dir / "nodes" / "validator-1.json"
+            self.assertTrue(payload["dry_run"])
+            self.assertEqual(
+                payload["node_profile_path"],
+                str(profile_path.resolve()),
+            )
+            self.assertFalse(profile_path.exists())
+
     def test_network_create_writes_dashboard_settings_to_bootstrap_profile(
         self,
     ) -> None:
@@ -1190,7 +1270,7 @@ class NetworkManifestTests(unittest.TestCase):
             )
             self.assertEqual(
                 profile["node_release_manifest"],
-                CANONICAL_NODE_RELEASE_MANIFEST,
+                _normalized_release_manifest(CANONICAL_NODE_RELEASE_MANIFEST),
             )
 
     def test_network_join_uses_template_defaults(self) -> None:
@@ -3073,7 +3153,7 @@ class NodeRuntimeTests(unittest.TestCase):
             payload = json.loads(stdout.getvalue())
             self.assertEqual(
                 payload["node_release_manifest"],
-                CANONICAL_NODE_RELEASE_MANIFEST,
+                _normalized_release_manifest(CANONICAL_NODE_RELEASE_MANIFEST),
             )
             self.assertEqual(
                 payload["summary"]["release_manifest_refs"]["xian-abci"],
@@ -3296,6 +3376,7 @@ class NodeRuntimeTests(unittest.TestCase):
                         },
                         "sync_info": {
                             "latest_block_height": "12",
+                            "latest_block_time": "2026-04-18T22:00:00Z",
                             "catching_up": False,
                         },
                     }
@@ -3338,6 +3419,12 @@ class NodeRuntimeTests(unittest.TestCase):
             self.assertEqual(result["summary"]["state"], "ready")
             self.assertEqual(result["summary"]["rpc_network"], "xian")
             self.assertEqual(result["summary"]["rpc_height"], "12")
+            self.assertIsInstance(
+                result["summary"]["rpc_block_age_seconds"], float
+            )
+            self.assertGreaterEqual(
+                result["summary"]["rpc_block_age_seconds"], 0.0
+            )
             self.assertEqual(result["summary"]["peer_count"], "2")
             self.assertTrue(result["summary"]["dashboard_reachable"])
             self.assertTrue(result["summary"]["prometheus_reachable"])
