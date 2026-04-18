@@ -824,6 +824,72 @@ class NetworkManifestTests(unittest.TestCase):
             manifest["genesis_time"], "2026-03-30T00:00:00.000000Z"
         )
 
+    def test_read_network_manifest_accepts_privacy_policy_surfaces(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            manifest_path = Path(tmp_dir) / "manifest.json"
+            manifest_path.write_text(
+                json.dumps(
+                    {
+                        "schema_version": 1,
+                        "name": "privacy-test",
+                        "chain_id": "xian-privacy-1",
+                        "mode": "join",
+                        "runtime_backend": "xian-stack",
+                        "node_image_mode": "local_build",
+                        "shielded_relayer": None,
+                        "shielded_relayers": [],
+                        "privacy_artifact_catalog": {
+                            "path": "./privacy/artifacts.json",
+                            "sha256": "a" * 64,
+                        },
+                        "shielded_history_policy": {
+                            "feed_version": 1,
+                            "compatibility_commitment": "versioned",
+                            "retention_class": "archive",
+                            "bds_snapshot_support": True,
+                            "operator_notice": (
+                                "retain encrypted payload history"
+                            ),
+                        },
+                        "privacy_submission_policy": {
+                            "disclosure_policy": "user_controlled",
+                            "shared_relayer_auth_required": True,
+                            "hidden_sender_submission_mode": "relayer_optional",
+                            "operator_notice": (
+                                "shared relayers require operator auth"
+                            ),
+                        },
+                        "genesis_preset": "devnet",
+                        "genesis_time": "2026-03-30T00:00:00.000000Z",
+                        "snapshot_url": None,
+                        "seed_nodes": [],
+                        "block_policy_mode": "on_demand",
+                        "block_policy_interval": "0s",
+                        "tracer_mode": "python_line_v1",
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            manifest = read_network_manifest(manifest_path)
+
+        self.assertEqual(
+            manifest["privacy_artifact_catalog"]["path"],
+            "./privacy/artifacts.json",
+        )
+        self.assertEqual(
+            manifest["shielded_history_policy"]["compatibility_commitment"],
+            "versioned",
+        )
+        self.assertEqual(
+            manifest["privacy_submission_policy"][
+                "hidden_sender_submission_mode"
+            ],
+            "relayer_optional",
+        )
+
     def test_read_network_manifest_rejects_incomplete_registry_image_config(
         self,
     ) -> None:

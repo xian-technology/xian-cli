@@ -2490,8 +2490,20 @@ def _summarize_node_status(result: dict[str, object]) -> dict[str, object]:
         if isinstance(build, dict):
             summary["release_manifest_build"] = {
                 "python_image": build.get("python_image"),
+                "go_image": build.get("go_image"),
                 "cometbft_version": build.get("cometbft_version"),
+                "cometbft_source_url": build.get("cometbft_source_url"),
+                "cometbft_source_sha256": build.get("cometbft_source_sha256"),
                 "s6_overlay_version": build.get("s6_overlay_version"),
+                "s6_overlay_noarch_sha256": build.get(
+                    "s6_overlay_noarch_sha256"
+                ),
+                "s6_overlay_x86_64_sha256": build.get(
+                    "s6_overlay_x86_64_sha256"
+                ),
+                "s6_overlay_aarch64_sha256": build.get(
+                    "s6_overlay_aarch64_sha256"
+                ),
             }
 
     backend_status = result.get("backend_status")

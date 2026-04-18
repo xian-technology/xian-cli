@@ -37,6 +37,18 @@ SUPPORTED_SHIELDED_RELAYER_SUBMISSION_KINDS = {
     "shielded_note_relay_transfer",
     "shielded_command",
 }
+SUPPORTED_SHIELDED_HISTORY_COMPATIBILITY = {
+    "best_effort",
+    "versioned",
+}
+SUPPORTED_SHIELDED_HISTORY_RETENTION = {
+    "operator_defined",
+    "archive",
+}
+SUPPORTED_PRIVACY_DISCLOSURE_POLICIES = {
+    "user_controlled",
+    "network_governed",
+}
 SUPPORTED_APP_LOG_LEVELS = {
     "TRACE",
     "DEBUG",
@@ -62,6 +74,13 @@ def _require_optional_str(payload: dict, key: str) -> str | None:
         return None
     if not isinstance(value, str) or not value:
         raise ValueError(f"{key} must be a non-empty string when provided")
+    return value
+
+
+def _require_sha256(payload: dict, key: str) -> str:
+    value = _require_str(payload, key).lower()
+    if len(value) != 64 or any(ch not in "0123456789abcdef" for ch in value):
+        raise ValueError(f"{key} must be a 64-character lowercase hex sha256")
     return value
 
 
@@ -157,8 +176,22 @@ def _normalize_node_release_manifest(
         raise ValueError(f"{key}.build must be an object")
     build = {
         "python_image": _require_str(build_raw, "python_image"),
+        "go_image": _require_str(build_raw, "go_image"),
         "cometbft_version": _require_str(build_raw, "cometbft_version"),
+        "cometbft_source_url": _require_str(build_raw, "cometbft_source_url"),
+        "cometbft_source_sha256": _require_sha256(
+            build_raw, "cometbft_source_sha256"
+        ),
         "s6_overlay_version": _require_str(build_raw, "s6_overlay_version"),
+        "s6_overlay_noarch_sha256": _require_sha256(
+            build_raw, "s6_overlay_noarch_sha256"
+        ),
+        "s6_overlay_x86_64_sha256": _require_sha256(
+            build_raw, "s6_overlay_x86_64_sha256"
+        ),
+        "s6_overlay_aarch64_sha256": _require_sha256(
+            build_raw, "s6_overlay_aarch64_sha256"
+        ),
     }
 
     images_raw = value.get("images")
@@ -268,6 +301,83 @@ def _normalize_shielded_relayers_manifest(
     return legacy or (
         sorted_relayers[0] if sorted_relayers else None
     ), sorted_relayers
+
+
+def _normalize_privacy_artifact_catalog(
+    payload: dict,
+    key: str,
+) -> dict | None:
+    value = payload.get(key)
+    if value is None:
+        return None
+    if not isinstance(value, dict):
+        raise ValueError(f"{key} must be an object when provided")
+    return {
+        "path": _require_str(value, "path"),
+        "sha256": _require_sha256(value, "sha256"),
+    }
+
+
+def _normalize_shielded_history_policy(
+    payload: dict,
+    key: str,
+) -> dict | None:
+    value = payload.get(key)
+    if value is None:
+        return None
+    if not isinstance(value, dict):
+        raise ValueError(f"{key} must be an object when provided")
+    compatibility_commitment = _require_optional_choice(
+        value,
+        "compatibility_commitment",
+        supported=SUPPORTED_SHIELDED_HISTORY_COMPATIBILITY,
+    )
+    if compatibility_commitment is None:
+        raise ValueError(f"{key}.compatibility_commitment is required")
+    retention_class = _require_optional_choice(
+        value,
+        "retention_class",
+        supported=SUPPORTED_SHIELDED_HISTORY_RETENTION,
+    )
+    if retention_class is None:
+        raise ValueError(f"{key}.retention_class is required")
+    return {
+        "feed_version": _require_positive_int_no_default(value, "feed_version"),
+        "compatibility_commitment": compatibility_commitment,
+        "retention_class": retention_class,
+        "bds_snapshot_support": _require_bool(
+            value, "bds_snapshot_support", default=False
+        ),
+        "operator_notice": _require_str(value, "operator_notice"),
+    }
+
+
+def _normalize_privacy_submission_policy(
+    payload: dict,
+    key: str,
+) -> dict | None:
+    value = payload.get(key)
+    if value is None:
+        return None
+    if not isinstance(value, dict):
+        raise ValueError(f"{key} must be an object when provided")
+    disclosure_policy = _require_optional_choice(
+        value,
+        "disclosure_policy",
+        supported=SUPPORTED_PRIVACY_DISCLOSURE_POLICIES,
+    )
+    if disclosure_policy is None:
+        raise ValueError(f"{key}.disclosure_policy is required")
+    return {
+        "disclosure_policy": disclosure_policy,
+        "shared_relayer_auth_required": _require_bool(
+            value, "shared_relayer_auth_required", default=False
+        ),
+        "hidden_sender_submission_mode": _require_str(
+            value, "hidden_sender_submission_mode"
+        ),
+        "operator_notice": _require_str(value, "operator_notice"),
+    }
 
 
 def _require_schema_version(payload: dict) -> int:
@@ -425,6 +535,15 @@ def normalize_network_manifest(payload: dict) -> dict:
         "node_split_image": node_split_image,
         "shielded_relayer": shielded_relayer,
         "shielded_relayers": shielded_relayers,
+        "privacy_artifact_catalog": _normalize_privacy_artifact_catalog(
+            payload, "privacy_artifact_catalog"
+        ),
+        "shielded_history_policy": _normalize_shielded_history_policy(
+            payload, "shielded_history_policy"
+        ),
+        "privacy_submission_policy": _normalize_privacy_submission_policy(
+            payload, "privacy_submission_policy"
+        ),
         "node_release_manifest": _normalize_node_release_manifest(
             payload,
             "node_release_manifest",
@@ -845,6 +964,9 @@ class NetworkManifest:
     node_split_image: str | None = None
     shielded_relayer: dict | None = None
     shielded_relayers: list[dict] = field(default_factory=list)
+    privacy_artifact_catalog: dict | None = None
+    shielded_history_policy: dict | None = None
+    privacy_submission_policy: dict | None = None
     node_release_manifest: dict | None = None
     genesis_source: str | None = None
     genesis_preset: str | None = None
