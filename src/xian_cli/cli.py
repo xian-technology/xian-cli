@@ -51,7 +51,7 @@ from xian_cli.runtime import (
 
 def _block_age_seconds(block_time: object) -> float | None:
     """
-    Seconds elapsed since ``block_time`` (CometBFT's ISO-8601 latest_block_time).
+    Seconds elapsed since ``block_time``.
 
     Surfaces sync lag in ``node status`` — fresh blocks return a small value,
     a stalled chain returns a large one. Returns None if the input is missing

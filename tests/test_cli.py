@@ -1117,7 +1117,9 @@ class NetworkManifestTests(unittest.TestCase):
             self.assertIsNone(profile["node_integrated_image"])
             self.assertIsNone(profile["node_split_image"])
 
-    def test_network_join_dry_run_validates_without_writing_profile(self) -> None:
+    def test_network_join_dry_run_validates_without_writing_profile(
+        self,
+    ) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             base_dir = Path(tmp_dir)
             stdout = io.StringIO()
