@@ -1855,8 +1855,12 @@ class NetworkManifestTests(unittest.TestCase):
             self.assertTrue(result["node_initialized"])
             home = Path(result["node_init"]["home"])
             self.assertTrue((home / "config" / "config.toml").exists())
+            self.assertTrue((home / "config" / "xian.toml").exists())
             self.assertTrue((home / "config" / "genesis.json").exists())
             config_toml = (home / "config" / "config.toml").read_text(
+                encoding="utf-8"
+            )
+            xian_toml = (home / "config" / "xian.toml").read_text(
                 encoding="utf-8"
             )
             profile = json.loads(
@@ -1868,7 +1872,8 @@ class NetworkManifestTests(unittest.TestCase):
                 profile["validator_key_ref"],
                 "keys/validator-1/validator_key_info.json",
             )
-            self.assertIn('metrics_host = "0.0.0.0"', config_toml)
+            self.assertNotIn("[xian]", config_toml)
+            self.assertIn('metrics_host = "0.0.0.0"', xian_toml)
 
     def test_network_create_can_bootstrap_local_network(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -1950,6 +1955,7 @@ class NetworkManifestTests(unittest.TestCase):
             self.assertTrue(result["node_initialized"])
             self.assertTrue(genesis_path.exists())
             self.assertTrue((home / "config" / "config.toml").exists())
+            self.assertTrue((home / "config" / "xian.toml").exists())
             self.assertTrue(
                 (
                     base_dir
@@ -2256,6 +2262,7 @@ class NodeInitTests(unittest.TestCase):
             result = json.loads(stdout.getvalue())
             home = Path(result["home"])
             self.assertTrue((home / "config" / "config.toml").exists())
+            self.assertTrue((home / "config" / "xian.toml").exists())
             self.assertTrue((home / "config" / "genesis.json").exists())
             self.assertTrue(
                 (home / "config" / "priv_validator_key.json").exists()
@@ -2267,20 +2274,24 @@ class NodeInitTests(unittest.TestCase):
             config_toml = (home / "config" / "config.toml").read_text(
                 encoding="utf-8"
             )
-            self.assertIn("transaction_trace_logging = true", config_toml)
-            self.assertIn('app_log_level = "WARNING"', config_toml)
-            self.assertIn("app_log_json = true", config_toml)
-            self.assertIn("app_log_rotation_hours = 8", config_toml)
-            self.assertIn("app_log_retention_days = 21", config_toml)
-            self.assertIn("simulation_enabled = true", config_toml)
-            self.assertIn("simulation_max_concurrency = 4", config_toml)
-            self.assertIn("simulation_timeout_ms = 3200", config_toml)
-            self.assertIn("simulation_max_chi = 700000", config_toml)
-            self.assertIn("parallel_execution_enabled = true", config_toml)
-            self.assertIn("parallel_execution_workers = 5", config_toml)
+            xian_toml = (home / "config" / "xian.toml").read_text(
+                encoding="utf-8"
+            )
+            self.assertNotIn("[xian]", config_toml)
+            self.assertIn("transaction_trace_logging = true", xian_toml)
+            self.assertIn('app_log_level = "WARNING"', xian_toml)
+            self.assertIn("app_log_json = true", xian_toml)
+            self.assertIn("app_log_rotation_hours = 8", xian_toml)
+            self.assertIn("app_log_retention_days = 21", xian_toml)
+            self.assertIn("simulation_enabled = true", xian_toml)
+            self.assertIn("simulation_max_concurrency = 4", xian_toml)
+            self.assertIn("simulation_timeout_ms = 3200", xian_toml)
+            self.assertIn("simulation_max_chi = 700000", xian_toml)
+            self.assertIn("parallel_execution_enabled = true", xian_toml)
+            self.assertIn("parallel_execution_workers = 5", xian_toml)
             self.assertIn(
                 "parallel_execution_min_transactions = 11",
-                config_toml,
+                xian_toml,
             )
 
     def test_node_init_supports_remote_genesis_url(self) -> None:
@@ -2824,6 +2835,7 @@ class NodeRuntimeTests(unittest.TestCase):
             config_dir = stack_dir / ".cometbft" / "config"
             config_dir.mkdir(parents=True)
             (config_dir / "config.toml").write_text("", encoding="utf-8")
+            (config_dir / "xian.toml").write_text("", encoding="utf-8")
 
             with redirect_stdout(io.StringIO()):
                 main(
@@ -2916,6 +2928,7 @@ class NodeRuntimeTests(unittest.TestCase):
             config_dir = stack_dir / ".cometbft" / "config"
             config_dir.mkdir(parents=True)
             (config_dir / "config.toml").write_text("", encoding="utf-8")
+            (config_dir / "xian.toml").write_text("", encoding="utf-8")
 
             (base_dir / "networks" / "mainnet" / "manifest.json").write_text(
                 json.dumps(
@@ -3322,6 +3335,7 @@ class NodeRuntimeTests(unittest.TestCase):
             config_dir.mkdir(parents=True)
             data_dir.mkdir(parents=True)
             (config_dir / "config.toml").write_text("", encoding="utf-8")
+            (config_dir / "xian.toml").write_text("", encoding="utf-8")
             (config_dir / "genesis.json").write_text("{}", encoding="utf-8")
             (config_dir / "node_key.json").write_text(
                 json.dumps({"node_id": "node-123"}),
@@ -3540,6 +3554,7 @@ trust_period = "336h0m0s"
 """,
                 encoding="utf-8",
             )
+            (config_dir / "xian.toml").write_text("", encoding="utf-8")
             (config_dir / "genesis.json").write_text("{}", encoding="utf-8")
             (config_dir / "node_key.json").write_text(
                 json.dumps({"node_id": "node-123"}),
@@ -3645,6 +3660,7 @@ class DoctorTests(unittest.TestCase):
             config_dir.mkdir(parents=True)
             data_dir.mkdir(parents=True)
             (config_dir / "config.toml").write_text("", encoding="utf-8")
+            (config_dir / "xian.toml").write_text("", encoding="utf-8")
             (config_dir / "genesis.json").write_text("{}", encoding="utf-8")
             (config_dir / "node_key.json").write_text(
                 json.dumps({"node_id": "node-123"}),
@@ -3774,6 +3790,7 @@ class DoctorTests(unittest.TestCase):
             config_dir.mkdir(parents=True)
             data_dir.mkdir(parents=True)
             (config_dir / "config.toml").write_text("", encoding="utf-8")
+            (config_dir / "xian.toml").write_text("", encoding="utf-8")
             (config_dir / "genesis.json").write_text("{}", encoding="utf-8")
             (config_dir / "node_key.json").write_text(
                 json.dumps({"node_id": "node-123"}),

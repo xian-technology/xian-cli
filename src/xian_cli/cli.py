@@ -2136,7 +2136,7 @@ def _initialize_node_from_args(args: argparse.Namespace) -> dict:
     seed_nodes = list(network.get("seed_nodes") or [])
     seed_nodes.extend(profile.get("seeds") or [])
 
-    config = node_setup.render_cometbft_config(
+    configs = node_setup.render_node_configs(
         moniker=profile["moniker"],
         seed_nodes=seed_nodes,
         service_node=bool(profile.get("service_node")),
@@ -2188,10 +2188,13 @@ def _initialize_node_from_args(args: argparse.Namespace) -> dict:
         if runtime_backend == "xian-stack"
         else "127.0.0.1",
     )
+    config = configs["cometbft"]
+    xian_config = configs["xian"]
 
     result = node_setup.materialize_cometbft_home(
         home=home,
         config=config,
+        xian_config=xian_config,
         genesis=genesis,
         priv_validator_key=validator_key_payload,
         overwrite=args.force,
@@ -2253,9 +2256,15 @@ def _handle_node_start(args: argparse.Namespace) -> int:
         stack_dir=stack_dir,
     )
     config_path = home / "config" / "config.toml"
+    xian_config_path = home / "config" / "xian.toml"
     if not config_path.exists():
         raise FileNotFoundError(
             f"{config_path} does not exist; "
+            f"run `xian node init {args.name}` first"
+        )
+    if not xian_config_path.exists():
+        raise FileNotFoundError(
+            f"{xian_config_path} does not exist; "
             f"run `xian node init {args.name}` first"
         )
 
@@ -2635,6 +2644,7 @@ def _collect_node_status(
     )
     node_release_manifest = _effective_node_release_manifest(profile, network)
     config_path = home / "config" / "config.toml"
+    xian_config_path = home / "config" / "xian.toml"
     genesis_path = home / "config" / "genesis.json"
     node_key_path = home / "config" / "node_key.json"
     validator_state_path = home / "data" / "priv_validator_state.json"
@@ -2644,8 +2654,9 @@ def _collect_node_status(
         "network_path": str(network_path),
         "runtime_backend": runtime_backend,
         "home": str(home),
-        "initialized": config_path.exists(),
+        "initialized": config_path.exists() and xian_config_path.exists(),
         "config_present": config_path.exists(),
+        "xian_config_present": xian_config_path.exists(),
         "genesis_present": genesis_path.exists(),
         "node_key_present": node_key_path.exists(),
         "priv_validator_state_present": validator_state_path.exists(),
@@ -2904,6 +2915,8 @@ def _doctor_node_artifacts(status: dict[str, object]) -> dict[str, object]:
     missing = []
     if not status.get("config_present"):
         missing.append("config.toml")
+    if not status.get("xian_config_present"):
+        missing.append("xian.toml")
     if not status.get("genesis_present"):
         missing.append("genesis.json")
     if not status.get("node_key_present"):
