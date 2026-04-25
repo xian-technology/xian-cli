@@ -116,7 +116,7 @@ uv run xian client tx transfer \
 - network creation and network join flows
 - node initialization, start, stop, and status
 - endpoint and health discovery, including optional dashboard, monitoring, and
-  stack-managed `xian-intentkit`
+  stack-managed `xian-intentkit` / `xian-dex-automation`
 - snapshot restore and doctor diagnostics
 - solution-pack starter flows built on `xian-configs`
 - wallet, query, call/simulate, and transaction automation through `xian-py`

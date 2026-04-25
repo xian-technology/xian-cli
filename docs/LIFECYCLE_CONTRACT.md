@@ -204,6 +204,10 @@ The node profile is the machine-local source of truth. Target fields:
   "intentkit_host": "127.0.0.1",
   "intentkit_port": 38000,
   "intentkit_api_port": 38080,
+  "dex_automation_enabled": false,
+  "dex_automation_host": "127.0.0.1",
+  "dex_automation_port": 38280,
+  "dex_automation_config": null,
   "block_policy_mode": "on_demand",
   "block_policy_interval": "0s"
 }
@@ -228,14 +232,17 @@ Rules:
   `genesis.json`
 - templates may provide defaults for runtime backend, tracing, bootstrap
   validator names, service-node mode, dashboard exposure, monitoring,
-  `xian-intentkit` exposure, and pruning, but explicit CLI flags should still
-  win
+  `xian-intentkit` exposure, `xian-dex-automation` exposure, and pruning, but
+  explicit CLI flags should still win
 - `intentkit_network_id` selects the Xian network slot inside
   `xian-intentkit`; canonical networks map to `xian-mainnet`, `xian-testnet`,
   or `xian-devnet`, while local and private stack-managed networks default to
   `xian-localnet`
 - stack-managed `xian-intentkit` uses the node's resolved RPC endpoint and
   chain ID to generate `xian-intentkit/deployment/.env`
+- stack-managed `xian-dex-automation` uses the node's resolved RPC endpoint,
+  a generated local service-wallet key file, and a generated config unless the
+  profile points `dex_automation_config` at an explicit path
 - `network join` may generate validator key material, but it should still write
   files under the workspace and store only a reference in the profile
 - node profiles should not duplicate network-owned seeds, snapshot URLs, or
@@ -270,6 +277,8 @@ Rules:
   - status
   - optional stack-managed `xian-intentkit` bring-up and shutdown through the
     same start/stop/status/endpoints/health surface
+  - optional stack-managed `xian-dex-automation` bring-up and shutdown through
+    the same start/stop/status/endpoints/health surface
   - localnet-init
   - localnet-build
   - localnet-up
@@ -281,6 +290,14 @@ Rules:
 - remains an independent repo with its own Compose topology and env contract
 - should not be copied into `xian-stack`; the stack owns only the thin adapter
   layer, generated env handoff, and published local ports
+
+### `xian-dex-automation`
+
+- remains an independent repo with its own Python service, local admin UI, and
+  config contract
+- should not be copied into `xian-stack`; the stack owns only the thin adapter,
+  generated local config/key material, process lifecycle, and published local
+  port
 
 These are now exposed through the machine-readable `scripts/backend.py`
 wrapper in `xian-stack`. Internally that wrapper may still call `make` and

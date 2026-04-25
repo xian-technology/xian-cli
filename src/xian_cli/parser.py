@@ -573,6 +573,30 @@ def build_parser() -> argparse.ArgumentParser:
         help="host port to publish for the xian-intentkit API",
     )
     create_parser.add_argument(
+        "--enable-dex-automation",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help=(
+            "start the optional deterministic DEX automation sidecar "
+            "alongside the bootstrap node runtime"
+        ),
+    )
+    create_parser.add_argument(
+        "--dex-automation-host",
+        type=str,
+        help="host interface to bind for the DEX automation web UI",
+    )
+    create_parser.add_argument(
+        "--dex-automation-port",
+        type=int,
+        help="host port to publish for the DEX automation web UI",
+    )
+    create_parser.add_argument(
+        "--dex-automation-config",
+        type=str,
+        help="stack-managed DEX automation config path override",
+    )
+    create_parser.add_argument(
         "--output",
         type=Path,
         help=(
@@ -922,6 +946,27 @@ def build_parser() -> argparse.ArgumentParser:
         "--intentkit-api-port",
         type=int,
         help="host port to publish for the xian-intentkit API",
+    )
+    join_parser.add_argument(
+        "--enable-dex-automation",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="start the optional deterministic DEX automation sidecar",
+    )
+    join_parser.add_argument(
+        "--dex-automation-host",
+        type=str,
+        help="host interface to bind for the DEX automation web UI",
+    )
+    join_parser.add_argument(
+        "--dex-automation-port",
+        type=int,
+        help="host port to publish for the DEX automation web UI",
+    )
+    join_parser.add_argument(
+        "--dex-automation-config",
+        type=str,
+        help="stack-managed DEX automation config path override",
     )
     join_parser.add_argument(
         "--output",

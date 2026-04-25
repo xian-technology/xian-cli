@@ -97,6 +97,10 @@ def run_backend_command(
     intentkit_host: str | None = None,
     intentkit_port: int | None = None,
     intentkit_api_port: int | None = None,
+    dex_automation_enabled: bool = False,
+    dex_automation_host: str | None = None,
+    dex_automation_port: int | None = None,
+    dex_automation_config: str | None = None,
     shielded_relayer_enabled: bool = False,
     shielded_relayer_host: str | None = None,
     shielded_relayer_port: int | None = None,
@@ -117,6 +121,11 @@ def run_backend_command(
     cmd.append("--monitoring" if monitoring_enabled else "--no-monitoring")
     cmd.append("--intentkit" if intentkit_enabled else "--no-intentkit")
     cmd.append(
+        "--dex-automation"
+        if dex_automation_enabled
+        else "--no-dex-automation"
+    )
+    cmd.append(
         "--shielded-relayer"
         if shielded_relayer_enabled
         else "--no-shielded-relayer"
@@ -136,6 +145,13 @@ def run_backend_command(
             cmd.extend(["--intentkit-port", str(intentkit_port)])
         if intentkit_api_port is not None:
             cmd.extend(["--intentkit-api-port", str(intentkit_api_port)])
+    if dex_automation_enabled:
+        if dex_automation_host is not None:
+            cmd.extend(["--dex-automation-host", dex_automation_host])
+        if dex_automation_port is not None:
+            cmd.extend(["--dex-automation-port", str(dex_automation_port)])
+        if dex_automation_config is not None:
+            cmd.extend(["--dex-automation-config", dex_automation_config])
     if shielded_relayer_enabled:
         if shielded_relayer_host is not None:
             cmd.extend(["--shielded-relayer-host", shielded_relayer_host])
@@ -201,6 +217,10 @@ def start_xian_stack_node(
     intentkit_host: str = "127.0.0.1",
     intentkit_port: int = 38000,
     intentkit_api_port: int = 38080,
+    dex_automation_enabled: bool = False,
+    dex_automation_host: str = "127.0.0.1",
+    dex_automation_port: int = 38280,
+    dex_automation_config: str | None = None,
     shielded_relayer_enabled: bool = False,
     shielded_relayer_host: str = "127.0.0.1",
     shielded_relayer_port: int = 38180,
@@ -224,6 +244,10 @@ def start_xian_stack_node(
         intentkit_host=intentkit_host,
         intentkit_port=intentkit_port,
         intentkit_api_port=intentkit_api_port,
+        dex_automation_enabled=dex_automation_enabled,
+        dex_automation_host=dex_automation_host,
+        dex_automation_port=dex_automation_port,
+        dex_automation_config=dex_automation_config,
         shielded_relayer_enabled=shielded_relayer_enabled,
         shielded_relayer_host=shielded_relayer_host,
         shielded_relayer_port=shielded_relayer_port,
@@ -250,6 +274,10 @@ def stop_xian_stack_node(
     intentkit_host: str = "127.0.0.1",
     intentkit_port: int = 38000,
     intentkit_api_port: int = 38080,
+    dex_automation_enabled: bool = False,
+    dex_automation_host: str = "127.0.0.1",
+    dex_automation_port: int = 38280,
+    dex_automation_config: str | None = None,
     shielded_relayer_enabled: bool = False,
     shielded_relayer_host: str = "127.0.0.1",
     shielded_relayer_port: int = 38180,
@@ -271,6 +299,10 @@ def stop_xian_stack_node(
         intentkit_host=intentkit_host,
         intentkit_port=intentkit_port,
         intentkit_api_port=intentkit_api_port,
+        dex_automation_enabled=dex_automation_enabled,
+        dex_automation_host=dex_automation_host,
+        dex_automation_port=dex_automation_port,
+        dex_automation_config=dex_automation_config,
         shielded_relayer_enabled=shielded_relayer_enabled,
         shielded_relayer_host=shielded_relayer_host,
         shielded_relayer_port=shielded_relayer_port,
@@ -294,6 +326,10 @@ def get_xian_stack_node_status(
     intentkit_host: str = "127.0.0.1",
     intentkit_port: int = 38000,
     intentkit_api_port: int = 38080,
+    dex_automation_enabled: bool = False,
+    dex_automation_host: str = "127.0.0.1",
+    dex_automation_port: int = 38280,
+    dex_automation_config: str | None = None,
     shielded_relayer_enabled: bool = False,
     shielded_relayer_host: str = "127.0.0.1",
     shielded_relayer_port: int = 38180,
@@ -315,6 +351,10 @@ def get_xian_stack_node_status(
         intentkit_host=intentkit_host,
         intentkit_port=intentkit_port,
         intentkit_api_port=intentkit_api_port,
+        dex_automation_enabled=dex_automation_enabled,
+        dex_automation_host=dex_automation_host,
+        dex_automation_port=dex_automation_port,
+        dex_automation_config=dex_automation_config,
         shielded_relayer_enabled=shielded_relayer_enabled,
         shielded_relayer_host=shielded_relayer_host,
         shielded_relayer_port=shielded_relayer_port,
@@ -338,6 +378,10 @@ def get_xian_stack_node_endpoints(
     intentkit_host: str = "127.0.0.1",
     intentkit_port: int = 38000,
     intentkit_api_port: int = 38080,
+    dex_automation_enabled: bool = False,
+    dex_automation_host: str = "127.0.0.1",
+    dex_automation_port: int = 38280,
+    dex_automation_config: str | None = None,
     shielded_relayer_enabled: bool = False,
     shielded_relayer_host: str = "127.0.0.1",
     shielded_relayer_port: int = 38180,
@@ -359,6 +403,10 @@ def get_xian_stack_node_endpoints(
         intentkit_host=intentkit_host,
         intentkit_port=intentkit_port,
         intentkit_api_port=intentkit_api_port,
+        dex_automation_enabled=dex_automation_enabled,
+        dex_automation_host=dex_automation_host,
+        dex_automation_port=dex_automation_port,
+        dex_automation_config=dex_automation_config,
         shielded_relayer_enabled=shielded_relayer_enabled,
         shielded_relayer_host=shielded_relayer_host,
         shielded_relayer_port=shielded_relayer_port,
@@ -382,6 +430,10 @@ def get_xian_stack_node_health(
     intentkit_host: str = "127.0.0.1",
     intentkit_port: int = 38000,
     intentkit_api_port: int = 38080,
+    dex_automation_enabled: bool = False,
+    dex_automation_host: str = "127.0.0.1",
+    dex_automation_port: int = 38280,
+    dex_automation_config: str | None = None,
     shielded_relayer_enabled: bool = False,
     shielded_relayer_host: str = "127.0.0.1",
     shielded_relayer_port: int = 38180,
@@ -405,6 +457,10 @@ def get_xian_stack_node_health(
         intentkit_host=intentkit_host,
         intentkit_port=intentkit_port,
         intentkit_api_port=intentkit_api_port,
+        dex_automation_enabled=dex_automation_enabled,
+        dex_automation_host=dex_automation_host,
+        dex_automation_port=dex_automation_port,
+        dex_automation_config=dex_automation_config,
         shielded_relayer_enabled=shielded_relayer_enabled,
         shielded_relayer_host=shielded_relayer_host,
         shielded_relayer_port=shielded_relayer_port,

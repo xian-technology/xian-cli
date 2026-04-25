@@ -212,6 +212,16 @@ def _stack_runtime_profile_kwargs(
         "intentkit_host": str(profile.get("intentkit_host", "127.0.0.1")),
         "intentkit_port": int(profile.get("intentkit_port", 38000)),
         "intentkit_api_port": int(profile.get("intentkit_api_port", 38080)),
+        "dex_automation_enabled": bool(
+            profile.get("dex_automation_enabled")
+        ),
+        "dex_automation_host": str(
+            profile.get("dex_automation_host", "127.0.0.1")
+        ),
+        "dex_automation_port": int(
+            profile.get("dex_automation_port", 38280)
+        ),
+        "dex_automation_config": profile.get("dex_automation_config"),
         "shielded_relayer_enabled": bool(
             profile.get("shielded_relayer_enabled")
         ),
@@ -1003,6 +1013,50 @@ def _handle_network_create(args: argparse.Namespace) -> int:
                 if validator["is_bootstrap"]
                 else 38080
             ),
+            dex_automation_enabled=(
+                _pick_template_value(
+                    args.enable_dex_automation,
+                    None
+                    if template is None
+                    else template.get("dex_automation_enabled"),
+                    False,
+                )
+                if validator["is_bootstrap"]
+                else False
+            ),
+            dex_automation_host=(
+                _pick_template_value(
+                    args.dex_automation_host,
+                    None
+                    if template is None
+                    else template.get("dex_automation_host"),
+                    "127.0.0.1",
+                )
+                if validator["is_bootstrap"]
+                else "127.0.0.1"
+            ),
+            dex_automation_port=(
+                _pick_template_value(
+                    args.dex_automation_port,
+                    None
+                    if template is None
+                    else template.get("dex_automation_port"),
+                    38280,
+                )
+                if validator["is_bootstrap"]
+                else 38280
+            ),
+            dex_automation_config=(
+                _pick_template_value(
+                    args.dex_automation_config,
+                    None
+                    if template is None
+                    else template.get("dex_automation_config"),
+                    None,
+                )
+                if validator["is_bootstrap"]
+                else None
+            ),
             shielded_relayer_enabled=(
                 _pick_template_value(
                     None,
@@ -1382,6 +1436,28 @@ def _handle_network_join(args: argparse.Namespace) -> int:
             args.intentkit_api_port,
             None if template is None else template.get("intentkit_api_port"),
             38080,
+        ),
+        dex_automation_enabled=_pick_template_value(
+            args.enable_dex_automation,
+            None
+            if template is None
+            else template.get("dex_automation_enabled"),
+            False,
+        ),
+        dex_automation_host=_pick_template_value(
+            args.dex_automation_host,
+            None if template is None else template.get("dex_automation_host"),
+            "127.0.0.1",
+        ),
+        dex_automation_port=_pick_template_value(
+            args.dex_automation_port,
+            None if template is None else template.get("dex_automation_port"),
+            38280,
+        ),
+        dex_automation_config=_pick_template_value(
+            args.dex_automation_config,
+            None if template is None else template.get("dex_automation_config"),
+            None,
         ),
         shielded_relayer_enabled=_pick_template_value(
             None,
@@ -2464,6 +2540,9 @@ def _collect_node_endpoints(args: argparse.Namespace) -> dict[str, object]:
         "dashboard_enabled": bool(profile.get("dashboard_enabled")),
         "monitoring_enabled": bool(profile.get("monitoring_enabled")),
         "intentkit_enabled": bool(profile.get("intentkit_enabled")),
+        "dex_automation_enabled": bool(
+            profile.get("dex_automation_enabled")
+        ),
         "shielded_relayer_enabled": bool(
             profile.get("shielded_relayer_enabled")
         ),
@@ -2531,6 +2610,9 @@ def _summarize_node_status(result: dict[str, object]) -> dict[str, object]:
         ),
         "intentkit_enabled": bool(
             result.get("profile", {}).get("intentkit_enabled")
+        ),
+        "dex_automation_enabled": bool(
+            result.get("profile", {}).get("dex_automation_enabled")
         ),
         "shielded_relayer_enabled": bool(
             result.get("profile", {}).get("shielded_relayer_enabled")
@@ -2615,6 +2697,13 @@ def _summarize_node_status(result: dict[str, object]) -> dict[str, object]:
             summary["intentkit_api_reachable"] = backend_status.get(
                 "intentkit_api_reachable"
             )
+        if summary["dex_automation_enabled"]:
+            summary["dex_automation_running"] = backend_status.get(
+                "dex_automation_running"
+            )
+            summary["dex_automation_reachable"] = backend_status.get(
+                "dex_automation_reachable"
+            )
         if summary["shielded_relayer_enabled"]:
             summary["shielded_relayer_running"] = backend_status.get(
                 "shielded_relayer_running"
@@ -2688,6 +2777,9 @@ def _collect_node_status(
             "monitoring_enabled": bool(profile.get("monitoring_enabled")),
             "intentkit_enabled": bool(profile.get("intentkit_enabled")),
             "intentkit_network_id": profile.get("intentkit_network_id"),
+            "dex_automation_enabled": bool(
+                profile.get("dex_automation_enabled")
+            ),
         },
     }
     result["node_release_manifest"] = node_release_manifest
@@ -2826,6 +2918,7 @@ def _collect_node_health(args: argparse.Namespace) -> dict[str, object]:
         "monitoring_enabled": bool(profile.get("monitoring_enabled")),
         "intentkit_enabled": bool(profile.get("intentkit_enabled")),
         "intentkit_network_id": profile.get("intentkit_network_id"),
+        "dex_automation_enabled": bool(profile.get("dex_automation_enabled")),
         "effective_snapshot_url": _resolve_effective_snapshot_url(
             profile=profile,
             network=context["network"],
@@ -3112,6 +3205,18 @@ def _handle_doctor(args: argparse.Namespace) -> int:
                             service_name="intentkit_api",
                             reachable_key="intentkit_api_reachable",
                             error_key="intentkit_api_error",
+                        ),
+                    )
+                )
+            if profile.get("dex_automation_enabled"):
+                checks.append(
+                    _run_check(
+                        "dex_automation",
+                        lambda: _doctor_service_check(
+                            node_status,
+                            service_name="dex_automation",
+                            reachable_key="dex_automation_reachable",
+                            error_key="dex_automation_error",
                         ),
                     )
                 )

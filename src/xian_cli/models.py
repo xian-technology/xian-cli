@@ -678,6 +678,21 @@ def normalize_node_profile(payload: dict) -> dict:
         "intentkit_api_port": _require_int(
             payload, "intentkit_api_port", default=38080
         ),
+        "dex_automation_enabled": _require_bool(
+            payload, "dex_automation_enabled", default=False
+        ),
+        "dex_automation_host": _require_str(payload, "dex_automation_host")
+        if "dex_automation_host" in payload
+        else "127.0.0.1",
+        "dex_automation_port": _require_int(
+            payload,
+            "dex_automation_port",
+            default=38280,
+        ),
+        "dex_automation_config": _require_optional_str(
+            payload,
+            "dex_automation_config",
+        ),
         "shielded_relayer_enabled": _require_bool(
             payload, "shielded_relayer_enabled", default=False
         ),
@@ -787,6 +802,21 @@ def normalize_network_template(payload: dict) -> dict:
         ),
         "intentkit_api_port": _require_int(
             payload, "intentkit_api_port", default=38080
+        ),
+        "dex_automation_enabled": _require_bool(
+            payload, "dex_automation_enabled", default=False
+        ),
+        "dex_automation_host": _require_str(payload, "dex_automation_host")
+        if "dex_automation_host" in payload
+        else "127.0.0.1",
+        "dex_automation_port": _require_int(
+            payload,
+            "dex_automation_port",
+            default=38280,
+        ),
+        "dex_automation_config": _require_optional_str(
+            payload,
+            "dex_automation_config",
         ),
         "shielded_relayer_enabled": _require_bool(
             payload, "shielded_relayer_enabled", default=False
@@ -1029,6 +1059,10 @@ class NodeProfile:
     intentkit_host: str = "127.0.0.1"
     intentkit_port: int = 38000
     intentkit_api_port: int = 38080
+    dex_automation_enabled: bool = False
+    dex_automation_host: str = "127.0.0.1"
+    dex_automation_port: int = 38280
+    dex_automation_config: str | None = None
     shielded_relayer_enabled: bool = False
     shielded_relayer_host: str = "127.0.0.1"
     shielded_relayer_port: int = 38180
@@ -1073,6 +1107,10 @@ class NetworkTemplate:
     intentkit_host: str = "127.0.0.1"
     intentkit_port: int = 38000
     intentkit_api_port: int = 38080
+    dex_automation_enabled: bool = False
+    dex_automation_host: str = "127.0.0.1"
+    dex_automation_port: int = 38280
+    dex_automation_config: str | None = None
     shielded_relayer_enabled: bool = False
     shielded_relayer_host: str = "127.0.0.1"
     shielded_relayer_port: int = 38180

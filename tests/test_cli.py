@@ -4429,6 +4429,10 @@ class RuntimeHelperTests(unittest.TestCase):
             intentkit_host="127.0.0.1",
             intentkit_port=38000,
             intentkit_api_port=38080,
+            dex_automation_enabled=False,
+            dex_automation_host="127.0.0.1",
+            dex_automation_port=38280,
+            dex_automation_config=None,
             shielded_relayer_enabled=False,
             shielded_relayer_host="127.0.0.1",
             shielded_relayer_port=38180,
@@ -4471,6 +4475,10 @@ class RuntimeHelperTests(unittest.TestCase):
             intentkit_host="127.0.0.1",
             intentkit_port=38000,
             intentkit_api_port=38080,
+            dex_automation_enabled=False,
+            dex_automation_host="127.0.0.1",
+            dex_automation_port=38280,
+            dex_automation_config=None,
             shielded_relayer_enabled=False,
             shielded_relayer_host="127.0.0.1",
             shielded_relayer_port=38180,
@@ -4514,6 +4522,10 @@ class RuntimeHelperTests(unittest.TestCase):
             intentkit_host="127.0.0.1",
             intentkit_port=38000,
             intentkit_api_port=38080,
+            dex_automation_enabled=False,
+            dex_automation_host="127.0.0.1",
+            dex_automation_port=38280,
+            dex_automation_config=None,
             shielded_relayer_enabled=False,
             shielded_relayer_host="127.0.0.1",
             shielded_relayer_port=38180,
@@ -4559,6 +4571,10 @@ class RuntimeHelperTests(unittest.TestCase):
             intentkit_host="127.0.0.1",
             intentkit_port=38000,
             intentkit_api_port=38080,
+            dex_automation_enabled=False,
+            dex_automation_host="127.0.0.1",
+            dex_automation_port=38280,
+            dex_automation_config=None,
             shielded_relayer_enabled=False,
             shielded_relayer_host="127.0.0.1",
             shielded_relayer_port=38180,
@@ -4604,6 +4620,10 @@ class RuntimeHelperTests(unittest.TestCase):
             intentkit_host="127.0.0.1",
             intentkit_port=38000,
             intentkit_api_port=38080,
+            dex_automation_enabled=False,
+            dex_automation_host="127.0.0.1",
+            dex_automation_port=38280,
+            dex_automation_config=None,
             shielded_relayer_enabled=False,
             shielded_relayer_host="127.0.0.1",
             shielded_relayer_port=38180,
@@ -4646,6 +4666,10 @@ class RuntimeHelperTests(unittest.TestCase):
             intentkit_host="127.0.0.1",
             intentkit_port=38000,
             intentkit_api_port=38080,
+            dex_automation_enabled=False,
+            dex_automation_host="127.0.0.1",
+            dex_automation_port=38280,
+            dex_automation_config=None,
             shielded_relayer_enabled=False,
             shielded_relayer_host="127.0.0.1",
             shielded_relayer_port=38180,
@@ -4693,6 +4717,39 @@ class RuntimeHelperTests(unittest.TestCase):
                 "compose interpolation failed",
             ):
                 run_backend_command(stack_dir, "start")
+
+    def test_run_backend_command_passes_dex_automation_flags(self) -> None:
+        stack_dir = Path("/tmp/xian-stack")
+        completed = subprocess.CompletedProcess(
+            ["python3", "backend.py", "start"],
+            0,
+            stdout='{"ok": true}',
+            stderr="",
+        )
+
+        with patch(
+            "xian_cli.runtime.subprocess.run",
+            return_value=completed,
+        ) as run_mock:
+            result = run_backend_command(
+                stack_dir,
+                "start",
+                dex_automation_enabled=True,
+                dex_automation_host="0.0.0.0",
+                dex_automation_port=39123,
+                dex_automation_config="/tmp/dex.yaml",
+            )
+
+        self.assertTrue(result["ok"])
+        command = run_mock.call_args.args[0]
+        self.assertIn("--dex-automation", command)
+        self.assertIn("--dex-automation-host", command)
+        self.assertIn("0.0.0.0", command)
+        self.assertIn("--dex-automation-port", command)
+        self.assertIn("39123", command)
+        self.assertIn("--dex-automation-config", command)
+        self.assertIn("/tmp/dex.yaml", command)
+        self.assertNotIn("--no-dex-automation", command)
 
 
 class ConfigRepoTests(unittest.TestCase):
