@@ -212,15 +212,11 @@ def _stack_runtime_profile_kwargs(
         "intentkit_host": str(profile.get("intentkit_host", "127.0.0.1")),
         "intentkit_port": int(profile.get("intentkit_port", 38000)),
         "intentkit_api_port": int(profile.get("intentkit_api_port", 38080)),
-        "dex_automation_enabled": bool(
-            profile.get("dex_automation_enabled")
-        ),
+        "dex_automation_enabled": bool(profile.get("dex_automation_enabled")),
         "dex_automation_host": str(
             profile.get("dex_automation_host", "127.0.0.1")
         ),
-        "dex_automation_port": int(
-            profile.get("dex_automation_port", 38280)
-        ),
+        "dex_automation_port": int(profile.get("dex_automation_port", 38280)),
         "dex_automation_config": profile.get("dex_automation_config"),
         "shielded_relayer_enabled": bool(
             profile.get("shielded_relayer_enabled")
@@ -2540,9 +2536,7 @@ def _collect_node_endpoints(args: argparse.Namespace) -> dict[str, object]:
         "dashboard_enabled": bool(profile.get("dashboard_enabled")),
         "monitoring_enabled": bool(profile.get("monitoring_enabled")),
         "intentkit_enabled": bool(profile.get("intentkit_enabled")),
-        "dex_automation_enabled": bool(
-            profile.get("dex_automation_enabled")
-        ),
+        "dex_automation_enabled": bool(profile.get("dex_automation_enabled")),
         "shielded_relayer_enabled": bool(
             profile.get("shielded_relayer_enabled")
         ),

@@ -121,9 +121,7 @@ def run_backend_command(
     cmd.append("--monitoring" if monitoring_enabled else "--no-monitoring")
     cmd.append("--intentkit" if intentkit_enabled else "--no-intentkit")
     cmd.append(
-        "--dex-automation"
-        if dex_automation_enabled
-        else "--no-dex-automation"
+        "--dex-automation" if dex_automation_enabled else "--no-dex-automation"
     )
     cmd.append(
         "--shielded-relayer"
