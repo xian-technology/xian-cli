@@ -118,27 +118,27 @@ def build_parser() -> argparse.ArgumentParser:
     )
     template_show_parser.set_defaults(handler=cli._handle_network_template_show)
 
-    solution_pack_parser = subparsers.add_parser(
-        "solution-pack",
-        help="inspect packaged solution-pack starter flows",
+    module_parser = subparsers.add_parser(
+        "module",
+        help="inspect, validate, and install reusable modules",
     )
-    solution_pack_subparsers = solution_pack_parser.add_subparsers(
-        dest="solution_pack_command", required=True
+    module_subparsers = module_parser.add_subparsers(
+        dest="module_command", required=True
     )
 
-    solution_pack_list_parser = solution_pack_subparsers.add_parser(
-        "list", help="list available solution packs"
+    module_list_parser = module_subparsers.add_parser(
+        "list", help="list available modules"
     )
-    solution_pack_list_parser.add_argument(
+    module_list_parser.add_argument(
         "--base-dir",
         type=Path,
         default=Path.cwd(),
         help=(
-            "workspace directory that may contain local ./solution-packs and "
+            "workspace directory that may contain local ./modules and "
             "optionally sibling repos"
         ),
     )
-    solution_pack_list_parser.add_argument(
+    module_list_parser.add_argument(
         "--configs-dir",
         type=Path,
         help=(
@@ -146,24 +146,22 @@ def build_parser() -> argparse.ArgumentParser:
             "or the sibling workspace layout"
         ),
     )
-    solution_pack_list_parser.set_defaults(
-        handler=cli._handle_solution_pack_list
-    )
+    module_list_parser.set_defaults(handler=cli._handle_module_list)
 
-    solution_pack_show_parser = solution_pack_subparsers.add_parser(
-        "show", help="show one solution pack"
+    module_show_parser = module_subparsers.add_parser(
+        "show", help="show one module"
     )
-    solution_pack_show_parser.add_argument("name", help="solution pack name")
-    solution_pack_show_parser.add_argument(
+    module_show_parser.add_argument("name", help="module name")
+    module_show_parser.add_argument(
         "--base-dir",
         type=Path,
         default=Path.cwd(),
         help=(
-            "workspace directory that may contain local ./solution-packs and "
+            "workspace directory that may contain local ./modules and "
             "optionally sibling repos"
         ),
     )
-    solution_pack_show_parser.add_argument(
+    module_show_parser.add_argument(
         "--configs-dir",
         type=Path,
         help=(
@@ -171,30 +169,161 @@ def build_parser() -> argparse.ArgumentParser:
             "or the sibling workspace layout"
         ),
     )
-    solution_pack_show_parser.set_defaults(
-        handler=cli._handle_solution_pack_show
+    module_show_parser.set_defaults(handler=cli._handle_module_show)
+
+    module_validate_parser = module_subparsers.add_parser(
+        "validate", help="validate one module and its contract bundles"
+    )
+    module_validate_parser.add_argument("name", help="module name")
+    module_validate_parser.add_argument(
+        "--base-dir",
+        type=Path,
+        default=Path.cwd(),
+        help=(
+            "workspace directory that may contain local ./modules and "
+            "optionally sibling repos"
+        ),
+    )
+    module_validate_parser.add_argument(
+        "--configs-dir",
+        type=Path,
+        help=(
+            "explicit xian-configs checkout path; defaults to XIAN_CONFIGS_DIR "
+            "or the sibling workspace layout"
+        ),
+    )
+    module_validate_parser.set_defaults(handler=cli._handle_module_validate)
+
+    module_install_parser = module_subparsers.add_parser(
+        "install", help="install a module onto a running network"
+    )
+    module_install_parser.add_argument("name", help="module name")
+    module_install_parser.add_argument(
+        "--recipe", help="module recipe; defaults to the module default"
+    )
+    module_install_parser.add_argument(
+        "--base-dir",
+        type=Path,
+        default=Path.cwd(),
+        help=(
+            "workspace directory that may contain local ./modules and "
+            "optionally sibling repos"
+        ),
+    )
+    module_install_parser.add_argument(
+        "--configs-dir",
+        type=Path,
+        help=(
+            "explicit xian-configs checkout path; defaults to XIAN_CONFIGS_DIR "
+            "or the sibling workspace layout"
+        ),
+    )
+    module_install_parser.add_argument(
+        "--stack-dir",
+        type=Path,
+        help="explicit xian-stack checkout path for stack-backed installers",
+    )
+    module_install_parser.add_argument(
+        "--repo-dir",
+        type=Path,
+        help="explicit owning repo checkout path for external installers",
+    )
+    module_install_parser.add_argument("--rpc-url")
+    module_install_parser.add_argument("--chain-id")
+    module_install_parser.add_argument("--deployer-private-key")
+    module_install_parser.add_argument(
+        "--top-up-liquidity",
+        action="store_true",
+        help=(
+            "top up the local DEX demo pool when the selected recipe "
+            "supports it"
+        ),
+    )
+    module_install_parser.add_argument(
+        "--emit-test-swap",
+        action="store_true",
+        help="emit a small local DEX swap after installation",
+    )
+    module_install_parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="print the resolved installer command without executing it",
+    )
+    module_install_parser.set_defaults(handler=cli._handle_module_install)
+
+    solution_parser = subparsers.add_parser(
+        "solution",
+        help="inspect application and operator solutions",
+    )
+    solution_subparsers = solution_parser.add_subparsers(
+        dest="solution_command", required=True
     )
 
-    solution_pack_starter_parser = solution_pack_subparsers.add_parser(
+    solution_list_parser = solution_subparsers.add_parser(
+        "list", help="list available solutions"
+    )
+    solution_list_parser.add_argument(
+        "--base-dir",
+        type=Path,
+        default=Path.cwd(),
+        help=(
+            "workspace directory that may contain local ./solutions and "
+            "optionally sibling repos"
+        ),
+    )
+    solution_list_parser.add_argument(
+        "--configs-dir",
+        type=Path,
+        help=(
+            "explicit xian-configs checkout path; defaults to XIAN_CONFIGS_DIR "
+            "or the sibling workspace layout"
+        ),
+    )
+    solution_list_parser.set_defaults(handler=cli._handle_solution_list)
+
+    solution_show_parser = solution_subparsers.add_parser(
+        "show", help="show one solution"
+    )
+    solution_show_parser.add_argument("name", help="solution name")
+    solution_show_parser.add_argument(
+        "--base-dir",
+        type=Path,
+        default=Path.cwd(),
+        help=(
+            "workspace directory that may contain local ./solutions and "
+            "optionally sibling repos"
+        ),
+    )
+    solution_show_parser.add_argument(
+        "--configs-dir",
+        type=Path,
+        help=(
+            "explicit xian-configs checkout path; defaults to XIAN_CONFIGS_DIR "
+            "or the sibling workspace layout"
+        ),
+    )
+    solution_show_parser.set_defaults(handler=cli._handle_solution_show)
+
+    solution_starter_parser = solution_subparsers.add_parser(
         "starter",
-        help="show the canonical starter flow for one solution pack",
+        help="show the canonical starter flow for one solution",
     )
-    solution_pack_starter_parser.add_argument("name", help="solution pack name")
-    solution_pack_starter_parser.add_argument(
+    solution_starter_parser.add_argument("name", help="solution name")
+    solution_starter_parser.add_argument(
         "--flow",
         default="local",
         help="starter flow name; defaults to local",
     )
-    solution_pack_starter_parser.add_argument(
+    solution_starter_parser.add_argument(
         "--base-dir",
         type=Path,
         default=Path.cwd(),
         help=(
-            "workspace directory that may contain local ./solution-packs and "
+            "workspace directory that may contain local ./solutions and "
             "optionally sibling repos"
         ),
     )
-    solution_pack_starter_parser.add_argument(
+    solution_starter_parser.add_argument(
         "--configs-dir",
         type=Path,
         help=(
@@ -202,9 +331,7 @@ def build_parser() -> argparse.ArgumentParser:
             "or the sibling workspace layout"
         ),
     )
-    solution_pack_starter_parser.set_defaults(
-        handler=cli._handle_solution_pack_starter
-    )
+    solution_starter_parser.set_defaults(handler=cli._handle_solution_starter)
 
     contract_parser = subparsers.add_parser(
         "contract", help="contract bundle helpers"

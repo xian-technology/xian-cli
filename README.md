@@ -97,7 +97,7 @@ uv run xian client tx transfer \
 - `xian-cli` owns operator UX. Deterministic node logic stays in `xian-abci`,
   and local runtime orchestration stays in `xian-stack`.
 - Manifests and node profiles are explicit artifacts, not hidden state.
-- Templates and solution packs should accelerate common setups, but they should
+- Templates, modules, and solutions should accelerate common setups, but they should
   remain optional. An operator who knows what they are doing should still be
   able to work directly with manifests, profiles, and node homes.
 - Health, endpoint discovery, and diagnostics are first-class operator
@@ -112,13 +112,14 @@ uv run xian client tx transfer \
 ## What It Covers
 
 - key generation and validator material
-- network template and solution-pack discovery
+- network template, module, and solution discovery
 - network creation and network join flows
 - node initialization, start, stop, and status
 - endpoint and health discovery, including optional dashboard, monitoring, and
   stack-managed `xian-intentkit` / `xian-dex-automation`
 - snapshot restore and doctor diagnostics
-- solution-pack starter flows built on `xian-configs`
+- module install/validation flows built on `xian-configs`
+- solution starter flows built on `xian-configs`
 - hash-pinned contract bundle validation
 - wallet, query, call/simulate, and transaction automation through `xian-py`
 
@@ -130,10 +131,10 @@ uv run xian client tx transfer \
 - `xian network join ...`: join an existing preset-backed or remote network
 - `xian node ...`: initialize, start, stop, inspect, and recover a node profile
 - `xian client ...`: wallet, query, call/simulate, and transaction automation
+- `xian module ...`: inspect, validate, and install reusable modules
+- `xian solution ...`: discover full application/operator starter flows
 - `xian contract bundle ...`: validate hash-pinned contract bundles
 - `xian doctor ...`: run broader local diagnostics
-- `xian solution-pack ...`: discover starter flows built on top of the golden
-  path
 
 ## Validation
 

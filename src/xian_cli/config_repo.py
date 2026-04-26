@@ -123,37 +123,37 @@ def list_network_template_paths(
     return [templates[name] for name in sorted(templates)]
 
 
-def resolve_solution_pack_path(
+def resolve_module_path(
     *,
     base_dir: Path,
-    pack_name: str,
+    module_name: str,
     configs_dir: Path | None = None,
 ) -> Path:
-    local_pack = (
-        base_dir / "solution-packs" / pack_name / "pack.json"
+    local_module = (
+        base_dir / "modules" / module_name / "module.json"
     ).resolve()
-    if local_pack.exists():
-        return local_pack
+    if local_module.exists():
+        return local_module
 
     resolved_configs_dir = resolve_configs_dir(base_dir, explicit=configs_dir)
-    canonical_pack = (
-        resolved_configs_dir / "solution-packs" / pack_name / "pack.json"
+    canonical_module = (
+        resolved_configs_dir / "modules" / module_name / "module.json"
     ).resolve()
-    if canonical_pack.exists():
-        return canonical_pack
+    if canonical_module.exists():
+        return canonical_module
 
     raise FileNotFoundError(
-        "solution pack not found in local workspace or xian-configs: "
-        f"{local_pack} or {canonical_pack}"
+        "module not found in local workspace or xian-configs: "
+        f"{local_module} or {canonical_module}"
     )
 
 
-def list_solution_pack_paths(
+def list_module_paths(
     *,
     base_dir: Path,
     configs_dir: Path | None = None,
 ) -> list[Path]:
-    packs: dict[str, Path] = {}
+    modules: dict[str, Path] = {}
 
     try:
         resolved_configs_dir = resolve_configs_dir(
@@ -164,14 +164,68 @@ def list_solution_pack_paths(
         resolved_configs_dir = None
 
     if resolved_configs_dir is not None:
-        canonical_dir = resolved_configs_dir / "solution-packs"
+        canonical_dir = resolved_configs_dir / "modules"
         if canonical_dir.exists():
-            for path in sorted(canonical_dir.glob("*/pack.json")):
-                packs[path.parent.name] = path.resolve()
+            for path in sorted(canonical_dir.glob("*/module.json")):
+                modules[path.parent.name] = path.resolve()
 
-    local_dir = base_dir / "solution-packs"
+    local_dir = base_dir / "modules"
     if local_dir.exists():
-        for path in sorted(local_dir.glob("*/pack.json")):
-            packs[path.parent.name] = path.resolve()
+        for path in sorted(local_dir.glob("*/module.json")):
+            modules[path.parent.name] = path.resolve()
 
-    return [packs[name] for name in sorted(packs)]
+    return [modules[name] for name in sorted(modules)]
+
+
+def resolve_solution_path(
+    *,
+    base_dir: Path,
+    solution_name: str,
+    configs_dir: Path | None = None,
+) -> Path:
+    local_solution = (
+        base_dir / "solutions" / solution_name / "solution.json"
+    ).resolve()
+    if local_solution.exists():
+        return local_solution
+
+    resolved_configs_dir = resolve_configs_dir(base_dir, explicit=configs_dir)
+    canonical_solution = (
+        resolved_configs_dir / "solutions" / solution_name / "solution.json"
+    ).resolve()
+    if canonical_solution.exists():
+        return canonical_solution
+
+    raise FileNotFoundError(
+        "solution not found in local workspace or xian-configs: "
+        f"{local_solution} or {canonical_solution}"
+    )
+
+
+def list_solution_paths(
+    *,
+    base_dir: Path,
+    configs_dir: Path | None = None,
+) -> list[Path]:
+    solutions: dict[str, Path] = {}
+
+    try:
+        resolved_configs_dir = resolve_configs_dir(
+            base_dir,
+            explicit=configs_dir,
+        )
+    except FileNotFoundError:
+        resolved_configs_dir = None
+
+    if resolved_configs_dir is not None:
+        canonical_dir = resolved_configs_dir / "solutions"
+        if canonical_dir.exists():
+            for path in sorted(canonical_dir.glob("*/solution.json")):
+                solutions[path.parent.name] = path.resolve()
+
+    local_dir = base_dir / "solutions"
+    if local_dir.exists():
+        for path in sorted(local_dir.glob("*/solution.json")):
+            solutions[path.parent.name] = path.resolve()
+
+    return [solutions[name] for name in sorted(solutions)]

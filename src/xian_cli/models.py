@@ -59,6 +59,12 @@ SUPPORTED_APP_LOG_LEVELS = {
     "CRITICAL",
 }
 SUPPORTED_RECOVERY_ARTIFACT_KINDS = {"snapshot_url"}
+MODULE_SCHEMA = "xian.module.v1"
+SOLUTION_SCHEMA = "xian.solution.v1"
+SUPPORTED_MODULE_INSTALL_KINDS = {
+    "external",
+    "xian-stack.localnet-dex-bootstrap",
+}
 
 
 def _require_str(payload: dict, key: str) -> str:
@@ -388,6 +394,13 @@ def _require_schema_version(payload: dict) -> int:
             f"expected {SCHEMA_VERSION}"
         )
     return schema_version
+
+
+def _require_schema(payload: dict, *, expected: str) -> str:
+    schema = _require_str(payload, "schema")
+    if schema != expected:
+        raise ValueError(f"unsupported schema: {schema}; expected {expected}")
+    return schema
 
 
 def _require_runtime_backend(payload: dict) -> str:
@@ -838,13 +851,13 @@ def normalize_network_template(payload: dict) -> dict:
     }
 
 
-def _normalize_solution_pack_step(payload: dict) -> dict:
+def _normalize_starter_step(payload: dict, *, label: str) -> dict:
     if not isinstance(payload, dict):
-        raise ValueError("solution pack step must be a JSON object")
+        raise ValueError(f"{label} step must be a JSON object")
 
     commands = _require_str_list(payload, "commands")
     if not commands:
-        raise ValueError("solution pack step commands must not be empty")
+        raise ValueError(f"{label} step commands must not be empty")
 
     return {
         "title": _require_str(payload, "title"),
@@ -853,9 +866,9 @@ def _normalize_solution_pack_step(payload: dict) -> dict:
     }
 
 
-def _normalize_solution_pack_flow(payload: dict) -> dict:
+def _normalize_starter_flow(payload: dict, *, label: str) -> dict:
     if not isinstance(payload, dict):
-        raise ValueError("solution pack starter flow must be a JSON object")
+        raise ValueError(f"{label} starter flow must be a JSON object")
 
     steps = payload.get("steps")
     if (
@@ -864,8 +877,7 @@ def _normalize_solution_pack_flow(payload: dict) -> dict:
         or any(not isinstance(item, dict) for item in steps)
     ):
         raise ValueError(
-            "solution pack starter flow steps must be a non-empty "
-            "list of objects"
+            f"{label} starter flow steps must be a non-empty list of objects"
         )
 
     return {
@@ -875,13 +887,83 @@ def _normalize_solution_pack_flow(payload: dict) -> dict:
         "summary": _require_str(payload, "summary"),
         "network_name": _require_optional_str(payload, "network_name"),
         "node_name": _require_optional_str(payload, "node_name"),
-        "steps": [_normalize_solution_pack_step(item) for item in steps],
+        "steps": [
+            _normalize_starter_step(item, label=label) for item in steps
+        ],
     }
 
 
-def normalize_solution_pack(payload: dict) -> dict:
+def _normalize_module_recipe(payload: dict) -> dict:
     if not isinstance(payload, dict):
-        raise ValueError("solution pack must be a JSON object")
+        raise ValueError("module recipe must be a JSON object")
+
+    install = payload.get("install")
+    if not isinstance(install, dict):
+        raise ValueError("module recipe install must be a JSON object")
+    install_kind = _require_str(install, "kind")
+    if install_kind not in SUPPORTED_MODULE_INSTALL_KINDS:
+        raise ValueError(
+            "module recipe install.kind must be one of "
+            f"{sorted(SUPPORTED_MODULE_INSTALL_KINDS)}"
+        )
+
+    return {
+        "name": _require_str(payload, "name"),
+        "display_name": _require_str(payload, "display_name"),
+        "summary": _require_str(payload, "summary"),
+        "install": dict(install),
+    }
+
+
+def normalize_module(payload: dict) -> dict:
+    if not isinstance(payload, dict):
+        raise ValueError("module must be a JSON object")
+
+    recipes = payload.get("recipes")
+    if (
+        not isinstance(recipes, list)
+        or not recipes
+        or any(not isinstance(item, dict) for item in recipes)
+    ):
+        raise ValueError("module recipes must be a non-empty list of objects")
+
+    normalized_recipes = [_normalize_module_recipe(item) for item in recipes]
+    recipe_names = {item["name"] for item in normalized_recipes}
+    default_recipe = _require_str(payload, "default_recipe")
+    if default_recipe not in recipe_names:
+        raise ValueError("module default_recipe must name an existing recipe")
+
+    return {
+        "schema": _require_schema(payload, expected=MODULE_SCHEMA),
+        "schema_version": _require_schema_version(payload),
+        "name": _require_str(payload, "name"),
+        "display_name": _require_str(payload, "display_name"),
+        "category": _require_str(payload, "category"),
+        "maturity": _require_str(payload, "maturity"),
+        "description": _require_str(payload, "description"),
+        "source_owner_repo": _require_str(payload, "source_owner_repo"),
+        "docs_path": _require_str(payload, "docs_path"),
+        "default_recipe": default_recipe,
+        "contract_paths": _require_str_list(payload, "contract_paths"),
+        "contract_bundle_paths": _require_str_list(
+            payload, "contract_bundle_paths"
+        ),
+        "recipes": normalized_recipes,
+    }
+
+
+def _normalize_solution_module_ref(payload: dict) -> dict:
+    if not isinstance(payload, dict):
+        raise ValueError("solution module reference must be a JSON object")
+    return {
+        "name": _require_str(payload, "name"),
+        "recipe": _require_optional_str(payload, "recipe"),
+    }
+
+
+def normalize_solution(payload: dict) -> dict:
+    if not isinstance(payload, dict):
+        raise ValueError("solution must be a JSON object")
 
     starter_flows = payload.get("starter_flows")
     if (
@@ -890,10 +972,17 @@ def normalize_solution_pack(payload: dict) -> dict:
         or any(not isinstance(item, dict) for item in starter_flows)
     ):
         raise ValueError(
-            "starter_flows must be a non-empty list of flow objects"
+            "solution starter_flows must be a non-empty list of flow objects"
         )
 
+    modules = payload.get("modules", [])
+    if not isinstance(modules, list) or any(
+        not isinstance(item, dict) for item in modules
+    ):
+        raise ValueError("solution modules must be a list of objects")
+
     return {
+        "schema": _require_schema(payload, expected=SOLUTION_SCHEMA),
         "schema_version": _require_schema_version(payload),
         "name": _require_str(payload, "name"),
         "display_name": _require_str(payload, "display_name"),
@@ -907,12 +996,15 @@ def normalize_solution_pack(payload: dict) -> dict:
         ),
         "docs_path": _require_str(payload, "docs_path"),
         "example_dir": _require_str(payload, "example_dir"),
+        "modules": [_normalize_solution_module_ref(item) for item in modules],
+        "services": _require_str_list(payload, "services"),
         "contract_paths": _require_str_list(payload, "contract_paths"),
         "contract_bundle_paths": _require_str_list(
             payload, "contract_bundle_paths"
         ),
         "starter_flows": [
-            _normalize_solution_pack_flow(item) for item in starter_flows
+            _normalize_starter_flow(item, label="solution")
+            for item in starter_flows
         ],
     }
 
@@ -1236,8 +1328,12 @@ def read_network_template(path: Path) -> dict:
     return normalize_network_template(read_json(path))
 
 
-def read_solution_pack(path: Path) -> dict:
-    return normalize_solution_pack(read_json(path))
+def read_module(path: Path) -> dict:
+    return normalize_module(read_json(path))
+
+
+def read_solution(path: Path) -> dict:
+    return normalize_solution(read_json(path))
 
 
 def read_recovery_plan(path: Path) -> dict:

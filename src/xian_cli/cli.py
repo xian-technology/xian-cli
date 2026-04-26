@@ -3,7 +3,10 @@ from __future__ import annotations
 import argparse
 import base64
 import json
+import os
+import shlex
 import shutil
+import subprocess
 import sys
 import tomllib
 from datetime import UTC, datetime
@@ -16,12 +19,14 @@ from xian_cli.abci_bridge import (
     get_node_setup_module,
 )
 from xian_cli.config_repo import (
+    list_module_paths,
     list_network_template_paths,
-    list_solution_pack_paths,
+    list_solution_paths,
     resolve_configs_dir,
+    resolve_module_path,
     resolve_network_manifest_path,
     resolve_network_template_path,
-    resolve_solution_pack_path,
+    resolve_solution_path,
 )
 from xian_cli.contract_bundles import validate_contract_bundle
 from xian_cli.models import (
@@ -30,11 +35,12 @@ from xian_cli.models import (
     NetworkManifest,
     NodeProfile,
     read_json,
+    read_module,
     read_network_manifest,
     read_network_template,
     read_node_profile,
     read_recovery_plan,
-    read_solution_pack,
+    read_solution,
     write_json,
 )
 from xian_cli.parser import build_parser as _build_parser
@@ -360,83 +366,414 @@ def _handle_network_template_show(args: argparse.Namespace) -> int:
     return 0
 
 
-def _load_solution_pack(
+def _catalog_root_for_manifest(
+    manifest_path: Path,
+    collection_name: str,
+) -> Path:
+    resolved = manifest_path.resolve()
+    for parent in resolved.parents:
+        if parent.name == collection_name:
+            return parent.parent
+    return resolved.parent
+
+
+def _resolve_catalog_ref(
+    manifest_path: Path,
+    ref: str,
+    *,
+    collection_name: str,
+) -> Path:
+    raw_ref = Path(ref)
+    if raw_ref.is_absolute():
+        return raw_ref.expanduser().resolve()
+
+    catalog_root = _catalog_root_for_manifest(manifest_path, collection_name)
+    rooted = (catalog_root / raw_ref).resolve()
+    if rooted.exists():
+        return rooted
+    return (manifest_path.parent / raw_ref).resolve()
+
+
+def _validate_module_assets(module_path: Path, module: dict) -> dict:
+    contract_paths: list[str] = module["contract_paths"]
+    contract_bundle_paths: list[str] = module["contract_bundle_paths"]
+    missing_contracts = [
+        ref
+        for ref in contract_paths
+        if not _resolve_catalog_ref(
+            module_path,
+            ref,
+            collection_name="modules",
+        ).exists()
+    ]
+    if missing_contracts:
+        raise FileNotFoundError(
+            f"module {module['name']} references missing contracts: "
+            f"{missing_contracts}"
+        )
+
+    validated_bundles = []
+    for bundle_ref in contract_bundle_paths:
+        bundle_path = _resolve_catalog_ref(
+            module_path,
+            bundle_ref,
+            collection_name="modules",
+        )
+        if not bundle_path.exists():
+            raise FileNotFoundError(f"module bundle not found: {bundle_ref}")
+        validated_bundles.append(validate_contract_bundle(bundle_path))
+
+    return {
+        "ok": True,
+        "path": str(module_path.resolve()),
+        "name": module["name"],
+        "contract_count": len(contract_paths),
+        "contract_bundle_count": len(contract_bundle_paths),
+        "bundles": validated_bundles,
+    }
+
+
+def _load_module(
     *,
     base_dir: Path,
-    pack_name: str,
+    module_name: str,
     configs_dir: Path | None,
-) -> dict:
-    pack_path = resolve_solution_pack_path(
+) -> tuple[Path, dict]:
+    module_path = resolve_module_path(
         base_dir=base_dir,
-        pack_name=pack_name,
+        module_name=module_name,
         configs_dir=configs_dir,
     )
-    return read_solution_pack(pack_path)
+    return module_path, read_module(module_path)
 
 
-def _handle_solution_pack_list(args: argparse.Namespace) -> int:
+def _module_recipe(module: dict, recipe_name: str | None) -> dict:
+    selected_recipe = recipe_name or module["default_recipe"]
+    for recipe in module["recipes"]:
+        if recipe["name"] == selected_recipe:
+            return recipe
+    available = sorted(recipe["name"] for recipe in module["recipes"])
+    raise ValueError(
+        f"module recipe '{selected_recipe}' not found; available: {available}"
+    )
+
+
+def _bool_backend_arg(name: str, value: bool) -> str:
+    return f"--{name}" if value else f"--no-{name}"
+
+
+def _env_var_for_repo(repo_name: str) -> str:
+    return repo_name.upper().replace("-", "_") + "_DIR"
+
+
+def _resolve_external_repo_dir(
+    *,
+    base_dir: Path,
+    repo_name: str,
+    explicit: Path | None = None,
+) -> Path:
+    candidates: list[Path] = []
+    if explicit is not None:
+        candidates.append(explicit)
+
+    env_value = os.environ.get(_env_var_for_repo(repo_name))
+    if env_value:
+        candidates.append(Path(env_value))
+
+    candidates.extend(
+        [
+            base_dir / repo_name,
+            base_dir.parent / repo_name,
+            Path(__file__).resolve().parents[3] / repo_name,
+        ]
+    )
+    for candidate in candidates:
+        resolved = candidate.expanduser().resolve()
+        if resolved.exists():
+            return resolved
+
+    raise FileNotFoundError(
+        f"unable to resolve {repo_name}; pass --repo-dir or set "
+        f"{_env_var_for_repo(repo_name)}"
+    )
+
+
+def _handle_external_module_install(
+    *,
+    args: argparse.Namespace,
+    base_dir: Path,
+    module: dict,
+    recipe: dict,
+    install: dict,
+) -> int:
+    repo_name = install.get("repo")
+    command_text = install.get("command")
+    if not isinstance(repo_name, str) or not repo_name:
+        raise ValueError("external module installer must define repo")
+    if not isinstance(command_text, str) or not command_text:
+        raise ValueError("external module installer must define command")
+
+    repo_dir = _resolve_external_repo_dir(
+        base_dir=base_dir,
+        repo_name=repo_name,
+        explicit=args.repo_dir,
+    )
+    command = shlex.split(command_text)
+    payload = {
+        "module": module["name"],
+        "recipe": recipe["name"],
+        "repo": repo_name,
+        "cwd": str(repo_dir),
+        "command": command,
+    }
+    if args.dry_run:
+        payload["dry_run"] = True
+        print(json.dumps(payload, indent=2))
+        return 0
+
+    result = subprocess.run(
+        command,
+        cwd=repo_dir,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    try:
+        command_payload = json.loads(result.stdout) if result.stdout else {}
+    except json.JSONDecodeError:
+        command_payload = {"stdout": result.stdout}
+    if result.stderr:
+        command_payload["stderr"] = result.stderr
+    command_payload.update(payload)
+    print(json.dumps(command_payload, indent=2))
+    return 0
+
+
+def _handle_module_list(args: argparse.Namespace) -> int:
     base_dir = args.base_dir.resolve()
-    packs = [
-        read_solution_pack(path)
-        for path in list_solution_pack_paths(
+    modules = [
+        read_module(path)
+        for path in list_module_paths(
             base_dir=base_dir,
             configs_dir=args.configs_dir,
         )
     ]
     summaries = [
         {
-            "name": pack["name"],
-            "display_name": pack["display_name"],
-            "description": pack["description"],
-            "recommended_local_template": pack["recommended_local_template"],
-            "recommended_remote_template": pack["recommended_remote_template"],
-            "docs_path": pack["docs_path"],
-            "example_dir": pack["example_dir"],
+            "name": module["name"],
+            "display_name": module["display_name"],
+            "category": module["category"],
+            "maturity": module["maturity"],
+            "description": module["description"],
+            "default_recipe": module["default_recipe"],
+            "docs_path": module["docs_path"],
         }
-        for pack in packs
+        for module in modules
     ]
     print(json.dumps(summaries, indent=2))
     return 0
 
 
-def _handle_solution_pack_show(args: argparse.Namespace) -> int:
+def _handle_module_show(args: argparse.Namespace) -> int:
     base_dir = args.base_dir.resolve()
-    pack = _load_solution_pack(
+    _, module = _load_module(
         base_dir=base_dir,
-        pack_name=args.name,
+        module_name=args.name,
         configs_dir=args.configs_dir,
     )
-    print(json.dumps(pack, indent=2))
+    print(json.dumps(module, indent=2))
     return 0
 
 
-def _handle_solution_pack_starter(args: argparse.Namespace) -> int:
+def _handle_module_validate(args: argparse.Namespace) -> int:
     base_dir = args.base_dir.resolve()
-    pack = _load_solution_pack(
+    module_path, module = _load_module(
         base_dir=base_dir,
-        pack_name=args.name,
+        module_name=args.name,
+        configs_dir=args.configs_dir,
+    )
+    print(json.dumps(_validate_module_assets(module_path, module), indent=2))
+    return 0
+
+
+def _handle_module_install(args: argparse.Namespace) -> int:
+    base_dir = args.base_dir.resolve()
+    module_path, module = _load_module(
+        base_dir=base_dir,
+        module_name=args.name,
+        configs_dir=args.configs_dir,
+    )
+    _validate_module_assets(module_path, module)
+    recipe = _module_recipe(module, args.recipe)
+    install = recipe["install"]
+    if install["kind"] == "external":
+        return _handle_external_module_install(
+            args=args,
+            base_dir=base_dir,
+            module=module,
+            recipe=recipe,
+            install=install,
+        )
+    if install["kind"] != "xian-stack.localnet-dex-bootstrap":
+        raise ValueError(
+            f"module {module['name']} recipe {recipe['name']} uses install "
+            f"kind {install['kind']!r}; run the owning repo bootstrap command"
+        )
+    if module["name"] != "dex":
+        raise ValueError("only the dex module has a stack installer today")
+
+    if not module["contract_bundle_paths"]:
+        raise ValueError("dex module must define a contract bundle")
+    dex_bundle = _resolve_catalog_ref(
+        module_path,
+        module["contract_bundle_paths"][0],
+        collection_name="modules",
+    )
+    stack_dir = resolve_stack_dir(base_dir, explicit=args.stack_dir)
+    command = [
+        sys.executable,
+        str(stack_dir / "scripts" / "backend.py"),
+        "localnet-dex-bootstrap",
+        "--dex-bundle",
+        str(dex_bundle),
+        _bool_backend_arg("deploy-helper", bool(install["deploy_helper"])),
+        _bool_backend_arg(
+            "seed-demo-pool",
+            bool(install["seed_demo_pool"]),
+        ),
+        _bool_backend_arg(
+            "top-up-liquidity",
+            bool(install["top_up_liquidity"]) or args.top_up_liquidity,
+        ),
+        _bool_backend_arg(
+            "emit-test-swap",
+            bool(install["emit_test_swap"]) or args.emit_test_swap,
+        ),
+    ]
+    if args.rpc_url is not None:
+        command.extend(["--rpc-url", args.rpc_url])
+    if args.chain_id is not None:
+        command.extend(["--chain-id", args.chain_id])
+    if args.deployer_private_key is not None:
+        command.extend(["--deployer-private-key", args.deployer_private_key])
+
+    if args.dry_run:
+        print(
+            json.dumps(
+                {
+                    "dry_run": True,
+                    "module": module["name"],
+                    "recipe": recipe["name"],
+                    "bundle": str(dex_bundle),
+                    "command": command,
+                },
+                indent=2,
+            )
+        )
+        return 0
+
+    result = subprocess.run(
+        command,
+        cwd=stack_dir,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    payload = json.loads(result.stdout)
+    payload["module"] = module["name"]
+    payload["recipe"] = recipe["name"]
+    print(json.dumps(payload, indent=2))
+    return 0
+
+
+def _load_solution(
+    *,
+    base_dir: Path,
+    solution_name: str,
+    configs_dir: Path | None,
+) -> dict:
+    solution_path = resolve_solution_path(
+        base_dir=base_dir,
+        solution_name=solution_name,
+        configs_dir=configs_dir,
+    )
+    return read_solution(solution_path)
+
+
+def _handle_solution_list(args: argparse.Namespace) -> int:
+    base_dir = args.base_dir.resolve()
+    solutions = [
+        read_solution(path)
+        for path in list_solution_paths(
+            base_dir=base_dir,
+            configs_dir=args.configs_dir,
+        )
+    ]
+    summaries = [
+        {
+            "name": solution["name"],
+            "display_name": solution["display_name"],
+            "description": solution["description"],
+            "recommended_local_template": solution[
+                "recommended_local_template"
+            ],
+            "recommended_remote_template": solution[
+                "recommended_remote_template"
+            ],
+            "docs_path": solution["docs_path"],
+            "example_dir": solution["example_dir"],
+            "modules": solution["modules"],
+            "services": solution["services"],
+        }
+        for solution in solutions
+    ]
+    print(json.dumps(summaries, indent=2))
+    return 0
+
+
+def _handle_solution_show(args: argparse.Namespace) -> int:
+    base_dir = args.base_dir.resolve()
+    solution = _load_solution(
+        base_dir=base_dir,
+        solution_name=args.name,
+        configs_dir=args.configs_dir,
+    )
+    print(json.dumps(solution, indent=2))
+    return 0
+
+
+def _handle_solution_starter(args: argparse.Namespace) -> int:
+    base_dir = args.base_dir.resolve()
+    solution = _load_solution(
+        base_dir=base_dir,
+        solution_name=args.name,
         configs_dir=args.configs_dir,
     )
     flow = next(
-        (item for item in pack["starter_flows"] if item["name"] == args.flow),
+        (
+            item
+            for item in solution["starter_flows"]
+            if item["name"] == args.flow
+        ),
         None,
     )
     if flow is None:
-        available = sorted(item["name"] for item in pack["starter_flows"])
+        available = sorted(item["name"] for item in solution["starter_flows"])
         raise ValueError(
-            "solution pack flow "
-            f"'{args.flow}' not found; available: {available}"
+            f"solution flow '{args.flow}' not found; available: {available}"
         )
 
     starter = {
-        "name": pack["name"],
-        "display_name": pack["display_name"],
-        "description": pack["description"],
-        "use_case": pack["use_case"],
-        "docs_path": pack["docs_path"],
-        "example_dir": pack["example_dir"],
-        "contract_bundle_paths": pack["contract_bundle_paths"],
-        "contract_paths": pack["contract_paths"],
+        "name": solution["name"],
+        "display_name": solution["display_name"],
+        "description": solution["description"],
+        "use_case": solution["use_case"],
+        "docs_path": solution["docs_path"],
+        "example_dir": solution["example_dir"],
+        "modules": solution["modules"],
+        "services": solution["services"],
+        "contract_bundle_paths": solution["contract_bundle_paths"],
+        "contract_paths": solution["contract_paths"],
         "flow": flow,
     }
     print(json.dumps(starter, indent=2))
