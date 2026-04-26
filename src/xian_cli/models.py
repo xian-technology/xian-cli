@@ -887,9 +887,7 @@ def _normalize_starter_flow(payload: dict, *, label: str) -> dict:
         "summary": _require_str(payload, "summary"),
         "network_name": _require_optional_str(payload, "network_name"),
         "node_name": _require_optional_str(payload, "node_name"),
-        "steps": [
-            _normalize_starter_step(item, label=label) for item in steps
-        ],
+        "steps": [_normalize_starter_step(item, label=label) for item in steps],
     }
 
 
