@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import importlib
 import io
 import json
@@ -4914,6 +4915,9 @@ class ConfigRepoTests(unittest.TestCase):
                         "contract_paths": [
                             "solution-packs/workflow-backend/contracts/job_workflow.s.py"
                         ],
+                        "contract_bundle_paths": [
+                            "solution-packs/workflow-backend/contract-bundle.json"
+                        ],
                         "starter_flows": [
                             {
                                 "name": "local",
@@ -4987,6 +4991,55 @@ class ConfigRepoTests(unittest.TestCase):
                 payload["flow"]["steps"][0]["commands"][0],
                 "ansible-playbook playbooks/deploy.yml",
             )
+            self.assertEqual(
+                payload["contract_bundle_paths"],
+                ["solution-packs/workflow-backend/contract-bundle.json"],
+            )
+
+    def test_contract_bundle_validate_checks_sources(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            bundle_dir = Path(tmp_dir)
+            source_path = bundle_dir / "contracts" / "con_demo.s.py"
+            source_path.parent.mkdir()
+            source = "value = Variable()\n"
+            source_path.write_text(source, encoding="utf-8")
+            bundle_path = bundle_dir / "contract-bundle.json"
+            bundle_path.write_text(
+                json.dumps(
+                    {
+                        "schema": "xian.contract_bundle.v1",
+                        "schema_version": 1,
+                        "name": "demo",
+                        "display_name": "Demo",
+                        "version": "0.1.0",
+                        "contracts": [
+                            {
+                                "name": "con_demo",
+                                "role": "demo",
+                                "path": "contracts/con_demo.s.py",
+                                "sha256": hashlib.sha256(
+                                    source.encode("utf-8")
+                                ).hexdigest(),
+                                "deploy_order": 10,
+                                "default_chi": 100000,
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            stdout = io.StringIO()
+            with redirect_stdout(stdout):
+                exit_code = main(
+                    ["contract", "bundle", "validate", str(bundle_path)]
+                )
+
+            self.assertEqual(exit_code, 0)
+            payload = json.loads(stdout.getvalue())
+            self.assertTrue(payload["ok"])
+            self.assertEqual(payload["name"], "demo")
+            self.assertEqual(payload["contracts"][0]["role"], "demo")
 
     def test_read_solution_pack_requires_explicit_schema_version(
         self,

@@ -206,6 +206,30 @@ def build_parser() -> argparse.ArgumentParser:
         handler=cli._handle_solution_pack_starter
     )
 
+    contract_parser = subparsers.add_parser(
+        "contract", help="contract bundle helpers"
+    )
+    contract_subparsers = contract_parser.add_subparsers(
+        dest="contract_command", required=True
+    )
+
+    contract_bundle_parser = contract_subparsers.add_parser(
+        "bundle", help="inspect and validate contract bundles"
+    )
+    contract_bundle_subparsers = contract_bundle_parser.add_subparsers(
+        dest="contract_bundle_command", required=True
+    )
+
+    contract_bundle_validate_parser = contract_bundle_subparsers.add_parser(
+        "validate", help="validate a hash-pinned contract bundle"
+    )
+    contract_bundle_validate_parser.add_argument(
+        "path", type=Path, help="path to contract-bundle.json"
+    )
+    contract_bundle_validate_parser.set_defaults(
+        handler=cli._handle_contract_bundle_validate
+    )
+
     create_parser = network_subparsers.add_parser(
         "create", help="create a new network manifest"
     )

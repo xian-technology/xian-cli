@@ -119,6 +119,7 @@ uv run xian client tx transfer \
   stack-managed `xian-intentkit` / `xian-dex-automation`
 - snapshot restore and doctor diagnostics
 - solution-pack starter flows built on `xian-configs`
+- hash-pinned contract bundle validation
 - wallet, query, call/simulate, and transaction automation through `xian-py`
 
 ## Command Groups
@@ -129,6 +130,7 @@ uv run xian client tx transfer \
 - `xian network join ...`: join an existing preset-backed or remote network
 - `xian node ...`: initialize, start, stop, inspect, and recover a node profile
 - `xian client ...`: wallet, query, call/simulate, and transaction automation
+- `xian contract bundle ...`: validate hash-pinned contract bundles
 - `xian doctor ...`: run broader local diagnostics
 - `xian solution-pack ...`: discover starter flows built on top of the golden
   path

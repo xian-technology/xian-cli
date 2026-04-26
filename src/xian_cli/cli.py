@@ -23,6 +23,7 @@ from xian_cli.config_repo import (
     resolve_network_template_path,
     resolve_solution_pack_path,
 )
+from xian_cli.contract_bundles import validate_contract_bundle
 from xian_cli.models import (
     SUPPORTED_NODE_IMAGE_MODES,
     SUPPORTED_RUNTIME_BACKENDS,
@@ -434,10 +435,17 @@ def _handle_solution_pack_starter(args: argparse.Namespace) -> int:
         "use_case": pack["use_case"],
         "docs_path": pack["docs_path"],
         "example_dir": pack["example_dir"],
+        "contract_bundle_paths": pack["contract_bundle_paths"],
         "contract_paths": pack["contract_paths"],
         "flow": flow,
     }
     print(json.dumps(starter, indent=2))
+    return 0
+
+
+def _handle_contract_bundle_validate(args: argparse.Namespace) -> int:
+    result = validate_contract_bundle(args.path)
+    print(json.dumps(result, indent=2))
     return 0
 
 

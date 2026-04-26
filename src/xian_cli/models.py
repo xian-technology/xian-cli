@@ -908,6 +908,9 @@ def normalize_solution_pack(payload: dict) -> dict:
         "docs_path": _require_str(payload, "docs_path"),
         "example_dir": _require_str(payload, "example_dir"),
         "contract_paths": _require_str_list(payload, "contract_paths"),
+        "contract_bundle_paths": _require_str_list(
+            payload, "contract_bundle_paths"
+        ),
         "starter_flows": [
             _normalize_solution_pack_flow(item) for item in starter_flows
         ],
@@ -1157,6 +1160,7 @@ class SolutionPack:
     docs_path: str
     example_dir: str
     contract_paths: list[str] = field(default_factory=list)
+    contract_bundle_paths: list[str] = field(default_factory=list)
     starter_flows: list[SolutionPackStarterFlow] = field(default_factory=list)
     schema_version: int = SCHEMA_VERSION
 

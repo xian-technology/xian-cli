@@ -12,6 +12,7 @@ behind network manifests, node profiles, and backend integration.
   `xian-py`
 - `models.py`: typed manifest, profile, and related config models
 - `config_repo.py`: canonical network/template/solution-pack resolution
+- `contract_bundles.py`: hash-pinned contract bundle validation helpers
 - `runtime.py`: local runtime backend integration
 - `abci_bridge.py`: direct integration points with backend node tooling
 
