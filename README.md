@@ -85,6 +85,72 @@ uv run xian client tx transfer \
   <recipient> 1.25
 ```
 
+## Operator Journeys
+
+Use `xian-cli` when you want a stable human-facing command surface. The CLI
+reads committed assets from `xian-configs`, delegates runtime-heavy local
+operations to `xian-stack`, and uses `xian-py` for wallet / RPC automation.
+
+| Goal | Primary commands | Backing repo |
+| --- | --- | --- |
+| Create a local network | `xian network template ...`, `xian network create ...` | `xian-configs`, `xian-abci` |
+| Join an existing network | `xian network join ...` | `xian-configs`, `xian-stack` |
+| Operate a node | `xian node start/status/health/endpoints/stop ...` | `xian-stack` |
+| Diagnose a setup | `xian doctor ...`, `xian snapshot restore ...` | `xian-stack`, `xian-abci` |
+| Install reusable contracts | `xian module list/show/validate/install ...` | `xian-configs` modules |
+| Inspect full app starters | `xian solution list/show/starter ...` | `xian-configs` solutions |
+| Script chain interactions | `xian client query/call/simulate/tx ...` | `xian-py` |
+
+Typical local development loop:
+
+```bash
+uv run xian network template show single-node-indexed
+uv run xian network create local-indexed \
+  --chain-id xian-local-indexed-1 \
+  --template single-node-indexed \
+  --generate-validator-key \
+  --init-node
+uv run xian node start local-indexed
+uv run xian node health local-indexed
+uv run xian node endpoints local-indexed
+```
+
+Install and smoke a reusable module:
+
+```bash
+uv run xian module list
+uv run xian module show dex
+uv run xian module validate dex
+uv run xian module install dex \
+  --rpc-url http://127.0.0.1:26657 \
+  --deployer-private-key "$XIAN_PRIVATE_KEY" \
+  --top-up-liquidity \
+  --emit-test-swap
+```
+
+Inspect a complete starter flow before creating files or running installers:
+
+```bash
+uv run xian solution list
+uv run xian solution show dex-demo
+uv run xian solution starter dex-demo --flow local
+```
+
+Validate a hash-pinned contract bundle directly:
+
+```bash
+uv run xian contract bundle validate ../xian-dex/contract-bundle.json
+```
+
+For scripts and CI, prefer commands that emit JSON and avoid parsing human
+status text:
+
+```bash
+uv run xian client query balance \
+  --node-url http://127.0.0.1:26657 \
+  <address>
+```
+
 ## Principles
 
 - **Operator UX lives here.** Deterministic node logic stays in `xian-abci`,
