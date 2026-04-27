@@ -1,54 +1,47 @@
 # xian-cli
 
-`xian-cli` is the operator-facing and automation-facing control plane for Xian.
-It handles manifests, node profiles, lifecycle commands, health checks, local
-bootstrap flows, and JSON-first client commands without turning `xian-abci`,
-`xian-py`, or `xian-stack` into user-facing tools.
+`xian-cli` is the operator-facing and automation-facing control plane for
+Xian. It owns manifests, node profiles, lifecycle commands, health checks,
+local bootstrap flows, and JSON-first client commands without turning
+`xian-abci`, `xian-py`, or `xian-stack` into user-facing tools.
 
-The published PyPI package name is `xian-tech-cli`. The installed console
-command remains `xian`.
+The published PyPI package is `xian-tech-cli`. The installed console command
+remains `xian`. Runtime-heavy commands expect access to `xian-stack` and
+canonical manifests from `xian-configs`, either through the default sibling
+workspace layout or explicit `--stack-dir` and `--configs-dir` flags.
 
-## Install
+## Quick Start
 
-For local development in a sibling-repo workspace:
+Local development in a sibling-repo workspace:
 
 ```bash
 uv sync --group dev
 uv run xian --help
 ```
 
-For an isolated operator install from a published release:
+Isolated operator install from a published release:
 
 ```bash
-uv tool install xian-tech-cli
+uv tool install xian-tech-cli       # or: pipx install xian-tech-cli
 xian --help
 ```
 
-`pipx install xian-tech-cli` is also a valid operator install path if you
-prefer `pipx` over `uv`.
-
-For a bootstrap installer that prefers `uv`, then `pipx`, then
-`python3 -m pip --user`:
+Bootstrap installer (prefers `uv`, falls back to `pipx`, then
+`python3 -m pip --user`):
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/xian-technology/xian-cli/main/scripts/install.sh | sh
 ```
 
-On Windows PowerShell:
+Windows PowerShell:
 
 ```powershell
 irm https://raw.githubusercontent.com/xian-technology/xian-cli/main/scripts/install.ps1 | iex
 ```
 
-Set `XIAN_CLI_VERSION` before invoking either installer if you want to pin a
-specific release.
+Set `XIAN_CLI_VERSION` before either installer to pin a specific release.
 
-The CLI itself is Python-packaged today, but it is the canonical operator
-surface for Xian. Runtime-heavy commands still expect access to `xian-stack`
-and canonical manifests from `xian-configs`, either via the default sibling
-workspace layout or explicit `--stack-dir` and `--configs-dir` flags.
-
-## Common Workflows
+### Common Workflows
 
 Create a local network from a template:
 
@@ -81,7 +74,7 @@ uv run xian snapshot restore devnet-node
 For remote snapshot bootstrap, prefer a signed snapshot manifest plus trusted
 snapshot signing keys in the network manifest or node profile.
 
-Drive a node directly for wallet, query, and transaction automation:
+Wallet, query, and transaction automation against a running node:
 
 ```bash
 uv run xian client wallet generate --include-private-key
@@ -94,47 +87,59 @@ uv run xian client tx transfer \
 
 ## Principles
 
-- `xian-cli` owns operator UX. Deterministic node logic stays in `xian-abci`,
-  and local runtime orchestration stays in `xian-stack`.
-- Manifests and node profiles are explicit artifacts, not hidden state.
-- Templates, modules, and solutions should accelerate common setups, but they should
-  remain optional. An operator who knows what they are doing should still be
-  able to work directly with manifests, profiles, and node homes.
-- Health, endpoint discovery, and diagnostics are first-class operator
-  features, not afterthoughts.
+- **Operator UX lives here.** Deterministic node logic stays in `xian-abci`,
+  and local runtime orchestration stays in `xian-stack`. This repo is the
+  control plane that ties them together.
+- **Explicit artifacts, not hidden state.** Manifests and node profiles are
+  human-readable files. The CLI inspects, generates, and updates them; it
+  does not invent state outside them.
+- **Templates accelerate, never lock in.** Templates, modules, and solutions
+  shorten common setups, but an operator who knows what they are doing should
+  still be able to work directly with manifests, profiles, and node homes.
+- **Diagnostics are first-class.** Health, endpoint discovery, and `doctor`
+  paths are core features, not afterthoughts.
+- **JSON-first for automation.** Client commands and inspection commands emit
+  machine-readable output suitable for scripts and CI.
 
 ## Key Directories
 
-- `src/xian_cli/`: commands, models, manifest handling, and backend integration
-- `tests/`: CLI behavior and manifest/profile validation coverage
-- `docs/`: lifecycle contracts, architecture notes, and backlog items
+- `src/xian_cli/` — commands, models, manifest handling, and backend
+  integration.
+  - `cli.py`, `parser.py` — argument parsing and command dispatch.
+  - `client/` — wallet, query, call, simulate, and transaction commands.
+  - `config_repo.py`, `models.py` — manifest and profile schemas.
+  - `abci_bridge.py`, `runtime.py` — node-runtime integration.
+  - `contract_bundles.py` — hash-pinned contract-bundle validation.
+- `scripts/` — install / packaging helpers (e.g. `install.sh`, `install.ps1`).
+- `tests/` — CLI behavior and manifest / profile validation coverage.
+- `docs/` — architecture, lifecycle contract, distribution notes, backlog.
 
-## What It Covers
+## Capabilities
 
 - key generation and validator material
 - network template, module, and solution discovery
 - network creation and network join flows
 - node initialization, start, stop, and status
-- endpoint and health discovery, including optional dashboard, monitoring, and
-  stack-managed `xian-intentkit` / `xian-dex-automation`
+- endpoint and health discovery, including optional dashboard, monitoring,
+  and stack-managed `xian-intentkit` / `xian-dex-automation`
 - snapshot restore and doctor diagnostics
-- module install/validation flows built on `xian-configs`
-- solution starter flows built on `xian-configs`
-- hash-pinned contract bundle validation
-- wallet, query, call/simulate, and transaction automation through `xian-py`
+- module install / validation flows backed by `xian-configs`
+- solution starter flows backed by `xian-configs`
+- hash-pinned contract-bundle validation
+- wallet, query, call / simulate, and transaction automation via `xian-py`
 
 ## Command Groups
 
-- `xian keys ...`: generate validator and account material
-- `xian network template ...`: inspect reusable network templates
-- `xian network create ...`: create a local/operator-managed network profile
-- `xian network join ...`: join an existing preset-backed or remote network
-- `xian node ...`: initialize, start, stop, inspect, and recover a node profile
-- `xian client ...`: wallet, query, call/simulate, and transaction automation
-- `xian module ...`: inspect, validate, and install reusable modules
-- `xian solution ...`: discover full application/operator starter flows
-- `xian contract bundle ...`: validate hash-pinned contract bundles
-- `xian doctor ...`: run broader local diagnostics
+- `xian keys ...` — generate validator and account material
+- `xian network template ...` — inspect reusable network templates
+- `xian network create ...` — create a local / operator-managed network profile
+- `xian network join ...` — join an existing preset-backed or remote network
+- `xian node ...` — initialize, start, stop, inspect, and recover a node profile
+- `xian client ...` — wallet, query, call / simulate, and transaction automation
+- `xian module ...` — inspect, validate, and install reusable modules
+- `xian solution ...` — discover full application / operator starter flows
+- `xian contract bundle ...` — validate hash-pinned contract bundles
+- `xian doctor ...` — run broader local diagnostics
 
 ## Validation
 
@@ -147,8 +152,9 @@ uv run pytest
 
 ## Related Docs
 
-- [AGENTS.md](AGENTS.md)
-- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
-- [docs/BACKLOG.md](docs/BACKLOG.md)
-- [docs/DISTRIBUTION.md](docs/DISTRIBUTION.md)
-- [docs/LIFECYCLE_CONTRACT.md](docs/LIFECYCLE_CONTRACT.md)
+- [AGENTS.md](AGENTS.md) — repo-specific guidance for AI agents and contributors
+- [docs/README.md](docs/README.md) — index of internal docs
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — major components and dependency direction
+- [docs/BACKLOG.md](docs/BACKLOG.md) — open work and follow-ups
+- [docs/LIFECYCLE_CONTRACT.md](docs/LIFECYCLE_CONTRACT.md) — node-lifecycle contract that the CLI enforces
+- [docs/DISTRIBUTION.md](docs/DISTRIBUTION.md) — packaging, install paths, and release-channel rules
