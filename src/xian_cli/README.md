@@ -16,6 +16,18 @@ behind network manifests, node profiles, and backend integration.
 - `runtime.py`: local runtime backend integration
 - `abci_bridge.py`: direct integration points with backend node tooling
 
+```mermaid
+flowchart LR
+  CLI["cli.py"] --> ConfigRepo["config_repo.py"]
+  CLI --> Runtime["runtime.py"]
+  CLI --> Client["client commands"]
+  ConfigRepo --> Models["models.py"]
+  ConfigRepo --> Bundles["contract_bundles.py"]
+  Runtime --> Stack["xian-stack backend"]
+  Client --> SDK["xian-py"]
+  Bundles --> Configs["xian-configs"]
+```
+
 ## Notes
 
 - Keep this package orchestration-focused.

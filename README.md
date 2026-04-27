@@ -10,6 +10,20 @@ remains `xian`. Runtime-heavy commands expect access to `xian-stack` and
 canonical manifests from `xian-configs`, either through the default sibling
 workspace layout or explicit `--stack-dir` and `--configs-dir` flags.
 
+## Control Plane
+
+```mermaid
+flowchart LR
+  Operator["Operator or automation"] --> CLI["xian CLI"]
+  CLI --> Configs["xian-configs manifests, modules, solutions"]
+  CLI --> Stack["xian-stack backend"]
+  CLI --> SDK["xian-py client"]
+  Configs --> Profiles["Network and node profiles"]
+  Stack --> Runtime["Local node runtime"]
+  SDK --> Node["Running Xian node"]
+  Runtime --> Node
+```
+
 ## Quick Start
 
 Local development in a sibling-repo workspace:
