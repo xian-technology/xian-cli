@@ -1160,7 +1160,7 @@ def build_parser() -> argparse.ArgumentParser:
         type=Path,
         help=(
             "explicit network manifest path; defaults to "
-            "./networks/<profile.network>.json"
+            "./networks/<profile.network>/manifest.json"
         ),
     )
     init_parser.add_argument(
@@ -1232,7 +1232,7 @@ def build_parser() -> argparse.ArgumentParser:
         type=Path,
         help=(
             "explicit network manifest path; defaults to "
-            "./networks/<profile.network>.json"
+            "./networks/<profile.network>/manifest.json"
         ),
     )
     start_parser.add_argument(
@@ -1285,7 +1285,7 @@ def build_parser() -> argparse.ArgumentParser:
         type=Path,
         help=(
             "explicit network manifest path; defaults to "
-            "./networks/<profile.network>.json"
+            "./networks/<profile.network>/manifest.json"
         ),
     )
     stop_parser.add_argument(
@@ -1688,7 +1688,7 @@ def build_parser() -> argparse.ArgumentParser:
         type=Path,
         help=(
             "explicit network manifest path; defaults to "
-            "./networks/<profile.network>.json"
+            "./networks/<profile.network>/manifest.json"
         ),
     )
     restore_parser.add_argument(

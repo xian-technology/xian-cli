@@ -893,7 +893,6 @@ class NetworkManifestTests(unittest.TestCase):
                         "mode": "join",
                         "runtime_backend": "xian-stack",
                         "node_image_mode": "local_build",
-                        "shielded_relayer": None,
                         "shielded_relayers": [],
                         "privacy_artifact_catalog": {
                             "path": "./privacy/artifacts.json",

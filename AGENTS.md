@@ -32,7 +32,6 @@
 - If a feature needs canonical network definitions, keep those in
   `xian-configs` and consume them here.
 - Prefer the network-first local layout `./networks/<name>/manifest.json`.
-  Treat flat `./networks/<name>.json` manifests as legacy fallback only.
 - `network join` must resolve the referenced network manifest up front. Keep
   network-owned metadata in the manifest and node-local overrides in the
   profile.

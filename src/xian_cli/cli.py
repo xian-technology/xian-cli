@@ -247,8 +247,6 @@ def _network_shielded_relayer_endpoints(
             relayers_raw = [
                 item for item in list_value if isinstance(item, dict)
             ]
-        elif isinstance(network.get("shielded_relayer"), dict):
-            relayers_raw = [network["shielded_relayer"]]
     if not relayers_raw:
         return {}
     relayers = sorted(

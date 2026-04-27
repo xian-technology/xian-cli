@@ -258,26 +258,12 @@ def _normalize_shielded_relayer_entry(
     }
 
 
-def _normalize_shielded_relayer_manifest(
-    payload: dict, key: str
-) -> dict | None:
-    value = payload.get(key)
-    if value is None:
-        return None
-    return _normalize_shielded_relayer_entry(
-        value,
-        key,
-        default_id="primary",
-    )
-
-
 def _normalize_shielded_relayers_manifest(
     payload: dict,
-) -> tuple[dict | None, list[dict]]:
-    legacy = _normalize_shielded_relayer_manifest(payload, "shielded_relayer")
+) -> list[dict]:
     relayers_raw = payload.get("shielded_relayers")
     if relayers_raw is None:
-        return legacy, [] if legacy is None else [legacy]
+        return []
     if not isinstance(relayers_raw, list):
         raise ValueError("shielded_relayers must be a list when provided")
     relayers = [
@@ -304,9 +290,7 @@ def _normalize_shielded_relayers_manifest(
             str(item["base_url"]),
         ),
     )
-    return legacy or (
-        sorted_relayers[0] if sorted_relayers else None
-    ), sorted_relayers
+    return sorted_relayers
 
 
 def _normalize_privacy_artifact_catalog(
@@ -503,9 +487,7 @@ def _require_mode(payload: dict) -> str:
 def normalize_network_manifest(payload: dict) -> dict:
     if not isinstance(payload, dict):
         raise ValueError("network manifest must be a JSON object")
-    shielded_relayer, shielded_relayers = _normalize_shielded_relayers_manifest(
-        payload
-    )
+    shielded_relayers = _normalize_shielded_relayers_manifest(payload)
 
     node_image_mode, node_integrated_image, node_split_image = (
         _validate_node_image_config(
@@ -546,7 +528,6 @@ def normalize_network_manifest(payload: dict) -> dict:
         "node_image_mode": node_image_mode,
         "node_integrated_image": node_integrated_image,
         "node_split_image": node_split_image,
-        "shielded_relayer": shielded_relayer,
         "shielded_relayers": shielded_relayers,
         "privacy_artifact_catalog": _normalize_privacy_artifact_catalog(
             payload, "privacy_artifact_catalog"
@@ -1085,7 +1066,6 @@ class NetworkManifest:
     node_image_mode: str = "local_build"
     node_integrated_image: str | None = None
     node_split_image: str | None = None
-    shielded_relayer: dict | None = None
     shielded_relayers: list[dict] = field(default_factory=list)
     privacy_artifact_catalog: dict | None = None
     shielded_history_policy: dict | None = None
