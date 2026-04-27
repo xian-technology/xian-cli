@@ -8,7 +8,7 @@
 
 The external UX should stay smaller than the internal lifecycle.
 
-Planned primary commands:
+Primary commands:
 
 - `xian keys validator generate`
 - `xian network template list`
@@ -19,6 +19,10 @@ Planned primary commands:
 - `xian node start`
 - `xian node stop`
 - `xian node status`
+- `xian node endpoints`
+- `xian node health`
+- `xian recovery validate`
+- `xian recovery apply`
 - `xian snapshot restore`
 - `xian doctor`
 
@@ -56,7 +60,6 @@ This stage produces the validator material required for `priv_validator_key.json
 
 - Owner: `xian-cli`
 - Source of truth: network manifest JSON, either local or canonical from `xian-configs`
-- Inputs: chain ID, bootstrap mode, genesis source, seeds, optional snapshot source
 - Inputs: chain ID, bootstrap mode, genesis source, seeds, optional snapshot
   source, and block-time policy
 - Outputs: immutable network-level description
@@ -67,7 +70,6 @@ This stage defines facts about a network, not about a specific node.
 
 - Owner: `xian-cli`
 - Source of truth: node profile JSON
-- Inputs: network reference, moniker, key references, role flags, and home path
 - Inputs: network reference, moniker, key references, role flags, home path,
   and optional local block-policy override
 - Outputs: local node intent
@@ -128,7 +130,8 @@ This stage creates the default CometBFT files such as `config.toml`, `genesis.js
   - `priv_validator_key.json`
   - pruning, BDS, RPC, and seed configuration
 
-This replaces the current manual `configure.py`-driven step with a manifest-driven render phase.
+This is the manifest-driven render phase that replaced the earlier manual
+`configure.py` workflow.
 
 ### 8. Snapshot Restore
 
