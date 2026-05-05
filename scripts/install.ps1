@@ -34,33 +34,9 @@ function Invoke-Step {
     }
 }
 
-function Get-PythonCommand {
-    if (Get-Command py -ErrorAction SilentlyContinue) {
-        return @("py", "-3")
-    }
-    if (Get-Command python -ErrorAction SilentlyContinue) {
-        return @("python")
-    }
-    return $null
+if (-not (Get-Command uv -ErrorAction SilentlyContinue)) {
+    throw "Need uv to install xian-cli"
 }
 
-if (Get-Command uv -ErrorAction SilentlyContinue) {
-    Invoke-Step @("uv", "tool", "install", "--force", $packageSpec)
-} elseif (Get-Command pipx -ErrorAction SilentlyContinue) {
-    Invoke-Step @("pipx", "install", "--force", $packageSpec)
-} else {
-    $python = Get-PythonCommand
-    if (-not $python) {
-        throw "Need one of: uv, pipx, py, or python"
-    }
-
-    Invoke-Step @($python + @("-m", "pip", "install", "--user", "--upgrade", $packageSpec))
-
-    $scriptsDir = & $python[0] @($python[1..($python.Length - 1)] + @(
-        "-c",
-        "import site, sys; from pathlib import Path; print(Path(site.USER_BASE) / ('Scripts' if sys.platform == 'win32' else 'bin'))"
-    ))
-    Write-Host "Installed with user-site pip. Add $scriptsDir to PATH if xian is not available yet."
-}
-
+Invoke-Step @("uv", "tool", "install", "--force", $packageSpec)
 Write-Host "Installed $packageSpec. Run 'xian --help' to verify the CLI."

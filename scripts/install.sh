@@ -23,25 +23,10 @@ run() {
   "$@"
 }
 
-if command -v uv >/dev/null 2>&1; then
-  run uv tool install --force "$PACKAGE_SPEC"
-elif command -v pipx >/dev/null 2>&1; then
-  run pipx install --force "$PACKAGE_SPEC"
-elif command -v python3 >/dev/null 2>&1; then
-  run python3 -m pip install --user --upgrade "$PACKAGE_SPEC"
-  USER_BIN="$(
-    python3 - <<'PY'
-import site
-import sys
-from pathlib import Path
-
-print(Path(site.USER_BASE) / ("Scripts" if sys.platform == "win32" else "bin"))
-PY
-  )"
-  printf 'Installed with user-site pip. Add %s to PATH if `xian` is not available yet.\n' "$USER_BIN"
-else
-  printf '%s\n' "Need one of: uv, pipx, or python3" >&2
+if ! command -v uv >/dev/null 2>&1; then
+  printf '%s\n' "Need uv to install xian-cli" >&2
   exit 1
 fi
 
+run uv tool install --force "$PACKAGE_SPEC"
 printf 'Installed %s. Run `xian --help` to verify the CLI.\n' "$PACKAGE_SPEC"

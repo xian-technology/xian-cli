@@ -36,12 +36,11 @@ uv run xian --help
 Isolated operator install from a published release:
 
 ```bash
-uv tool install xian-tech-cli       # or: pipx install xian-tech-cli
+uv tool install xian-tech-cli
 xian --help
 ```
 
-Bootstrap installer (prefers `uv`, falls back to `pipx`, then
-`python3 -m pip --user`):
+Bootstrap installer (requires `uv`):
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/xian-technology/xian-cli/main/scripts/install.sh | sh

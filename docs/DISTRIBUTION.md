@@ -27,10 +27,9 @@ command surface in another language.
 - Publish `xian-tech-cli` to PyPI.
 - Keep `xian` as the installed command name.
 - Upload wheel and sdist artifacts to GitHub releases.
-- Recommend isolated operator installs through `uv tool install xian-tech-cli`
-  or `pipx install xian-tech-cli`.
-- Provide bootstrap installer scripts for Unix and PowerShell that choose the
-  best available install path on the operator machine.
+- Recommend isolated operator installs through `uv tool install xian-tech-cli`.
+- Provide bootstrap installer scripts for Unix and PowerShell that use the same
+  uv tool install path on the operator machine.
 - Preserve `python -m xian_cli` as a valid fallback entrypoint for debugging and
   packaging environments.
 
