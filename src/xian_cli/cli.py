@@ -43,6 +43,7 @@ from xian_cli.models import (
     read_solution,
     write_json,
 )
+from xian_cli.network_plans import build_profile_runtime_fields
 from xian_cli.parser import build_parser as _build_parser
 from xian_cli.runtime import (
     default_home_for_backend,
@@ -310,18 +311,6 @@ def _resolve_node_image_settings(
             "--node-integrated-image and --node-split-image"
         )
     return node_image_mode, node_integrated_image, node_split_image
-
-
-def _validate_non_negative_int(name: str, value: int) -> int:
-    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
-        raise ValueError(f"{name} must be a non-negative integer")
-    return value
-
-
-def _validate_positive_int(name: str, value: int) -> int:
-    if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
-        raise ValueError(f"{name} must be a positive integer")
-    return value
 
 
 def _load_template(
@@ -1103,331 +1092,19 @@ def _handle_network_create(args: argparse.Namespace) -> int:
                 if validator["is_bootstrap"]
                 else []
             ),
-            service_node=(
-                _pick_template_value(
-                    args.service_node,
-                    None if template is None else template.get("service_node"),
-                    False,
-                )
-                if validator["is_bootstrap"]
-                else False
-            ),
             home=(
                 str(args.home)
                 if validator["is_bootstrap"] and args.home is not None
                 else None
             ),
-            pruning_enabled=(
-                _pick_template_value(
-                    args.enable_pruning,
-                    None
-                    if template is None
-                    else template.get("pruning_enabled"),
-                    False,
-                )
-                if validator["is_bootstrap"]
-                else False
-            ),
-            blocks_to_keep=(
-                _pick_template_value(
-                    args.blocks_to_keep,
-                    None
-                    if template is None
-                    else template.get("blocks_to_keep"),
-                    100000,
-                )
-                if validator["is_bootstrap"]
-                else 100000
-            ),
             block_policy_mode=manifest.block_policy_mode,
             block_policy_interval=manifest.block_policy_interval,
             tracer_mode=manifest.tracer_mode,
-            transaction_trace_logging=_pick_template_value(
-                args.transaction_trace_logging,
-                None
-                if template is None
-                else template.get("transaction_trace_logging"),
-                False,
-            ),
-            app_log_level=_pick_template_value(
-                args.app_log_level,
-                None if template is None else template.get("app_log_level"),
-                "INFO",
-            ),
-            app_log_json=_pick_template_value(
-                args.app_log_json,
-                None if template is None else template.get("app_log_json"),
-                False,
-            ),
-            app_log_rotation_hours=_validate_positive_int(
-                "app_log_rotation_hours",
-                _pick_template_value(
-                    args.app_log_rotation_hours,
-                    None
-                    if template is None
-                    else template.get("app_log_rotation_hours"),
-                    1,
-                ),
-            ),
-            app_log_retention_days=_validate_positive_int(
-                "app_log_retention_days",
-                _pick_template_value(
-                    args.app_log_retention_days,
-                    None
-                    if template is None
-                    else template.get("app_log_retention_days"),
-                    7,
-                ),
-            ),
-            simulation_enabled=_pick_template_value(
-                args.simulation_enabled,
-                None
-                if template is None
-                else template.get("simulation_enabled"),
-                True,
-            ),
-            simulation_max_concurrency=_validate_positive_int(
-                "simulation_max_concurrency",
-                _pick_template_value(
-                    args.simulation_max_concurrency,
-                    None
-                    if template is None
-                    else template.get("simulation_max_concurrency"),
-                    2,
-                ),
-            ),
-            simulation_timeout_ms=_validate_positive_int(
-                "simulation_timeout_ms",
-                _pick_template_value(
-                    args.simulation_timeout_ms,
-                    None
-                    if template is None
-                    else template.get("simulation_timeout_ms"),
-                    3000,
-                ),
-            ),
-            simulation_max_chi=_validate_positive_int(
-                "simulation_max_chi",
-                _pick_template_value(
-                    args.simulation_max_chi,
-                    None
-                    if template is None
-                    else template.get("simulation_max_chi"),
-                    1_000_000,
-                ),
-            ),
-            parallel_execution_enabled=_pick_template_value(
-                args.parallel_execution_enabled,
-                None
-                if template is None
-                else template.get("parallel_execution_enabled"),
-                False,
-            ),
-            parallel_execution_workers=_validate_non_negative_int(
-                "parallel_execution_workers",
-                _pick_template_value(
-                    args.parallel_execution_workers,
-                    None
-                    if template is None
-                    else template.get("parallel_execution_workers"),
-                    0,
-                ),
-            ),
-            parallel_execution_min_transactions=_validate_non_negative_int(
-                "parallel_execution_min_transactions",
-                _pick_template_value(
-                    args.parallel_execution_min_transactions,
-                    None
-                    if template is None
-                    else template.get("parallel_execution_min_transactions"),
-                    8,
-                ),
-            ),
-            operator_profile=(
-                template.get("operator_profile")
-                if validator["is_bootstrap"] and template is not None
-                else None
-            ),
-            monitoring_profile=(
-                template.get("monitoring_profile")
-                if validator["is_bootstrap"] and template is not None
-                else None
-            ),
-            dashboard_enabled=(
-                _pick_template_value(
-                    args.enable_dashboard,
-                    None
-                    if template is None
-                    else template.get("dashboard_enabled"),
-                    False,
-                )
-                if validator["is_bootstrap"]
-                else False
-            ),
-            monitoring_enabled=(
-                _pick_template_value(
-                    args.enable_monitoring,
-                    None
-                    if template is None
-                    else template.get("monitoring_enabled"),
-                    False,
-                )
-                if validator["is_bootstrap"]
-                else False
-            ),
-            dashboard_host=(
-                _pick_template_value(
-                    args.dashboard_host,
-                    None
-                    if template is None
-                    else template.get("dashboard_host"),
-                    "127.0.0.1",
-                )
-                if validator["is_bootstrap"]
-                else "127.0.0.1"
-            ),
-            dashboard_port=(
-                _pick_template_value(
-                    args.dashboard_port,
-                    None
-                    if template is None
-                    else template.get("dashboard_port"),
-                    8080,
-                )
-                if validator["is_bootstrap"]
-                else 8080
-            ),
-            intentkit_enabled=(
-                _pick_template_value(
-                    args.enable_intentkit,
-                    None
-                    if template is None
-                    else template.get("intentkit_enabled"),
-                    False,
-                )
-                if validator["is_bootstrap"]
-                else False
-            ),
-            intentkit_network_id=(
-                _pick_template_value(
-                    args.intentkit_network_id,
-                    None
-                    if template is None
-                    else template.get("intentkit_network_id"),
-                    "xian-localnet",
-                )
-                if validator["is_bootstrap"]
-                else "xian-localnet"
-            ),
-            intentkit_host=(
-                _pick_template_value(
-                    args.intentkit_host,
-                    None
-                    if template is None
-                    else template.get("intentkit_host"),
-                    "127.0.0.1",
-                )
-                if validator["is_bootstrap"]
-                else "127.0.0.1"
-            ),
-            intentkit_port=(
-                _pick_template_value(
-                    args.intentkit_port,
-                    None
-                    if template is None
-                    else template.get("intentkit_port"),
-                    38000,
-                )
-                if validator["is_bootstrap"]
-                else 38000
-            ),
-            intentkit_api_port=(
-                _pick_template_value(
-                    args.intentkit_api_port,
-                    None
-                    if template is None
-                    else template.get("intentkit_api_port"),
-                    38080,
-                )
-                if validator["is_bootstrap"]
-                else 38080
-            ),
-            dex_automation_enabled=(
-                _pick_template_value(
-                    args.enable_dex_automation,
-                    None
-                    if template is None
-                    else template.get("dex_automation_enabled"),
-                    False,
-                )
-                if validator["is_bootstrap"]
-                else False
-            ),
-            dex_automation_host=(
-                _pick_template_value(
-                    args.dex_automation_host,
-                    None
-                    if template is None
-                    else template.get("dex_automation_host"),
-                    "127.0.0.1",
-                )
-                if validator["is_bootstrap"]
-                else "127.0.0.1"
-            ),
-            dex_automation_port=(
-                _pick_template_value(
-                    args.dex_automation_port,
-                    None
-                    if template is None
-                    else template.get("dex_automation_port"),
-                    38280,
-                )
-                if validator["is_bootstrap"]
-                else 38280
-            ),
-            dex_automation_config=(
-                _pick_template_value(
-                    args.dex_automation_config,
-                    None
-                    if template is None
-                    else template.get("dex_automation_config"),
-                    None,
-                )
-                if validator["is_bootstrap"]
-                else None
-            ),
-            shielded_relayer_enabled=(
-                _pick_template_value(
-                    None,
-                    None
-                    if template is None
-                    else template.get("shielded_relayer_enabled"),
-                    False,
-                )
-                if validator["is_bootstrap"]
-                else False
-            ),
-            shielded_relayer_host=(
-                _pick_template_value(
-                    None,
-                    None
-                    if template is None
-                    else template.get("shielded_relayer_host"),
-                    "127.0.0.1",
-                )
-                if validator["is_bootstrap"]
-                else "127.0.0.1"
-            ),
-            shielded_relayer_port=(
-                _pick_template_value(
-                    None,
-                    None
-                    if template is None
-                    else template.get("shielded_relayer_port"),
-                    38180,
-                )
-                if validator["is_bootstrap"]
-                else 38180
+            **build_profile_runtime_fields(
+                args=args,
+                template=template,
+                runtime_services=bool(validator["is_bootstrap"]),
+                intentkit_network_id_default="xian-localnet",
             ),
         )
         write_json(profile_path, profile.to_dict(), force=args.force)
@@ -1595,22 +1272,7 @@ def _handle_network_join(args: argparse.Namespace) -> int:
         genesis_url=args.genesis_url,
         snapshot_url=args.snapshot_url,
         snapshot_signing_keys=args.snapshot_signing_key or [],
-        service_node=_pick_template_value(
-            args.service_node,
-            None if template is None else template.get("service_node"),
-            False,
-        ),
         home=str(args.home) if args.home is not None else None,
-        pruning_enabled=_pick_template_value(
-            args.enable_pruning,
-            None if template is None else template.get("pruning_enabled"),
-            False,
-        ),
-        blocks_to_keep=_pick_template_value(
-            args.blocks_to_keep,
-            None if template is None else template.get("blocks_to_keep"),
-            100000,
-        ),
         block_policy_mode=_pick_template_value(
             args.block_policy_mode,
             None if template is None else template.get("block_policy_mode"),
@@ -1626,194 +1288,13 @@ def _handle_network_join(args: argparse.Namespace) -> int:
             None if template is None else template.get("tracer_mode"),
             network.get("tracer_mode", "python_line_v1"),
         ),
-        transaction_trace_logging=_pick_template_value(
-            args.transaction_trace_logging,
-            None
-            if template is None
-            else template.get("transaction_trace_logging"),
-            False,
-        ),
-        app_log_level=_pick_template_value(
-            args.app_log_level,
-            None if template is None else template.get("app_log_level"),
-            "INFO",
-        ),
-        app_log_json=_pick_template_value(
-            args.app_log_json,
-            None if template is None else template.get("app_log_json"),
-            False,
-        ),
-        app_log_rotation_hours=_validate_positive_int(
-            "app_log_rotation_hours",
-            _pick_template_value(
-                args.app_log_rotation_hours,
-                None
-                if template is None
-                else template.get("app_log_rotation_hours"),
-                1,
+        **build_profile_runtime_fields(
+            args=args,
+            template=template,
+            runtime_services=True,
+            intentkit_network_id_default=_default_intentkit_network_id(
+                network.get("name")
             ),
-        ),
-        app_log_retention_days=_validate_positive_int(
-            "app_log_retention_days",
-            _pick_template_value(
-                args.app_log_retention_days,
-                None
-                if template is None
-                else template.get("app_log_retention_days"),
-                7,
-            ),
-        ),
-        simulation_enabled=_pick_template_value(
-            args.simulation_enabled,
-            None if template is None else template.get("simulation_enabled"),
-            True,
-        ),
-        simulation_max_concurrency=_validate_positive_int(
-            "simulation_max_concurrency",
-            _pick_template_value(
-                args.simulation_max_concurrency,
-                None
-                if template is None
-                else template.get("simulation_max_concurrency"),
-                2,
-            ),
-        ),
-        simulation_timeout_ms=_validate_positive_int(
-            "simulation_timeout_ms",
-            _pick_template_value(
-                args.simulation_timeout_ms,
-                None
-                if template is None
-                else template.get("simulation_timeout_ms"),
-                3000,
-            ),
-        ),
-        simulation_max_chi=_validate_positive_int(
-            "simulation_max_chi",
-            _pick_template_value(
-                args.simulation_max_chi,
-                None
-                if template is None
-                else template.get("simulation_max_chi"),
-                1_000_000,
-            ),
-        ),
-        parallel_execution_enabled=_pick_template_value(
-            args.parallel_execution_enabled,
-            None
-            if template is None
-            else template.get("parallel_execution_enabled"),
-            False,
-        ),
-        parallel_execution_workers=_validate_non_negative_int(
-            "parallel_execution_workers",
-            _pick_template_value(
-                args.parallel_execution_workers,
-                None
-                if template is None
-                else template.get("parallel_execution_workers"),
-                0,
-            ),
-        ),
-        parallel_execution_min_transactions=_validate_non_negative_int(
-            "parallel_execution_min_transactions",
-            _pick_template_value(
-                args.parallel_execution_min_transactions,
-                None
-                if template is None
-                else template.get("parallel_execution_min_transactions"),
-                8,
-            ),
-        ),
-        operator_profile=(
-            None if template is None else template.get("operator_profile")
-        ),
-        monitoring_profile=(
-            None if template is None else template.get("monitoring_profile")
-        ),
-        dashboard_enabled=_pick_template_value(
-            args.enable_dashboard,
-            None if template is None else template.get("dashboard_enabled"),
-            False,
-        ),
-        monitoring_enabled=_pick_template_value(
-            args.enable_monitoring,
-            None if template is None else template.get("monitoring_enabled"),
-            False,
-        ),
-        dashboard_host=_pick_template_value(
-            args.dashboard_host,
-            None if template is None else template.get("dashboard_host"),
-            "127.0.0.1",
-        ),
-        dashboard_port=_pick_template_value(
-            args.dashboard_port,
-            None if template is None else template.get("dashboard_port"),
-            8080,
-        ),
-        intentkit_enabled=_pick_template_value(
-            args.enable_intentkit,
-            None if template is None else template.get("intentkit_enabled"),
-            False,
-        ),
-        intentkit_network_id=_pick_template_value(
-            args.intentkit_network_id,
-            None if template is None else template.get("intentkit_network_id"),
-            _default_intentkit_network_id(network.get("name")),
-        ),
-        intentkit_host=_pick_template_value(
-            args.intentkit_host,
-            None if template is None else template.get("intentkit_host"),
-            "127.0.0.1",
-        ),
-        intentkit_port=_pick_template_value(
-            args.intentkit_port,
-            None if template is None else template.get("intentkit_port"),
-            38000,
-        ),
-        intentkit_api_port=_pick_template_value(
-            args.intentkit_api_port,
-            None if template is None else template.get("intentkit_api_port"),
-            38080,
-        ),
-        dex_automation_enabled=_pick_template_value(
-            args.enable_dex_automation,
-            None
-            if template is None
-            else template.get("dex_automation_enabled"),
-            False,
-        ),
-        dex_automation_host=_pick_template_value(
-            args.dex_automation_host,
-            None if template is None else template.get("dex_automation_host"),
-            "127.0.0.1",
-        ),
-        dex_automation_port=_pick_template_value(
-            args.dex_automation_port,
-            None if template is None else template.get("dex_automation_port"),
-            38280,
-        ),
-        dex_automation_config=_pick_template_value(
-            args.dex_automation_config,
-            None if template is None else template.get("dex_automation_config"),
-            None,
-        ),
-        shielded_relayer_enabled=_pick_template_value(
-            None,
-            None
-            if template is None
-            else template.get("shielded_relayer_enabled"),
-            False,
-        ),
-        shielded_relayer_host=_pick_template_value(
-            None,
-            None if template is None else template.get("shielded_relayer_host"),
-            "127.0.0.1",
-        ),
-        shielded_relayer_port=_pick_template_value(
-            None,
-            None if template is None else template.get("shielded_relayer_port"),
-            38180,
         ),
     )
     target = args.output or base_dir / "nodes" / f"{args.name}.json"
@@ -2552,56 +2033,68 @@ def _initialize_node_from_args(args: argparse.Namespace) -> dict:
     seed_nodes.extend(profile.get("seeds") or [])
 
     configs = node_setup.render_node_configs(
-        moniker=profile["moniker"],
-        seed_nodes=seed_nodes,
-        service_node=bool(profile.get("service_node")),
-        enable_pruning=bool(profile.get("pruning_enabled")),
-        blocks_to_keep=int(profile.get("blocks_to_keep", 100000)),
-        block_policy_mode=str(
-            profile.get(
-                "block_policy_mode",
-                network.get("block_policy_mode", "on_demand"),
-            )
-        ),
-        block_policy_interval=str(
-            profile.get(
-                "block_policy_interval",
-                network.get("block_policy_interval", "0s"),
-            )
-        ),
-        tracer_mode=str(
-            profile.get(
-                "tracer_mode",
-                network.get("tracer_mode", "python_line_v1"),
-            )
-        ),
-        transaction_trace_logging=bool(
-            profile.get("transaction_trace_logging", False)
-        ),
-        app_log_level=str(profile.get("app_log_level", "INFO")),
-        app_log_json=bool(profile.get("app_log_json", False)),
-        app_log_rotation_hours=int(profile.get("app_log_rotation_hours", 1)),
-        app_log_retention_days=int(profile.get("app_log_retention_days", 7)),
-        simulation_enabled=bool(profile.get("simulation_enabled", True)),
-        simulation_max_concurrency=int(
-            profile.get("simulation_max_concurrency", 2)
-        ),
-        simulation_timeout_ms=int(profile.get("simulation_timeout_ms", 3000)),
-        simulation_max_chi=int(profile.get("simulation_max_chi", 1_000_000)),
-        parallel_execution_enabled=bool(
-            profile.get("parallel_execution_enabled", False)
-        ),
-        parallel_execution_workers=int(
-            profile.get("parallel_execution_workers", 0)
-        ),
-        parallel_execution_min_transactions=int(
-            profile.get("parallel_execution_min_transactions", 8)
-        ),
-        # The xian-stack runtime publishes the app metrics port from Docker,
-        # so the in-container exporter must listen on all interfaces.
-        metrics_host="0.0.0.0"
-        if runtime_backend == "xian-stack"
-        else "127.0.0.1",
+        options=node_setup.NodeConfigOptions(
+            moniker=profile["moniker"],
+            seed_nodes=tuple(seed_nodes),
+            service_node=bool(profile.get("service_node")),
+            enable_pruning=bool(profile.get("pruning_enabled")),
+            blocks_to_keep=int(profile.get("blocks_to_keep", 100000)),
+            block_policy_mode=str(
+                profile.get(
+                    "block_policy_mode",
+                    network.get("block_policy_mode", "on_demand"),
+                )
+            ),
+            block_policy_interval=str(
+                profile.get(
+                    "block_policy_interval",
+                    network.get("block_policy_interval", "0s"),
+                )
+            ),
+            execution=node_setup.ExecutionOptions(
+                tracer_mode=str(
+                    profile.get(
+                        "tracer_mode",
+                        network.get("tracer_mode", "python_line_v1"),
+                    )
+                )
+            ),
+            transaction_trace_logging=bool(
+                profile.get("transaction_trace_logging", False)
+            ),
+            app_logging=node_setup.AppLoggingOptions(
+                level=str(profile.get("app_log_level", "INFO")),
+                json_logging=bool(profile.get("app_log_json", False)),
+                rotation_hours=int(profile.get("app_log_rotation_hours", 1)),
+                retention_days=int(profile.get("app_log_retention_days", 7)),
+            ),
+            simulation=node_setup.SimulationOptions(
+                enabled=bool(profile.get("simulation_enabled", True)),
+                max_concurrency=int(
+                    profile.get("simulation_max_concurrency", 2)
+                ),
+                timeout_ms=int(profile.get("simulation_timeout_ms", 3000)),
+                max_chi=int(profile.get("simulation_max_chi", 1_000_000)),
+            ),
+            parallel_execution=node_setup.ParallelExecutionOptions(
+                enabled=bool(
+                    profile.get("parallel_execution_enabled", False)
+                ),
+                workers=int(profile.get("parallel_execution_workers", 0)),
+                min_transactions=int(
+                    profile.get("parallel_execution_min_transactions", 8)
+                ),
+            ),
+            # The xian-stack runtime publishes the app metrics port from Docker,
+            # so the in-container exporter must listen on all interfaces.
+            metrics=node_setup.MetricsOptions(
+                host=(
+                    "0.0.0.0"
+                    if runtime_backend == "xian-stack"
+                    else "127.0.0.1"
+                )
+            ),
+        )
     )
     config = configs["cometbft"]
     xian_config = configs["xian"]

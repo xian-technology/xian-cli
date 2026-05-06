@@ -4720,10 +4720,10 @@ class RuntimeHelperTests(unittest.TestCase):
             ):
                 run_backend_command(stack_dir, "start")
 
-    def test_run_backend_command_passes_dex_automation_flags(self) -> None:
+    def test_run_backend_command_sends_structured_request(self) -> None:
         stack_dir = Path("/tmp/xian-stack")
         completed = subprocess.CompletedProcess(
-            ["python3", "backend.py", "start"],
+            ["python3", "backend.py", "--request-json", "-"],
             0,
             stdout='{"ok": true}',
             stderr="",
@@ -4744,14 +4744,16 @@ class RuntimeHelperTests(unittest.TestCase):
 
         self.assertTrue(result["ok"])
         command = run_mock.call_args.args[0]
-        self.assertIn("--dex-automation", command)
-        self.assertIn("--dex-automation-host", command)
-        self.assertIn("0.0.0.0", command)
-        self.assertIn("--dex-automation-port", command)
-        self.assertIn("39123", command)
-        self.assertIn("--dex-automation-config", command)
-        self.assertIn("/tmp/dex.yaml", command)
-        self.assertNotIn("--no-dex-automation", command)
+        self.assertEqual(command[-2:], ["--request-json", "-"])
+        request = json.loads(run_mock.call_args.kwargs["input"])
+        self.assertEqual(request["schema_version"], 1)
+        self.assertEqual(request["command"], "start")
+        self.assertTrue(request["options"]["dex_automation"])
+        self.assertEqual(request["options"]["dex_automation_host"], "0.0.0.0")
+        self.assertEqual(request["options"]["dex_automation_port"], 39123)
+        self.assertEqual(
+            request["options"]["dex_automation_config"], "/tmp/dex.yaml"
+        )
 
 
 class ConfigRepoTests(unittest.TestCase):

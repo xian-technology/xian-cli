@@ -9,6 +9,8 @@ from pathlib import Path
 from urllib.error import URLError
 from urllib.request import urlopen
 
+from xian_cli.setup_contract import BackendRequest, drop_none
+
 DEFAULT_RPC_TIMEOUT_SECONDS = 90.0
 
 
@@ -109,63 +111,43 @@ def run_backend_command(
     rpc_url: str | None = None,
     check_disk: bool | None = None,
 ) -> dict:
-    cmd = [sys.executable, str(_backend_script(stack_dir)), command]
-    if node_image_mode is not None:
-        cmd.extend(["--node-image-mode", node_image_mode])
-    if node_integrated_image is not None:
-        cmd.extend(["--node-integrated-image", node_integrated_image])
-    if node_split_image is not None:
-        cmd.extend(["--node-split-image", node_split_image])
-    cmd.append("--service-node" if service_node else "--no-service-node")
-    cmd.append("--dashboard" if dashboard_enabled else "--no-dashboard")
-    cmd.append("--monitoring" if monitoring_enabled else "--no-monitoring")
-    cmd.append("--intentkit" if intentkit_enabled else "--no-intentkit")
-    cmd.append(
-        "--dex-automation" if dex_automation_enabled else "--no-dex-automation"
+    request = BackendRequest(
+        command=command,
+        options=drop_none(
+            {
+                "node_image_mode": node_image_mode,
+                "node_integrated_image": node_integrated_image,
+                "node_split_image": node_split_image,
+                "service_node": service_node,
+                "dashboard": dashboard_enabled,
+                "monitoring": monitoring_enabled,
+                "dashboard_host": dashboard_host,
+                "dashboard_port": dashboard_port,
+                "intentkit": intentkit_enabled,
+                "intentkit_network_id": intentkit_network_id,
+                "intentkit_host": intentkit_host,
+                "intentkit_port": intentkit_port,
+                "intentkit_api_port": intentkit_api_port,
+                "dex_automation": dex_automation_enabled,
+                "dex_automation_host": dex_automation_host,
+                "dex_automation_port": dex_automation_port,
+                "dex_automation_config": dex_automation_config,
+                "shielded_relayer": shielded_relayer_enabled,
+                "shielded_relayer_host": shielded_relayer_host,
+                "shielded_relayer_port": shielded_relayer_port,
+                "wait_for_health": wait_for_health,
+                "rpc_timeout_seconds": rpc_timeout_seconds,
+                "rpc_url": rpc_url,
+                "check_disk": check_disk,
+            }
+        ),
     )
-    cmd.append(
-        "--shielded-relayer"
-        if shielded_relayer_enabled
-        else "--no-shielded-relayer"
-    )
-
-    if dashboard_enabled:
-        if dashboard_host is not None:
-            cmd.extend(["--dashboard-host", dashboard_host])
-        if dashboard_port is not None:
-            cmd.extend(["--dashboard-port", str(dashboard_port)])
-    if intentkit_enabled:
-        if intentkit_network_id is not None:
-            cmd.extend(["--intentkit-network-id", intentkit_network_id])
-        if intentkit_host is not None:
-            cmd.extend(["--intentkit-host", intentkit_host])
-        if intentkit_port is not None:
-            cmd.extend(["--intentkit-port", str(intentkit_port)])
-        if intentkit_api_port is not None:
-            cmd.extend(["--intentkit-api-port", str(intentkit_api_port)])
-    if dex_automation_enabled:
-        if dex_automation_host is not None:
-            cmd.extend(["--dex-automation-host", dex_automation_host])
-        if dex_automation_port is not None:
-            cmd.extend(["--dex-automation-port", str(dex_automation_port)])
-        if dex_automation_config is not None:
-            cmd.extend(["--dex-automation-config", dex_automation_config])
-    if shielded_relayer_enabled:
-        if shielded_relayer_host is not None:
-            cmd.extend(["--shielded-relayer-host", shielded_relayer_host])
-        if shielded_relayer_port is not None:
-            cmd.extend(["--shielded-relayer-port", str(shielded_relayer_port)])
-
-    if wait_for_health is not None:
-        cmd.append(
-            "--wait-for-health" if wait_for_health else "--no-wait-for-health"
-        )
-    if rpc_timeout_seconds is not None:
-        cmd.extend(["--rpc-timeout-seconds", str(rpc_timeout_seconds)])
-    if rpc_url is not None:
-        cmd.extend(["--rpc-url", rpc_url])
-    if check_disk is not None:
-        cmd.append("--check-disk" if check_disk else "--no-check-disk")
+    cmd = [
+        sys.executable,
+        str(_backend_script(stack_dir)),
+        "--request-json",
+        "-",
+    ]
 
     try:
         result = subprocess.run(
@@ -174,6 +156,7 @@ def run_backend_command(
             check=True,
             capture_output=True,
             text=True,
+            input=json.dumps(request.to_dict()),
             env=(
                 {
                     **os.environ,

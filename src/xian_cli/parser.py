@@ -14,6 +14,186 @@ from xian_cli.models import (
 from xian_cli.runtime import DEFAULT_RPC_TIMEOUT_SECONDS
 
 
+def add_node_profile_runtime_args(
+    parser: argparse.ArgumentParser,
+    *,
+    subject: str,
+) -> None:
+    parser.add_argument(
+        "--service-node",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help=f"mark {subject} as a service node",
+    )
+    parser.add_argument(
+        "--enable-pruning",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help=f"enable pruning for {subject}",
+    )
+    parser.add_argument(
+        "--blocks-to-keep",
+        type=int,
+        help="number of blocks to retain when pruning is enabled",
+    )
+    parser.add_argument(
+        "--block-policy-mode",
+        choices=sorted(SUPPORTED_BLOCK_POLICY_MODES),
+        help=(
+            "block production policy: on_demand waits for transactions, "
+            "idle_interval emits empty blocks after an idle interval, "
+            "periodic enables scheduled empty blocks"
+        ),
+    )
+    parser.add_argument(
+        "--block-policy-interval",
+        type=str,
+        help="idle or periodic block interval, for example 10s",
+    )
+    parser.add_argument(
+        "--tracer-mode",
+        choices=sorted(SUPPORTED_TRACER_MODES),
+        help="execution tracer backend for contract metering",
+    )
+    parser.add_argument(
+        "--transaction-trace-logging",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help=f"emit per-transaction debug summaries in {subject}",
+    )
+    parser.add_argument(
+        "--app-log-level",
+        choices=sorted(SUPPORTED_APP_LOG_LEVELS),
+        type=str,
+        help=f"application log level for {subject}",
+    )
+    parser.add_argument(
+        "--app-log-json",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help=f"emit structured JSON application logs in {subject}",
+    )
+    parser.add_argument(
+        "--app-log-rotation-hours",
+        type=int,
+        help=f"rotate application log files after this many hours in {subject}",
+    )
+    parser.add_argument(
+        "--app-log-retention-days",
+        type=int,
+        help=f"retain rotated application logs for this many days in {subject}",
+    )
+    parser.add_argument(
+        "--simulation-enabled",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help=f"enable readonly transaction simulation in {subject}",
+    )
+    parser.add_argument(
+        "--simulation-max-concurrency",
+        type=int,
+        help=f"maximum concurrent simulation requests accepted by {subject}",
+    )
+    parser.add_argument(
+        "--simulation-timeout-ms",
+        type=int,
+        help=f"simulation timeout in milliseconds for {subject}",
+    )
+    parser.add_argument(
+        "--simulation-max-chi",
+        type=int,
+        help=f"chi budget cap used for readonly simulation in {subject}",
+    )
+    parser.add_argument(
+        "--parallel-execution-enabled",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help=f"enable speculative parallel block execution in {subject}",
+    )
+    parser.add_argument(
+        "--parallel-execution-workers",
+        type=int,
+        help=f"speculative execution worker count for {subject}",
+    )
+    parser.add_argument(
+        "--parallel-execution-min-transactions",
+        type=int,
+        help=(
+            "minimum transactions in a block before parallel execution is used "
+            f"in {subject}"
+        ),
+    )
+    parser.add_argument(
+        "--enable-dashboard",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help=f"start the optional dashboard alongside {subject}",
+    )
+    parser.add_argument(
+        "--enable-monitoring",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help=f"start the optional Prometheus and Grafana stack for {subject}",
+    )
+    parser.add_argument(
+        "--dashboard-host",
+        type=str,
+        help="host interface to bind for the dashboard publish port",
+    )
+    parser.add_argument(
+        "--dashboard-port",
+        type=int,
+        help="host port to publish for the dashboard",
+    )
+    parser.add_argument(
+        "--enable-intentkit",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help=f"start the optional xian-intentkit stack for {subject}",
+    )
+    parser.add_argument(
+        "--intentkit-network-id",
+        choices=sorted(SUPPORTED_INTENTKIT_NETWORK_IDS),
+        help="xian-intentkit Xian network slot for this profile",
+    )
+    parser.add_argument(
+        "--intentkit-host",
+        type=str,
+        help="host interface to bind for the xian-intentkit frontend port",
+    )
+    parser.add_argument(
+        "--intentkit-port",
+        type=int,
+        help="host port to publish for the xian-intentkit frontend",
+    )
+    parser.add_argument(
+        "--intentkit-api-port",
+        type=int,
+        help="host port to publish for the xian-intentkit API",
+    )
+    parser.add_argument(
+        "--enable-dex-automation",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="start the optional deterministic DEX automation sidecar",
+    )
+    parser.add_argument(
+        "--dex-automation-host",
+        type=str,
+        help="host interface to bind for the DEX automation web UI",
+    )
+    parser.add_argument(
+        "--dex-automation-port",
+        type=int,
+        help="host port to publish for the DEX automation web UI",
+    )
+    parser.add_argument(
+        "--dex-automation-config",
+        type=str,
+        help="stack-managed DEX automation config path override",
+    )
+
+
 def build_parser() -> argparse.ArgumentParser:
     # Import handlers lazily so parser wiring can live outside cli.py
     # without creating an import cycle at module import time.
@@ -520,232 +700,9 @@ def build_parser() -> argparse.ArgumentParser:
         type=Path,
         help="bootstrap node home directory, for example ~/.cometbft",
     )
-    create_parser.add_argument(
-        "--service-node",
-        action=argparse.BooleanOptionalAction,
-        default=None,
-        help="mark the bootstrap node profile as a service node",
-    )
-    create_parser.add_argument(
-        "--enable-pruning",
-        action=argparse.BooleanOptionalAction,
-        default=None,
-        help="enable pruning for the bootstrap node",
-    )
-    create_parser.add_argument(
-        "--blocks-to-keep",
-        type=int,
-        help="number of blocks to retain when pruning is enabled",
-    )
-    create_parser.add_argument(
-        "--block-policy-mode",
-        choices=sorted(SUPPORTED_BLOCK_POLICY_MODES),
-        help=(
-            "network block production policy: on_demand waits for "
-            "transactions, idle_interval emits empty blocks after an idle "
-            "interval, periodic enables scheduled empty blocks; overrides "
-            "template defaults"
-        ),
-    )
-    create_parser.add_argument(
-        "--block-policy-interval",
-        type=str,
-        help=(
-            "idle or periodic block interval, for example 10s; ignored for "
-            "on_demand; overrides template defaults"
-        ),
-    )
-    create_parser.add_argument(
-        "--tracer-mode",
-        choices=sorted(SUPPORTED_TRACER_MODES),
-        help=(
-            "execution tracer backend for contract metering; overrides "
-            "template defaults"
-        ),
-    )
-    create_parser.add_argument(
-        "--transaction-trace-logging",
-        action=argparse.BooleanOptionalAction,
-        default=None,
-        help=(
-            "emit per-transaction debug summaries in generated bootstrap "
-            "profiles; overrides template defaults"
-        ),
-    )
-    create_parser.add_argument(
-        "--app-log-level",
-        choices=sorted(SUPPORTED_APP_LOG_LEVELS),
-        type=str,
-        help=(
-            "application log level for generated bootstrap profiles; "
-            "overrides template defaults"
-        ),
-    )
-    create_parser.add_argument(
-        "--app-log-json",
-        action=argparse.BooleanOptionalAction,
-        default=None,
-        help=(
-            "emit structured JSON application logs in generated bootstrap "
-            "profiles; overrides template defaults"
-        ),
-    )
-    create_parser.add_argument(
-        "--app-log-rotation-hours",
-        type=int,
-        help=(
-            "rotate application log files after this many hours in generated "
-            "bootstrap profiles; overrides template defaults"
-        ),
-    )
-    create_parser.add_argument(
-        "--app-log-retention-days",
-        type=int,
-        help=(
-            "retain rotated application logs for this many days in generated "
-            "bootstrap profiles; overrides template defaults"
-        ),
-    )
-    create_parser.add_argument(
-        "--simulation-enabled",
-        action=argparse.BooleanOptionalAction,
-        default=None,
-        help=(
-            "enable readonly transaction simulation in generated node "
-            "profiles; overrides template defaults"
-        ),
-    )
-    create_parser.add_argument(
-        "--simulation-max-concurrency",
-        type=int,
-        help=(
-            "maximum concurrent simulation requests accepted by generated "
-            "node profiles; overrides template defaults"
-        ),
-    )
-    create_parser.add_argument(
-        "--simulation-timeout-ms",
-        type=int,
-        help=(
-            "simulation timeout in milliseconds for generated node profiles; "
-            "overrides template defaults"
-        ),
-    )
-    create_parser.add_argument(
-        "--simulation-max-chi",
-        type=int,
-        help=(
-            "chi budget cap used for readonly simulation in generated node "
-            "profiles; overrides template defaults"
-        ),
-    )
-    create_parser.add_argument(
-        "--parallel-execution-enabled",
-        action=argparse.BooleanOptionalAction,
-        default=None,
-        help=(
-            "enable speculative parallel block execution in generated node "
-            "profiles; overrides template defaults"
-        ),
-    )
-    create_parser.add_argument(
-        "--parallel-execution-workers",
-        type=int,
-        help=(
-            "speculative execution worker count for generated node profiles; "
-            "overrides template defaults"
-        ),
-    )
-    create_parser.add_argument(
-        "--parallel-execution-min-transactions",
-        type=int,
-        help=(
-            "minimum transactions in a block before parallel execution is "
-            "used in generated node profiles; overrides template defaults"
-        ),
-    )
-    create_parser.add_argument(
-        "--enable-dashboard",
-        action=argparse.BooleanOptionalAction,
-        default=None,
-        help=(
-            "start the optional dashboard alongside the bootstrap node runtime"
-        ),
-    )
-    create_parser.add_argument(
-        "--enable-monitoring",
-        action=argparse.BooleanOptionalAction,
-        default=None,
-        help=(
-            "start the optional Prometheus and Grafana stack for the "
-            "bootstrap node"
-        ),
-    )
-    create_parser.add_argument(
-        "--dashboard-host",
-        type=str,
-        help="host interface to bind for the dashboard publish port",
-    )
-    create_parser.add_argument(
-        "--dashboard-port",
-        type=int,
-        help="host port to publish for the dashboard",
-    )
-    create_parser.add_argument(
-        "--enable-intentkit",
-        action=argparse.BooleanOptionalAction,
-        default=None,
-        help=(
-            "start the optional xian-intentkit stack alongside the bootstrap "
-            "node runtime"
-        ),
-    )
-    create_parser.add_argument(
-        "--intentkit-network-id",
-        choices=sorted(SUPPORTED_INTENTKIT_NETWORK_IDS),
-        help=(
-            "xian-intentkit Xian network slot to target for the bootstrap "
-            "node; defaults to xian-localnet for newly created networks"
-        ),
-    )
-    create_parser.add_argument(
-        "--intentkit-host",
-        type=str,
-        help="host interface to bind for the xian-intentkit frontend port",
-    )
-    create_parser.add_argument(
-        "--intentkit-port",
-        type=int,
-        help="host port to publish for the xian-intentkit frontend",
-    )
-    create_parser.add_argument(
-        "--intentkit-api-port",
-        type=int,
-        help="host port to publish for the xian-intentkit API",
-    )
-    create_parser.add_argument(
-        "--enable-dex-automation",
-        action=argparse.BooleanOptionalAction,
-        default=None,
-        help=(
-            "start the optional deterministic DEX automation sidecar "
-            "alongside the bootstrap node runtime"
-        ),
-    )
-    create_parser.add_argument(
-        "--dex-automation-host",
-        type=str,
-        help="host interface to bind for the DEX automation web UI",
-    )
-    create_parser.add_argument(
-        "--dex-automation-port",
-        type=int,
-        help="host port to publish for the DEX automation web UI",
-    )
-    create_parser.add_argument(
-        "--dex-automation-config",
-        type=str,
-        help="stack-managed DEX automation config path override",
+    add_node_profile_runtime_args(
+        create_parser,
+        subject="the bootstrap node profile",
     )
     create_parser.add_argument(
         "--output",
@@ -901,223 +858,9 @@ def build_parser() -> argparse.ArgumentParser:
         type=Path,
         help="node home directory, for example ~/.cometbft",
     )
-    join_parser.add_argument(
-        "--service-node",
-        action=argparse.BooleanOptionalAction,
-        default=None,
-        help="mark the node profile as a service node",
-    )
-    join_parser.add_argument(
-        "--enable-pruning",
-        action=argparse.BooleanOptionalAction,
-        default=None,
-        help="enable pruning for this node",
-    )
-    join_parser.add_argument(
-        "--blocks-to-keep",
-        type=int,
-        help="number of blocks to retain when pruning is enabled",
-    )
-    join_parser.add_argument(
-        "--block-policy-mode",
-        choices=sorted(SUPPORTED_BLOCK_POLICY_MODES),
-        help=(
-            "optional node-local block policy override; defaults to the "
-            "network manifest value"
-        ),
-    )
-    join_parser.add_argument(
-        "--block-policy-interval",
-        type=str,
-        help=(
-            "optional node-local block interval override, for example 10s; "
-            "defaults to the network manifest value"
-        ),
-    )
-    join_parser.add_argument(
-        "--tracer-mode",
-        choices=sorted(SUPPORTED_TRACER_MODES),
-        help=(
-            "optional node-local tracer override; defaults to the network "
-            "manifest value"
-        ),
-    )
-    join_parser.add_argument(
-        "--transaction-trace-logging",
-        action=argparse.BooleanOptionalAction,
-        default=None,
-        help=(
-            "optional node-local per-transaction debug logging override; "
-            "defaults to the template value"
-        ),
-    )
-    join_parser.add_argument(
-        "--app-log-level",
-        choices=sorted(SUPPORTED_APP_LOG_LEVELS),
-        type=str,
-        help=(
-            "optional node-local application log level override; defaults "
-            "to the template value"
-        ),
-    )
-    join_parser.add_argument(
-        "--app-log-json",
-        action=argparse.BooleanOptionalAction,
-        default=None,
-        help=(
-            "optional node-local structured JSON logging override; defaults "
-            "to the template value"
-        ),
-    )
-    join_parser.add_argument(
-        "--app-log-rotation-hours",
-        type=int,
-        help=(
-            "optional node-local log rotation interval override in hours; "
-            "defaults to the template value"
-        ),
-    )
-    join_parser.add_argument(
-        "--app-log-retention-days",
-        type=int,
-        help=(
-            "optional node-local log retention override in days; defaults "
-            "to the template value"
-        ),
-    )
-    join_parser.add_argument(
-        "--simulation-enabled",
-        action=argparse.BooleanOptionalAction,
-        default=None,
-        help=(
-            "optional node-local readonly simulation override; defaults to "
-            "the template value"
-        ),
-    )
-    join_parser.add_argument(
-        "--simulation-max-concurrency",
-        type=int,
-        help=(
-            "optional node-local maximum concurrent simulation requests; "
-            "defaults to the template value"
-        ),
-    )
-    join_parser.add_argument(
-        "--simulation-timeout-ms",
-        type=int,
-        help=(
-            "optional node-local simulation timeout in milliseconds; "
-            "defaults to the template value"
-        ),
-    )
-    join_parser.add_argument(
-        "--simulation-max-chi",
-        type=int,
-        help=(
-            "optional node-local chi budget cap for readonly simulation; "
-            "defaults to the template value"
-        ),
-    )
-    join_parser.add_argument(
-        "--parallel-execution-enabled",
-        action=argparse.BooleanOptionalAction,
-        default=None,
-        help=(
-            "optional node-local speculative parallel execution override; "
-            "defaults to the template value"
-        ),
-    )
-    join_parser.add_argument(
-        "--parallel-execution-workers",
-        type=int,
-        help=(
-            "optional node-local speculative execution worker override; "
-            "defaults to the template value"
-        ),
-    )
-    join_parser.add_argument(
-        "--parallel-execution-min-transactions",
-        type=int,
-        help=(
-            "optional node-local minimum block size before speculative "
-            "parallel execution is used; defaults to the template value"
-        ),
-    )
-    join_parser.add_argument(
-        "--enable-dashboard",
-        action=argparse.BooleanOptionalAction,
-        default=None,
-        help="start the optional dashboard alongside this node runtime",
-    )
-    join_parser.add_argument(
-        "--enable-monitoring",
-        action=argparse.BooleanOptionalAction,
-        default=None,
-        help=(
-            "start the optional Prometheus and Grafana stack for this node "
-            "runtime"
-        ),
-    )
-    join_parser.add_argument(
-        "--dashboard-host",
-        type=str,
-        help="host interface to bind for the dashboard publish port",
-    )
-    join_parser.add_argument(
-        "--dashboard-port",
-        type=int,
-        help="host port to publish for the dashboard",
-    )
-    join_parser.add_argument(
-        "--enable-intentkit",
-        action=argparse.BooleanOptionalAction,
-        default=None,
-        help="start the optional xian-intentkit stack for this node runtime",
-    )
-    join_parser.add_argument(
-        "--intentkit-network-id",
-        choices=sorted(SUPPORTED_INTENTKIT_NETWORK_IDS),
-        help=(
-            "xian-intentkit Xian network slot for this profile; defaults to "
-            "a canonical mapping for mainnet/testnet/devnet and xian-localnet "
-            "for local or private networks"
-        ),
-    )
-    join_parser.add_argument(
-        "--intentkit-host",
-        type=str,
-        help="host interface to bind for the xian-intentkit frontend port",
-    )
-    join_parser.add_argument(
-        "--intentkit-port",
-        type=int,
-        help="host port to publish for the xian-intentkit frontend",
-    )
-    join_parser.add_argument(
-        "--intentkit-api-port",
-        type=int,
-        help="host port to publish for the xian-intentkit API",
-    )
-    join_parser.add_argument(
-        "--enable-dex-automation",
-        action=argparse.BooleanOptionalAction,
-        default=None,
-        help="start the optional deterministic DEX automation sidecar",
-    )
-    join_parser.add_argument(
-        "--dex-automation-host",
-        type=str,
-        help="host interface to bind for the DEX automation web UI",
-    )
-    join_parser.add_argument(
-        "--dex-automation-port",
-        type=int,
-        help="host port to publish for the DEX automation web UI",
-    )
-    join_parser.add_argument(
-        "--dex-automation-config",
-        type=str,
-        help="stack-managed DEX automation config path override",
+    add_node_profile_runtime_args(
+        join_parser,
+        subject="this node profile",
     )
     join_parser.add_argument(
         "--output",
