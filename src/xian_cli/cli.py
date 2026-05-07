@@ -2077,9 +2077,7 @@ def _initialize_node_from_args(args: argparse.Namespace) -> dict:
                 max_chi=int(profile.get("simulation_max_chi", 1_000_000)),
             ),
             parallel_execution=node_setup.ParallelExecutionOptions(
-                enabled=bool(
-                    profile.get("parallel_execution_enabled", False)
-                ),
+                enabled=bool(profile.get("parallel_execution_enabled", False)),
                 workers=int(profile.get("parallel_execution_workers", 0)),
                 min_transactions=int(
                     profile.get("parallel_execution_min_transactions", 8)

@@ -86,7 +86,9 @@ def main(argv: list[str] | None = None) -> int:
             )
 
         console_help = _run(str(console_script), "--help").stdout.lower()
-        module_help = _run(str(python), "-m", "xian_cli", "--help").stdout.lower()
+        module_help = _run(
+            str(python), "-m", "xian_cli", "--help"
+        ).stdout.lower()
 
         _assert_help_contains(console_help, str(console_script))
         _assert_help_contains(module_help, "python -m xian_cli")
