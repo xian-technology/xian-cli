@@ -5,13 +5,83 @@ import os
 import subprocess
 import sys
 import time
+from collections.abc import Mapping
 from pathlib import Path
+from typing import Any
 from urllib.error import URLError
 from urllib.request import urlopen
 
 from xian_cli.setup_contract import BackendRequest, drop_none
 
 DEFAULT_RPC_TIMEOUT_SECONDS = 90.0
+
+BACKEND_OPTION_KEYS = (
+    ("node_image_mode", "node_image_mode"),
+    ("node_integrated_image", "node_integrated_image"),
+    ("node_split_image", "node_split_image"),
+    ("service_node", "service_node"),
+    ("dashboard_enabled", "dashboard"),
+    ("monitoring_enabled", "monitoring"),
+    ("dashboard_host", "dashboard_host"),
+    ("dashboard_port", "dashboard_port"),
+    ("intentkit_enabled", "intentkit"),
+    ("intentkit_network_id", "intentkit_network_id"),
+    ("intentkit_host", "intentkit_host"),
+    ("intentkit_port", "intentkit_port"),
+    ("intentkit_api_port", "intentkit_api_port"),
+    ("dex_automation_enabled", "dex_automation"),
+    ("dex_automation_host", "dex_automation_host"),
+    ("dex_automation_port", "dex_automation_port"),
+    ("dex_automation_config", "dex_automation_config"),
+    ("shielded_relayer_enabled", "shielded_relayer"),
+    ("shielded_relayer_host", "shielded_relayer_host"),
+    ("shielded_relayer_port", "shielded_relayer_port"),
+    ("wait_for_health", "wait_for_health"),
+    ("rpc_timeout_seconds", "rpc_timeout_seconds"),
+    ("rpc_url", "rpc_url"),
+    ("check_disk", "check_disk"),
+)
+
+RUNTIME_COMMAND_KWARG_NAMES = (
+    "cometbft_home",
+    "node_image_mode",
+    "node_integrated_image",
+    "node_split_image",
+    "service_node",
+    "dashboard_enabled",
+    "monitoring_enabled",
+    "dashboard_host",
+    "dashboard_port",
+    "intentkit_enabled",
+    "intentkit_network_id",
+    "intentkit_host",
+    "intentkit_port",
+    "intentkit_api_port",
+    "dex_automation_enabled",
+    "dex_automation_host",
+    "dex_automation_port",
+    "dex_automation_config",
+    "shielded_relayer_enabled",
+    "shielded_relayer_host",
+    "shielded_relayer_port",
+)
+
+
+def _backend_options(values: Mapping[str, Any]) -> dict[str, Any]:
+    return drop_none(
+        {
+            option_key: values.get(argument_name)
+            for argument_name, option_key in BACKEND_OPTION_KEYS
+        }
+    )
+
+
+def _runtime_command_kwargs(values: Mapping[str, Any]) -> dict[str, Any]:
+    return {
+        name: values[name]
+        for name in RUNTIME_COMMAND_KWARG_NAMES
+        if name in values
+    }
 
 
 def resolve_stack_dir(base_dir: Path, explicit: Path | None = None) -> Path:
@@ -113,34 +183,7 @@ def run_backend_command(
 ) -> dict:
     request = BackendRequest(
         command=command,
-        options=drop_none(
-            {
-                "node_image_mode": node_image_mode,
-                "node_integrated_image": node_integrated_image,
-                "node_split_image": node_split_image,
-                "service_node": service_node,
-                "dashboard": dashboard_enabled,
-                "monitoring": monitoring_enabled,
-                "dashboard_host": dashboard_host,
-                "dashboard_port": dashboard_port,
-                "intentkit": intentkit_enabled,
-                "intentkit_network_id": intentkit_network_id,
-                "intentkit_host": intentkit_host,
-                "intentkit_port": intentkit_port,
-                "intentkit_api_port": intentkit_api_port,
-                "dex_automation": dex_automation_enabled,
-                "dex_automation_host": dex_automation_host,
-                "dex_automation_port": dex_automation_port,
-                "dex_automation_config": dex_automation_config,
-                "shielded_relayer": shielded_relayer_enabled,
-                "shielded_relayer_host": shielded_relayer_host,
-                "shielded_relayer_port": shielded_relayer_port,
-                "wait_for_health": wait_for_health,
-                "rpc_timeout_seconds": rpc_timeout_seconds,
-                "rpc_url": rpc_url,
-                "check_disk": check_disk,
-            }
-        ),
+        options=_backend_options(locals()),
     )
     cmd = [
         sys.executable,
@@ -208,30 +251,11 @@ def start_xian_stack_node(
     wait_for_rpc: bool = True,
     rpc_timeout_seconds: float = DEFAULT_RPC_TIMEOUT_SECONDS,
 ) -> dict:
+    runtime_options = _runtime_command_kwargs(locals())
     return run_backend_command(
         stack_dir,
         "start",
-        cometbft_home=cometbft_home,
-        node_image_mode=node_image_mode,
-        node_integrated_image=node_integrated_image,
-        node_split_image=node_split_image,
-        service_node=service_node,
-        dashboard_enabled=dashboard_enabled,
-        monitoring_enabled=monitoring_enabled,
-        dashboard_host=dashboard_host,
-        dashboard_port=dashboard_port,
-        intentkit_enabled=intentkit_enabled,
-        intentkit_network_id=intentkit_network_id,
-        intentkit_host=intentkit_host,
-        intentkit_port=intentkit_port,
-        intentkit_api_port=intentkit_api_port,
-        dex_automation_enabled=dex_automation_enabled,
-        dex_automation_host=dex_automation_host,
-        dex_automation_port=dex_automation_port,
-        dex_automation_config=dex_automation_config,
-        shielded_relayer_enabled=shielded_relayer_enabled,
-        shielded_relayer_host=shielded_relayer_host,
-        shielded_relayer_port=shielded_relayer_port,
+        **runtime_options,
         wait_for_health=wait_for_rpc,
         rpc_timeout_seconds=rpc_timeout_seconds,
         rpc_url="http://127.0.0.1:26657/status",
@@ -263,30 +287,11 @@ def stop_xian_stack_node(
     shielded_relayer_host: str = "127.0.0.1",
     shielded_relayer_port: int = 38180,
 ) -> dict:
+    runtime_options = _runtime_command_kwargs(locals())
     return run_backend_command(
         stack_dir,
         "stop",
-        cometbft_home=cometbft_home,
-        node_image_mode=node_image_mode,
-        node_integrated_image=node_integrated_image,
-        node_split_image=node_split_image,
-        service_node=service_node,
-        dashboard_enabled=dashboard_enabled,
-        monitoring_enabled=monitoring_enabled,
-        dashboard_host=dashboard_host,
-        dashboard_port=dashboard_port,
-        intentkit_enabled=intentkit_enabled,
-        intentkit_network_id=intentkit_network_id,
-        intentkit_host=intentkit_host,
-        intentkit_port=intentkit_port,
-        intentkit_api_port=intentkit_api_port,
-        dex_automation_enabled=dex_automation_enabled,
-        dex_automation_host=dex_automation_host,
-        dex_automation_port=dex_automation_port,
-        dex_automation_config=dex_automation_config,
-        shielded_relayer_enabled=shielded_relayer_enabled,
-        shielded_relayer_host=shielded_relayer_host,
-        shielded_relayer_port=shielded_relayer_port,
+        **runtime_options,
     )
 
 
@@ -315,30 +320,11 @@ def get_xian_stack_node_status(
     shielded_relayer_host: str = "127.0.0.1",
     shielded_relayer_port: int = 38180,
 ) -> dict:
+    runtime_options = _runtime_command_kwargs(locals())
     return run_backend_command(
         stack_dir,
         "status",
-        cometbft_home=cometbft_home,
-        node_image_mode=node_image_mode,
-        node_integrated_image=node_integrated_image,
-        node_split_image=node_split_image,
-        service_node=service_node,
-        dashboard_enabled=dashboard_enabled,
-        monitoring_enabled=monitoring_enabled,
-        dashboard_host=dashboard_host,
-        dashboard_port=dashboard_port,
-        intentkit_enabled=intentkit_enabled,
-        intentkit_network_id=intentkit_network_id,
-        intentkit_host=intentkit_host,
-        intentkit_port=intentkit_port,
-        intentkit_api_port=intentkit_api_port,
-        dex_automation_enabled=dex_automation_enabled,
-        dex_automation_host=dex_automation_host,
-        dex_automation_port=dex_automation_port,
-        dex_automation_config=dex_automation_config,
-        shielded_relayer_enabled=shielded_relayer_enabled,
-        shielded_relayer_host=shielded_relayer_host,
-        shielded_relayer_port=shielded_relayer_port,
+        **runtime_options,
     )
 
 
@@ -367,30 +353,11 @@ def get_xian_stack_node_endpoints(
     shielded_relayer_host: str = "127.0.0.1",
     shielded_relayer_port: int = 38180,
 ) -> dict:
+    runtime_options = _runtime_command_kwargs(locals())
     return run_backend_command(
         stack_dir,
         "endpoints",
-        cometbft_home=cometbft_home,
-        node_image_mode=node_image_mode,
-        node_integrated_image=node_integrated_image,
-        node_split_image=node_split_image,
-        service_node=service_node,
-        dashboard_enabled=dashboard_enabled,
-        monitoring_enabled=monitoring_enabled,
-        dashboard_host=dashboard_host,
-        dashboard_port=dashboard_port,
-        intentkit_enabled=intentkit_enabled,
-        intentkit_network_id=intentkit_network_id,
-        intentkit_host=intentkit_host,
-        intentkit_port=intentkit_port,
-        intentkit_api_port=intentkit_api_port,
-        dex_automation_enabled=dex_automation_enabled,
-        dex_automation_host=dex_automation_host,
-        dex_automation_port=dex_automation_port,
-        dex_automation_config=dex_automation_config,
-        shielded_relayer_enabled=shielded_relayer_enabled,
-        shielded_relayer_host=shielded_relayer_host,
-        shielded_relayer_port=shielded_relayer_port,
+        **runtime_options,
     )
 
 
@@ -421,30 +388,11 @@ def get_xian_stack_node_health(
     rpc_url: str = "http://127.0.0.1:26657/status",
     check_disk: bool = True,
 ) -> dict:
+    runtime_options = _runtime_command_kwargs(locals())
     return run_backend_command(
         stack_dir,
         "health",
-        cometbft_home=cometbft_home,
-        node_image_mode=node_image_mode,
-        node_integrated_image=node_integrated_image,
-        node_split_image=node_split_image,
-        service_node=service_node,
-        dashboard_enabled=dashboard_enabled,
-        monitoring_enabled=monitoring_enabled,
-        dashboard_host=dashboard_host,
-        dashboard_port=dashboard_port,
-        intentkit_enabled=intentkit_enabled,
-        intentkit_network_id=intentkit_network_id,
-        intentkit_host=intentkit_host,
-        intentkit_port=intentkit_port,
-        intentkit_api_port=intentkit_api_port,
-        dex_automation_enabled=dex_automation_enabled,
-        dex_automation_host=dex_automation_host,
-        dex_automation_port=dex_automation_port,
-        dex_automation_config=dex_automation_config,
-        shielded_relayer_enabled=shielded_relayer_enabled,
-        shielded_relayer_host=shielded_relayer_host,
-        shielded_relayer_port=shielded_relayer_port,
+        **runtime_options,
         rpc_url=rpc_url,
         check_disk=check_disk,
     )

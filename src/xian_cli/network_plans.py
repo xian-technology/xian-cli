@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import argparse
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from typing import Any
 
 
@@ -50,6 +50,39 @@ def _template_value(
     )
 
 
+def _profile_field_value(
+    args: argparse.Namespace,
+    template: Mapping[str, Any] | None,
+    *,
+    runtime_services: bool,
+    field_name: str,
+    arg_name: str | None,
+    template_key: str,
+    default: Any,
+    runtime_only: bool = False,
+    validator: Callable[[str, Any], Any] | None = None,
+) -> Any:
+    if runtime_only and not runtime_services:
+        value = default
+    elif arg_name is None:
+        value = pick_value(
+            None,
+            None if template is None else template.get(template_key),
+            default,
+        )
+    else:
+        value = _template_value(
+            args,
+            template,
+            arg_name=arg_name,
+            template_key=template_key,
+            default=default,
+        )
+    if validator is None:
+        return value
+    return validator(field_name, value)
+
+
 def build_profile_runtime_fields(
     *,
     args: argparse.Namespace,
@@ -57,337 +90,263 @@ def build_profile_runtime_fields(
     runtime_services: bool,
     intentkit_network_id_default: str,
 ) -> dict[str, Any]:
-    runtime_only = runtime_services
-
-    fields: dict[str, Any] = {
-        "pruning_enabled": (
-            _template_value(
-                args,
-                template,
-                arg_name="enable_pruning",
-                template_key="pruning_enabled",
-                default=False,
-            )
-            if runtime_only
-            else False
+    specs = (
+        (
+            "pruning_enabled",
+            "enable_pruning",
+            "pruning_enabled",
+            False,
+            True,
+            None,
         ),
-        "blocks_to_keep": (
-            _template_value(
-                args,
-                template,
-                arg_name="blocks_to_keep",
-                template_key="blocks_to_keep",
-                default=100000,
-            )
-            if runtime_only
-            else 100000
+        (
+            "blocks_to_keep",
+            "blocks_to_keep",
+            "blocks_to_keep",
+            100000,
+            True,
+            None,
         ),
-        "transaction_trace_logging": _template_value(
-            args,
-            template,
-            arg_name="transaction_trace_logging",
-            template_key="transaction_trace_logging",
-            default=False,
+        (
+            "transaction_trace_logging",
+            "transaction_trace_logging",
+            "transaction_trace_logging",
+            False,
+            False,
+            None,
         ),
-        "app_log_level": _template_value(
-            args,
-            template,
-            arg_name="app_log_level",
-            template_key="app_log_level",
-            default="INFO",
+        (
+            "app_log_level",
+            "app_log_level",
+            "app_log_level",
+            "INFO",
+            False,
+            None,
         ),
-        "app_log_json": _template_value(
-            args,
-            template,
-            arg_name="app_log_json",
-            template_key="app_log_json",
-            default=False,
-        ),
-        "app_log_rotation_hours": validate_positive_int(
+        ("app_log_json", "app_log_json", "app_log_json", False, False, None),
+        (
             "app_log_rotation_hours",
-            _template_value(
-                args,
-                template,
-                arg_name="app_log_rotation_hours",
-                template_key="app_log_rotation_hours",
-                default=1,
-            ),
+            "app_log_rotation_hours",
+            "app_log_rotation_hours",
+            1,
+            False,
+            validate_positive_int,
         ),
-        "app_log_retention_days": validate_positive_int(
+        (
             "app_log_retention_days",
-            _template_value(
-                args,
-                template,
-                arg_name="app_log_retention_days",
-                template_key="app_log_retention_days",
-                default=7,
-            ),
+            "app_log_retention_days",
+            "app_log_retention_days",
+            7,
+            False,
+            validate_positive_int,
         ),
-        "simulation_enabled": _template_value(
-            args,
-            template,
-            arg_name="simulation_enabled",
-            template_key="simulation_enabled",
-            default=True,
+        (
+            "simulation_enabled",
+            "simulation_enabled",
+            "simulation_enabled",
+            True,
+            False,
+            None,
         ),
-        "simulation_max_concurrency": validate_positive_int(
+        (
             "simulation_max_concurrency",
-            _template_value(
-                args,
-                template,
-                arg_name="simulation_max_concurrency",
-                template_key="simulation_max_concurrency",
-                default=2,
-            ),
+            "simulation_max_concurrency",
+            "simulation_max_concurrency",
+            2,
+            False,
+            validate_positive_int,
         ),
-        "simulation_timeout_ms": validate_positive_int(
+        (
             "simulation_timeout_ms",
-            _template_value(
-                args,
-                template,
-                arg_name="simulation_timeout_ms",
-                template_key="simulation_timeout_ms",
-                default=3000,
-            ),
+            "simulation_timeout_ms",
+            "simulation_timeout_ms",
+            3000,
+            False,
+            validate_positive_int,
         ),
-        "simulation_max_chi": validate_positive_int(
+        (
             "simulation_max_chi",
-            _template_value(
-                args,
-                template,
-                arg_name="simulation_max_chi",
-                template_key="simulation_max_chi",
-                default=1_000_000,
-            ),
+            "simulation_max_chi",
+            "simulation_max_chi",
+            1_000_000,
+            False,
+            validate_positive_int,
         ),
-        "parallel_execution_enabled": _template_value(
+        (
+            "parallel_execution_enabled",
+            "parallel_execution_enabled",
+            "parallel_execution_enabled",
+            False,
+            False,
+            None,
+        ),
+        (
+            "parallel_execution_workers",
+            "parallel_execution_workers",
+            "parallel_execution_workers",
+            0,
+            False,
+            validate_non_negative_int,
+        ),
+        (
+            "parallel_execution_min_transactions",
+            "parallel_execution_min_transactions",
+            "parallel_execution_min_transactions",
+            8,
+            False,
+            validate_non_negative_int,
+        ),
+        ("service_node", "service_node", "service_node", False, True, None),
+        ("operator_profile", None, "operator_profile", None, True, None),
+        ("monitoring_profile", None, "monitoring_profile", None, True, None),
+        (
+            "dashboard_enabled",
+            "enable_dashboard",
+            "dashboard_enabled",
+            False,
+            True,
+            None,
+        ),
+        (
+            "monitoring_enabled",
+            "enable_monitoring",
+            "monitoring_enabled",
+            False,
+            True,
+            None,
+        ),
+        (
+            "dashboard_host",
+            "dashboard_host",
+            "dashboard_host",
+            "127.0.0.1",
+            True,
+            None,
+        ),
+        (
+            "dashboard_port",
+            "dashboard_port",
+            "dashboard_port",
+            8080,
+            True,
+            None,
+        ),
+        (
+            "intentkit_enabled",
+            "enable_intentkit",
+            "intentkit_enabled",
+            False,
+            True,
+            None,
+        ),
+        (
+            "intentkit_network_id",
+            "intentkit_network_id",
+            "intentkit_network_id",
+            intentkit_network_id_default,
+            True,
+            None,
+        ),
+        (
+            "intentkit_host",
+            "intentkit_host",
+            "intentkit_host",
+            "127.0.0.1",
+            True,
+            None,
+        ),
+        (
+            "intentkit_port",
+            "intentkit_port",
+            "intentkit_port",
+            38000,
+            True,
+            None,
+        ),
+        (
+            "intentkit_api_port",
+            "intentkit_api_port",
+            "intentkit_api_port",
+            38080,
+            True,
+            None,
+        ),
+        (
+            "dex_automation_enabled",
+            "enable_dex_automation",
+            "dex_automation_enabled",
+            False,
+            True,
+            None,
+        ),
+        (
+            "dex_automation_host",
+            "dex_automation_host",
+            "dex_automation_host",
+            "127.0.0.1",
+            True,
+            None,
+        ),
+        (
+            "dex_automation_port",
+            "dex_automation_port",
+            "dex_automation_port",
+            38280,
+            True,
+            None,
+        ),
+        (
+            "dex_automation_config",
+            "dex_automation_config",
+            "dex_automation_config",
+            None,
+            True,
+            None,
+        ),
+        (
+            "shielded_relayer_enabled",
+            None,
+            "shielded_relayer_enabled",
+            False,
+            True,
+            None,
+        ),
+        (
+            "shielded_relayer_host",
+            None,
+            "shielded_relayer_host",
+            "127.0.0.1",
+            True,
+            None,
+        ),
+        (
+            "shielded_relayer_port",
+            None,
+            "shielded_relayer_port",
+            38180,
+            True,
+            None,
+        ),
+    )
+
+    return {
+        field_name: _profile_field_value(
             args,
             template,
-            arg_name="parallel_execution_enabled",
-            template_key="parallel_execution_enabled",
-            default=False,
-        ),
-        "parallel_execution_workers": validate_non_negative_int(
-            "parallel_execution_workers",
-            _template_value(
-                args,
-                template,
-                arg_name="parallel_execution_workers",
-                template_key="parallel_execution_workers",
-                default=0,
-            ),
-        ),
-        "parallel_execution_min_transactions": validate_non_negative_int(
-            "parallel_execution_min_transactions",
-            _template_value(
-                args,
-                template,
-                arg_name="parallel_execution_min_transactions",
-                template_key="parallel_execution_min_transactions",
-                default=8,
-            ),
-        ),
+            runtime_services=runtime_services,
+            field_name=field_name,
+            arg_name=arg_name,
+            template_key=template_key,
+            default=default,
+            runtime_only=runtime_only,
+            validator=validator,
+        )
+        for (
+            field_name,
+            arg_name,
+            template_key,
+            default,
+            runtime_only,
+            validator,
+        ) in specs
     }
-
-    fields.update(
-        {
-            "service_node": (
-                _template_value(
-                    args,
-                    template,
-                    arg_name="service_node",
-                    template_key="service_node",
-                    default=False,
-                )
-                if runtime_only
-                else False
-            ),
-            "operator_profile": (
-                None if template is None else template.get("operator_profile")
-            )
-            if runtime_only
-            else None,
-            "monitoring_profile": (
-                None if template is None else template.get("monitoring_profile")
-            )
-            if runtime_only
-            else None,
-            "dashboard_enabled": (
-                _template_value(
-                    args,
-                    template,
-                    arg_name="enable_dashboard",
-                    template_key="dashboard_enabled",
-                    default=False,
-                )
-                if runtime_only
-                else False
-            ),
-            "monitoring_enabled": (
-                _template_value(
-                    args,
-                    template,
-                    arg_name="enable_monitoring",
-                    template_key="monitoring_enabled",
-                    default=False,
-                )
-                if runtime_only
-                else False
-            ),
-            "dashboard_host": (
-                _template_value(
-                    args,
-                    template,
-                    arg_name="dashboard_host",
-                    template_key="dashboard_host",
-                    default="127.0.0.1",
-                )
-                if runtime_only
-                else "127.0.0.1"
-            ),
-            "dashboard_port": (
-                _template_value(
-                    args,
-                    template,
-                    arg_name="dashboard_port",
-                    template_key="dashboard_port",
-                    default=8080,
-                )
-                if runtime_only
-                else 8080
-            ),
-            "intentkit_enabled": (
-                _template_value(
-                    args,
-                    template,
-                    arg_name="enable_intentkit",
-                    template_key="intentkit_enabled",
-                    default=False,
-                )
-                if runtime_only
-                else False
-            ),
-            "intentkit_network_id": (
-                _template_value(
-                    args,
-                    template,
-                    arg_name="intentkit_network_id",
-                    template_key="intentkit_network_id",
-                    default=intentkit_network_id_default,
-                )
-                if runtime_only
-                else intentkit_network_id_default
-            ),
-            "intentkit_host": (
-                _template_value(
-                    args,
-                    template,
-                    arg_name="intentkit_host",
-                    template_key="intentkit_host",
-                    default="127.0.0.1",
-                )
-                if runtime_only
-                else "127.0.0.1"
-            ),
-            "intentkit_port": (
-                _template_value(
-                    args,
-                    template,
-                    arg_name="intentkit_port",
-                    template_key="intentkit_port",
-                    default=38000,
-                )
-                if runtime_only
-                else 38000
-            ),
-            "intentkit_api_port": (
-                _template_value(
-                    args,
-                    template,
-                    arg_name="intentkit_api_port",
-                    template_key="intentkit_api_port",
-                    default=38080,
-                )
-                if runtime_only
-                else 38080
-            ),
-            "dex_automation_enabled": (
-                _template_value(
-                    args,
-                    template,
-                    arg_name="enable_dex_automation",
-                    template_key="dex_automation_enabled",
-                    default=False,
-                )
-                if runtime_only
-                else False
-            ),
-            "dex_automation_host": (
-                _template_value(
-                    args,
-                    template,
-                    arg_name="dex_automation_host",
-                    template_key="dex_automation_host",
-                    default="127.0.0.1",
-                )
-                if runtime_only
-                else "127.0.0.1"
-            ),
-            "dex_automation_port": (
-                _template_value(
-                    args,
-                    template,
-                    arg_name="dex_automation_port",
-                    template_key="dex_automation_port",
-                    default=38280,
-                )
-                if runtime_only
-                else 38280
-            ),
-            "dex_automation_config": (
-                _template_value(
-                    args,
-                    template,
-                    arg_name="dex_automation_config",
-                    template_key="dex_automation_config",
-                    default=None,
-                )
-                if runtime_only
-                else None
-            ),
-            "shielded_relayer_enabled": (
-                pick_value(
-                    None,
-                    None
-                    if template is None
-                    else template.get("shielded_relayer_enabled"),
-                    False,
-                )
-                if runtime_only
-                else False
-            ),
-            "shielded_relayer_host": (
-                pick_value(
-                    None,
-                    None
-                    if template is None
-                    else template.get("shielded_relayer_host"),
-                    "127.0.0.1",
-                )
-                if runtime_only
-                else "127.0.0.1"
-            ),
-            "shielded_relayer_port": (
-                pick_value(
-                    None,
-                    None
-                    if template is None
-                    else template.get("shielded_relayer_port"),
-                    38180,
-                )
-                if runtime_only
-                else 38180
-            ),
-        }
-    )
-    return fields
