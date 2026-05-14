@@ -1276,9 +1276,7 @@ class NetworkManifestTests(unittest.TestCase):
                 (bundle_dir / "privacy" / "artifacts.json").exists()
             )
             self.assertEqual(
-                (bundle_dir / "bootstrap-seed.txt").read_text(
-                    encoding="utf-8"
-                ),
+                (bundle_dir / "bootstrap-seed.txt").read_text(encoding="utf-8"),
                 "abc@seed.example:26656\n",
             )
             self.assertIn("--parallel-execution-enabled", join_script)

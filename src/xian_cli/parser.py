@@ -922,9 +922,7 @@ def build_parser() -> argparse.ArgumentParser:
     operator_bundle_parser.add_argument(
         "--output",
         type=Path,
-        help=(
-            "output directory; defaults to ./dist/<network>-operator-bundle"
-        ),
+        help=("output directory; defaults to ./dist/<network>-operator-bundle"),
     )
     operator_bundle_parser.add_argument(
         "--bootstrap-seed",

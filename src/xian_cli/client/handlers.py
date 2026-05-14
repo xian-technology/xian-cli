@@ -235,9 +235,7 @@ def handle_tx_submit_artifacts(args: argparse.Namespace) -> int:
         and artifact_name.strip()
         and artifact_name.strip() != name
     ):
-        raise ValueError(
-            "contract name does not match artifact module_name"
-        )
+        raise ValueError("contract name does not match artifact module_name")
 
     wallet = _build_wallet(args)
     with _make_client(args, wallet=wallet) as client:
