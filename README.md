@@ -76,6 +76,14 @@ uv run xian node health devnet-node
 uv run xian node endpoints devnet-node
 ```
 
+Package a clean operator handoff bundle for a network manifest:
+
+```bash
+uv run xian network package-operator-bundle devnet \
+  --bootstrap-seed '<node_id>@<public-host>:26656' \
+  --archive
+```
+
 Inspect or recover a configured node:
 
 ```bash
@@ -108,6 +116,7 @@ operations to `xian-stack`, and uses `xian-py` for wallet / RPC automation.
 | --- | --- | --- |
 | Create a local network | `xian network template ...`, `xian network create ...` | `xian-configs`, `xian-abci` |
 | Join an existing network | `xian network join ...` | `xian-configs`, `xian-stack` |
+| Package operator handoff | `xian network package-operator-bundle ...` | `xian-cli`, `xian-configs` |
 | Operate a node | `xian node start/status/health/endpoints/stop ...` | `xian-stack` |
 | Diagnose a setup | `xian doctor ...`, `xian snapshot restore ...` | `xian-stack`, `xian-abci` |
 | Install reusable contracts | `xian module list/show/validate/install ...` | `xian-configs` modules |
@@ -153,6 +162,23 @@ Validate a hash-pinned contract bundle directly:
 
 ```bash
 uv run xian contract bundle validate ../xian-dex/contract-bundle.json
+```
+
+Build Xian VM deployment artifacts from source for SDKs or CI:
+
+```bash
+uv run xian contract build-artifacts ./contracts/con_counter.s.py \
+  --output ./dist/con_counter.artifacts.json
+```
+
+Submit prebuilt deployment artifacts through the same signed transaction
+surface as other client automation:
+
+```bash
+uv run xian client tx submit-artifacts ./dist/con_counter.artifacts.json \
+  --node-url http://127.0.0.1:26657 \
+  --private-key-env XIAN_PRIVATE_KEY \
+  --mode commit
 ```
 
 For scripts and CI, prefer commands that emit JSON and avoid parsing human
@@ -204,6 +230,7 @@ uv run xian client query balance \
 - snapshot restore and doctor diagnostics
 - module install / validation flows backed by `xian-configs`
 - solution starter flows backed by `xian-configs`
+- Xian VM deployment artifact generation from contract source
 - hash-pinned contract-bundle validation
 - wallet, query, call / simulate, and transaction automation via `xian-py`
 
@@ -213,10 +240,13 @@ uv run xian client query balance \
 - `xian network template ...` — inspect reusable network templates
 - `xian network create ...` — create a local / operator-managed network profile
 - `xian network join ...` — join an existing preset-backed or remote network
+- `xian network package-operator-bundle ...` — package a shareable operator handoff
 - `xian node ...` — initialize, start, stop, inspect, and recover a node profile
 - `xian client ...` — wallet, query, call / simulate, and transaction automation
+  including artifact-backed contract submission
 - `xian module ...` — inspect, validate, and install reusable modules
 - `xian solution ...` — discover full application / operator starter flows
+- `xian contract build-artifacts ...` — build Xian VM deployment artifacts
 - `xian contract bundle ...` — validate hash-pinned contract bundles
 - `xian doctor ...` — run broader local diagnostics
 

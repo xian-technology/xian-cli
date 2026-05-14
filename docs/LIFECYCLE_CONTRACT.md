@@ -83,7 +83,8 @@ Resolution policy:
 - `network join` should resolve the referenced network manifest immediately
 - template resolution should prefer a local `./templates/<name>.json` file and
   otherwise fall back to `xian-configs/templates/<name>.json`
-- `runtime_backend` is explicit and currently must be `xian-stack`
+- runtime backend selection is no longer configurable; generated profiles use
+  `xian-stack`
 - node-local overrides such as extra seeds, snapshot URL overrides, and genesis
   URL overrides belong in the node profile
 - `network create` may write a colocated `genesis.json` beside the manifest
@@ -169,7 +170,6 @@ The network manifest is the network-level source of truth. Target fields:
   "name": "devnet",
   "chain_id": "xian-devnet-1",
   "mode": "join",
-  "runtime_backend": "xian-stack",
   "genesis_preset": "devnet",
   "genesis_time": "2026-03-30T00:00:00.000000Z",
   "snapshot_url": null,
@@ -198,7 +198,6 @@ The node profile is the machine-local source of truth. Target fields:
   "validator_key_ref": "./keys/validator-1/validator_key_info.json",
   "home": "~/.cometbft",
   "service_node": false,
-  "runtime_backend": "xian-stack",
   "pruning_enabled": false,
   "blocks_to_keep": 100000,
   "monitoring_enabled": false,

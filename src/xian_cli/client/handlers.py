@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import argparse
+import asyncio
 import json
 import os
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -90,6 +92,15 @@ def _parse_json_object(raw: str, *, flag_name: str) -> dict[str, Any]:
     return value
 
 
+def _parse_json_object_from_path(path: str, *, label: str) -> dict[str, Any]:
+    raw = (
+        sys.stdin.read()
+        if path == "-"
+        else Path(path).read_text(encoding="utf-8")
+    )
+    return _parse_json_object(raw, flag_name=label)
+
+
 def _submission_kwargs(args: argparse.Namespace) -> dict[str, Any]:
     return {
         "chi": getattr(args, "chi", None),
@@ -124,7 +135,9 @@ def handle_wallet_generate(args: argparse.Namespace) -> int:
 def handle_query_nonce(args: argparse.Namespace) -> int:
     payload = {
         "address": args.address,
-        "next_nonce": tx_api.get_nonce(_resolve_node_url(args), args.address),
+        "next_nonce": asyncio.run(
+            tx_api.get_nonce_async(_resolve_node_url(args), args.address)
+        ),
     }
     emit_json(payload)
     return 0
@@ -194,6 +207,44 @@ def handle_tx_send(args: argparse.Namespace) -> int:
             contract=args.contract,
             function=args.function,
             kwargs=kwargs,
+            nonce=args.nonce,
+            **_submission_kwargs(args),
+        )
+    emit_json(result)
+    return 0
+
+
+def handle_tx_submit_artifacts(args: argparse.Namespace) -> int:
+    artifacts = _parse_json_object_from_path(
+        args.artifacts,
+        label="artifact JSON",
+    )
+    constructor_args = _parse_json_object(
+        args.args_json,
+        flag_name="--args-json",
+    )
+    artifact_name = artifacts.get("module_name")
+    name = args.name or artifact_name
+    if not isinstance(name, str) or not name.strip():
+        raise ValueError(
+            "--name is required when artifact module_name is missing"
+        )
+    name = name.strip()
+    if (
+        isinstance(artifact_name, str)
+        and artifact_name.strip()
+        and artifact_name.strip() != name
+    ):
+        raise ValueError(
+            "contract name does not match artifact module_name"
+        )
+
+    wallet = _build_wallet(args)
+    with _make_client(args, wallet=wallet) as client:
+        result = client.submit_contract(
+            name,
+            artifacts,
+            args=constructor_args or None,
             nonce=args.nonce,
             **_submission_kwargs(args),
         )

@@ -103,13 +103,10 @@ def resolve_stack_dir(base_dir: Path, explicit: Path | None = None) -> Path:
 
 
 def default_home_for_backend(
-    *, base_dir: Path, runtime_backend: str, stack_dir: Path | None = None
+    *, base_dir: Path, stack_dir: Path | None = None
 ) -> Path:
-    if runtime_backend == "xian-stack":
-        resolved_stack_dir = resolve_stack_dir(base_dir, explicit=stack_dir)
-        return resolved_stack_dir / ".cometbft"
-
-    return Path.home() / ".cometbft"
+    resolved_stack_dir = resolve_stack_dir(base_dir, explicit=stack_dir)
+    return resolved_stack_dir / ".cometbft"
 
 
 def fetch_json(url: str, *, timeout: float = 10.0) -> dict:

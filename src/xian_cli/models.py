@@ -11,9 +11,7 @@ from xian_runtime_types.time import Datetime
 
 SCHEMA_VERSION = 1
 SUPPORTED_NETWORK_MODES = {"join", "create"}
-SUPPORTED_RUNTIME_BACKENDS = {"xian-stack"}
 SUPPORTED_BLOCK_POLICY_MODES = {"on_demand", "idle_interval", "periodic"}
-SUPPORTED_TRACER_MODES = {"python_line_v1", "native_instruction_v1"}
 SUPPORTED_NODE_IMAGE_MODES = {"local_build", "registry"}
 SUPPORTED_OPERATOR_PROFILES = {
     "local_development",
@@ -387,14 +385,10 @@ def _require_schema(payload: dict, *, expected: str) -> str:
     return schema
 
 
-def _require_runtime_backend(payload: dict) -> str:
-    runtime_backend = _require_str(payload, "runtime_backend")
-    if runtime_backend not in SUPPORTED_RUNTIME_BACKENDS:
-        raise ValueError(
-            "runtime_backend must be one of "
-            f"{sorted(SUPPORTED_RUNTIME_BACKENDS)}"
-        )
-    return runtime_backend
+def _reject_removed_fields(payload: dict, *keys: str) -> None:
+    for key in keys:
+        if key in payload:
+            raise ValueError(f"{key} has been removed")
 
 
 def _require_node_image_mode(payload: dict, key: str) -> str:
@@ -454,15 +448,6 @@ def _require_block_policy_interval(payload: dict, key: str) -> str:
     return value
 
 
-def _require_tracer_mode(payload: dict, key: str) -> str:
-    value = payload.get(key, "python_line_v1")
-    if not isinstance(value, str) or value not in SUPPORTED_TRACER_MODES:
-        raise ValueError(
-            f"{key} must be one of {sorted(SUPPORTED_TRACER_MODES)}"
-        )
-    return value
-
-
 def _require_app_log_level(payload: dict, key: str) -> str:
     value = payload.get(key, "INFO")
     if not isinstance(value, str):
@@ -487,6 +472,7 @@ def _require_mode(payload: dict) -> str:
 def normalize_network_manifest(payload: dict) -> dict:
     if not isinstance(payload, dict):
         raise ValueError("network manifest must be a JSON object")
+    _reject_removed_fields(payload, "runtime_backend")
     shielded_relayers = _normalize_shielded_relayers_manifest(payload)
 
     node_image_mode, node_integrated_image, node_split_image = (
@@ -509,7 +495,6 @@ def normalize_network_manifest(payload: dict) -> dict:
         "name": _require_str(payload, "name"),
         "chain_id": _require_str(payload, "chain_id"),
         "mode": _require_mode(payload),
-        "runtime_backend": _require_runtime_backend(payload),
         "genesis_source": _require_optional_str(payload, "genesis_source"),
         "genesis_preset": genesis_preset,
         "genesis_time": genesis_time,
@@ -524,7 +509,6 @@ def normalize_network_manifest(payload: dict) -> dict:
         "block_policy_interval": _require_block_policy_interval(
             payload, "block_policy_interval"
         ),
-        "tracer_mode": _require_tracer_mode(payload, "tracer_mode"),
         "node_image_mode": node_image_mode,
         "node_integrated_image": node_integrated_image,
         "node_split_image": node_split_image,
@@ -548,6 +532,7 @@ def normalize_network_manifest(payload: dict) -> dict:
 def normalize_node_profile(payload: dict) -> dict:
     if not isinstance(payload, dict):
         raise ValueError("node profile must be a JSON object")
+    _reject_removed_fields(payload, "runtime_backend")
 
     node_image_mode, node_integrated_image, node_split_image = (
         _validate_node_image_config(
@@ -568,7 +553,6 @@ def normalize_node_profile(payload: dict) -> dict:
             payload,
             "validator_key_ref",
         ),
-        "runtime_backend": _require_runtime_backend(payload),
         "node_image_mode": node_image_mode,
         "node_integrated_image": node_integrated_image,
         "node_split_image": node_split_image,
@@ -597,7 +581,6 @@ def normalize_node_profile(payload: dict) -> dict:
         "block_policy_interval": _require_block_policy_interval(
             payload, "block_policy_interval"
         ),
-        "tracer_mode": _require_tracer_mode(payload, "tracer_mode"),
         "transaction_trace_logging": _require_bool(
             payload, "transaction_trace_logging", default=False
         ),
@@ -704,20 +687,19 @@ def normalize_node_profile(payload: dict) -> dict:
 def normalize_network_template(payload: dict) -> dict:
     if not isinstance(payload, dict):
         raise ValueError("network template must be a JSON object")
+    _reject_removed_fields(payload, "runtime_backend")
 
     return {
         "schema_version": _require_schema_version(payload),
         "name": _require_str(payload, "name"),
         "display_name": _require_str(payload, "display_name"),
         "description": _require_str(payload, "description"),
-        "runtime_backend": _require_runtime_backend(payload),
         "block_policy_mode": _require_block_policy_mode(
             payload, "block_policy_mode"
         ),
         "block_policy_interval": _require_block_policy_interval(
             payload, "block_policy_interval"
         ),
-        "tracer_mode": _require_tracer_mode(payload, "tracer_mode"),
         "transaction_trace_logging": _require_bool(
             payload, "transaction_trace_logging", default=False
         ),
@@ -1062,7 +1044,6 @@ class NetworkManifest:
     name: str
     chain_id: str
     mode: str = "join"
-    runtime_backend: str = "xian-stack"
     node_image_mode: str = "local_build"
     node_integrated_image: str | None = None
     node_split_image: str | None = None
@@ -1079,7 +1060,6 @@ class NetworkManifest:
     seed_nodes: list[str] = field(default_factory=list)
     block_policy_mode: str = "on_demand"
     block_policy_interval: str = "0s"
-    tracer_mode: str = "python_line_v1"
     schema_version: int = SCHEMA_VERSION
 
     def to_dict(self) -> dict:
@@ -1092,7 +1072,6 @@ class NodeProfile:
     network: str
     moniker: str
     validator_key_ref: str | None = None
-    runtime_backend: str = "xian-stack"
     node_image_mode: str | None = None
     node_integrated_image: str | None = None
     node_split_image: str | None = None
@@ -1108,7 +1087,6 @@ class NodeProfile:
     blocks_to_keep: int = 100000
     block_policy_mode: str = "on_demand"
     block_policy_interval: str = "0s"
-    tracer_mode: str = "python_line_v1"
     transaction_trace_logging: bool = False
     app_log_level: str = "INFO"
     app_log_json: bool = False
@@ -1150,10 +1128,8 @@ class NetworkTemplate:
     name: str
     display_name: str
     description: str
-    runtime_backend: str = "xian-stack"
     block_policy_mode: str = "on_demand"
     block_policy_interval: str = "0s"
-    tracer_mode: str = "python_line_v1"
     transaction_trace_logging: bool = False
     app_log_level: str = "INFO"
     app_log_json: bool = False

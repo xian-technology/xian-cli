@@ -5,12 +5,13 @@ import hashlib
 import importlib
 import io
 import json
+import os
 import subprocess
 import tempfile
 import unittest
 from contextlib import redirect_stdout
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 from urllib.error import URLError
 
 from xian_accounts import Ed25519Account
@@ -133,6 +134,7 @@ class _FakeContextClient:
     def __init__(self, **responses):
         self.responses = responses
         self.send_tx_calls = []
+        self.submit_contract_calls = []
         self.send_calls = []
         self.call_calls = []
 
@@ -164,6 +166,17 @@ class _FakeContextClient:
     def send_tx(self, **kwargs):
         self.send_tx_calls.append(kwargs)
         return self.responses["send_tx"]
+
+    def submit_contract(self, name, deployment_artifacts, args=None, **kwargs):
+        self.submit_contract_calls.append(
+            {
+                "name": name,
+                "deployment_artifacts": deployment_artifacts,
+                "args": args,
+                **kwargs,
+            }
+        )
+        return self.responses["submit_contract"]
 
     def send(self, amount, to_address, token="currency", **kwargs):
         self.send_calls.append(
@@ -325,7 +338,8 @@ class ClientCommandTests(unittest.TestCase):
 
     def test_client_query_nonce(self) -> None:
         with patch(
-            "xian_cli.client.handlers.tx_api.get_nonce", return_value=12
+            "xian_cli.client.handlers.tx_api.get_nonce_async",
+            AsyncMock(return_value=12),
         ) as get_nonce:
             stdout = io.StringIO()
             with redirect_stdout(stdout):
@@ -343,7 +357,7 @@ class ClientCommandTests(unittest.TestCase):
         self.assertEqual(exit_code, 0)
         payload = json.loads(stdout.getvalue())
         self.assertEqual(payload, {"address": "alice", "next_nonce": 12})
-        get_nonce.assert_called_once_with("http://node.example", "alice")
+        get_nonce.assert_awaited_once_with("http://node.example", "alice")
 
     def test_client_query_balance_serializes_runtime_types(self) -> None:
         fake_client = _FakeContextClient(balance=ContractingDecimal("12.50"))
@@ -591,6 +605,108 @@ class ClientCommandTests(unittest.TestCase):
         self.assertEqual(call["timeout_seconds"], 5.0)
         self.assertEqual(call["chi"], 123)
 
+    def test_client_tx_submit_artifacts_uses_artifact_module_name(self) -> None:
+        fake_client = _FakeContextClient(
+            submit_contract={
+                "submitted": True,
+                "tx_hash": "DEF456",
+                "mode": "checktx",
+            }
+        )
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            artifact_path = Path(tmp_dir) / "con_counter.artifacts.json"
+            artifact_path.write_text(
+                json.dumps(
+                    {
+                        "format": "xian_contract_artifact_v1",
+                        "module_name": "con_counter",
+                        "vm_profile": "xian_vm_v1",
+                        "source": "counter = Variable()\n",
+                        "vm_ir_json": "{}",
+                        "hashes": {},
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            with (
+                patch(
+                    "xian_cli.client.handlers._make_client",
+                    return_value=fake_client,
+                ),
+                patch(
+                    "xian_cli.client.handlers._build_wallet",
+                    return_value=object(),
+                ),
+            ):
+                stdout = io.StringIO()
+                with redirect_stdout(stdout):
+                    exit_code = main(
+                        [
+                            "client",
+                            "tx",
+                            "submit-artifacts",
+                            "--node-url",
+                            "http://node.example",
+                            str(artifact_path),
+                            "--args-json",
+                            '{"seed":7}',
+                            "--mode",
+                            "checktx",
+                            "--nonce",
+                            "42",
+                        ]
+                    )
+
+        self.assertEqual(exit_code, 0)
+        payload = json.loads(stdout.getvalue())
+        self.assertEqual(payload["tx_hash"], "DEF456")
+        self.assertEqual(len(fake_client.submit_contract_calls), 1)
+        call = fake_client.submit_contract_calls[0]
+        self.assertEqual(call["name"], "con_counter")
+        self.assertEqual(call["args"], {"seed": 7})
+        self.assertEqual(call["mode"], "checktx")
+        self.assertEqual(call["nonce"], 42)
+        self.assertEqual(
+            call["deployment_artifacts"]["format"],
+            "xian_contract_artifact_v1",
+        )
+
+    def test_client_tx_submit_artifacts_rejects_name_mismatch(self) -> None:
+        fake_client = _FakeContextClient(submit_contract={})
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            artifact_path = Path(tmp_dir) / "artifacts.json"
+            artifact_path.write_text(
+                json.dumps({"module_name": "con_counter"}),
+                encoding="utf-8",
+            )
+
+            with (
+                patch(
+                    "xian_cli.client.handlers._make_client",
+                    return_value=fake_client,
+                ),
+                patch(
+                    "xian_cli.client.handlers._build_wallet",
+                    return_value=object(),
+                ),
+            ):
+                with self.assertRaisesRegex(ValueError, "module_name"):
+                    main(
+                        [
+                            "client",
+                            "tx",
+                            "submit-artifacts",
+                            "--node-url",
+                            "http://node.example",
+                            str(artifact_path),
+                            "--name",
+                            "con_other",
+                        ]
+                    )
+
+        self.assertEqual(fake_client.submit_contract_calls, [])
+
     def test_client_tx_transfer(self) -> None:
         fake_client = _FakeContextClient(
             send={
@@ -732,10 +848,8 @@ class NetworkManifestTests(unittest.TestCase):
                         "name": "single-node-dev",
                         "display_name": "Single-Node Dev",
                         "description": "Local dev template",
-                        "runtime_backend": "xian-stack",
                         "block_policy_mode": "on_demand",
                         "block_policy_interval": "0s",
-                        "tracer_mode": "python_line_v1",
                         "operator_profile": "local_development",
                         "monitoring_profile": "none",
                         "bootstrap_node_name": "validator-1",
@@ -796,10 +910,10 @@ class NetworkManifestTests(unittest.TestCase):
             self.assertEqual(manifest["name"], "local-dev")
             self.assertEqual(manifest["chain_id"], "xian-local-1")
             self.assertEqual(manifest["mode"], "create")
-            self.assertEqual(manifest["runtime_backend"], "xian-stack")
+            self.assertNotIn("runtime_backend", manifest)
             self.assertEqual(manifest["block_policy_mode"], "on_demand")
             self.assertEqual(manifest["block_policy_interval"], "0s")
-            self.assertEqual(manifest["tracer_mode"], "python_line_v1")
+            self.assertNotIn("tracer_mode", manifest)
             self.assertEqual(manifest["node_image_mode"], "local_build")
             self.assertIsNone(manifest["node_integrated_image"])
             self.assertIsNone(manifest["node_split_image"])
@@ -836,7 +950,7 @@ class NetworkManifestTests(unittest.TestCase):
             self.assertIsNone(manifest["genesis_source"])
             self.assertEqual(manifest["block_policy_mode"], "on_demand")
             self.assertEqual(manifest["block_policy_interval"], "0s")
-            self.assertEqual(manifest["tracer_mode"], "python_line_v1")
+            self.assertNotIn("tracer_mode", manifest)
             self.assertEqual(manifest["node_image_mode"], "local_build")
 
     def test_network_create_dry_run_validates_without_writing_files(
@@ -891,7 +1005,6 @@ class NetworkManifestTests(unittest.TestCase):
                         "name": "privacy-test",
                         "chain_id": "xian-privacy-1",
                         "mode": "join",
-                        "runtime_backend": "xian-stack",
                         "node_image_mode": "local_build",
                         "shielded_relayers": [],
                         "privacy_artifact_catalog": {
@@ -921,7 +1034,6 @@ class NetworkManifestTests(unittest.TestCase):
                         "seed_nodes": [],
                         "block_policy_mode": "on_demand",
                         "block_policy_interval": "0s",
-                        "tracer_mode": "python_line_v1",
                     }
                 ),
                 encoding="utf-8",
@@ -956,7 +1068,6 @@ class NetworkManifestTests(unittest.TestCase):
                         "name": "canonical",
                         "chain_id": "xian-canonical-1",
                         "mode": "join",
-                        "runtime_backend": "xian-stack",
                         "node_image_mode": "registry",
                         "node_integrated_image": (
                             "ghcr.io/xian-technology/xian-node@sha256:abc"
@@ -966,7 +1077,6 @@ class NetworkManifestTests(unittest.TestCase):
                         "seed_nodes": [],
                         "block_policy_mode": "on_demand",
                         "block_policy_interval": "0s",
-                        "tracer_mode": "python_line_v1",
                     }
                 ),
                 encoding="utf-8",
@@ -990,10 +1100,8 @@ class NetworkManifestTests(unittest.TestCase):
                         "name": "single-node-indexed",
                         "display_name": "Single-Node Indexed",
                         "description": "Indexed single node",
-                        "runtime_backend": "xian-stack",
                         "block_policy_mode": "on_demand",
                         "block_policy_interval": "0s",
-                        "tracer_mode": "native_instruction_v1",
                         "transaction_trace_logging": True,
                         "app_log_level": "DEBUG",
                         "app_log_json": True,
@@ -1057,7 +1165,7 @@ class NetworkManifestTests(unittest.TestCase):
             )
 
             self.assertEqual(result["template"], "single-node-indexed")
-            self.assertEqual(manifest["tracer_mode"], "native_instruction_v1")
+            self.assertNotIn("tracer_mode", manifest)
             self.assertTrue(profile["service_node"])
             self.assertTrue(profile["transaction_trace_logging"])
             self.assertEqual(profile["app_log_level"], "DEBUG")
@@ -1077,6 +1185,111 @@ class NetworkManifestTests(unittest.TestCase):
             self.assertTrue(profile["monitoring_enabled"])
             self.assertEqual(profile["dashboard_host"], "0.0.0.0")
             self.assertEqual(profile["dashboard_port"], 18080)
+
+    def test_network_package_operator_bundle_materializes_shareable_files(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            base_dir = Path(tmp_dir)
+            network_dir = base_dir / "networks" / "private-dev"
+            privacy_dir = network_dir / "privacy"
+            privacy_dir.mkdir(parents=True)
+            (network_dir / "genesis.json").write_text(
+                TEST_FIXTURE_GENESIS.read_text(encoding="utf-8"),
+                encoding="utf-8",
+            )
+            (privacy_dir / "artifacts.json").write_text(
+                json.dumps(
+                    {
+                        "schema_version": 1,
+                        "network": "private-dev",
+                        "bundle_policy": {
+                            "approved_setup_modes": ["single-party"],
+                            "allow_single_party": True,
+                        },
+                        "artifacts": [],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            manifest_path = network_dir / "manifest.json"
+            manifest_path.write_text(
+                json.dumps(
+                    {
+                        "schema_version": 1,
+                        "name": "private-dev",
+                        "chain_id": "xian-private-dev-1",
+                        "mode": "join",
+                        "node_image_mode": "local_build",
+                        "genesis_source": "./genesis.json",
+                        "snapshot_url": None,
+                        "snapshot_signing_keys": [],
+                        "seed_nodes": [],
+                        "block_policy_mode": "idle_interval",
+                        "block_policy_interval": "5s",
+                        "privacy_artifact_catalog": {
+                            "path": "./privacy/artifacts.json",
+                            "sha256": "a" * 64,
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            stdout = io.StringIO()
+            with redirect_stdout(stdout):
+                exit_code = main(
+                    [
+                        "network",
+                        "package-operator-bundle",
+                        "private-dev",
+                        "--base-dir",
+                        str(base_dir),
+                        "--bootstrap-seed",
+                        "abc@seed.example:26656",
+                    ]
+                )
+
+            self.assertEqual(exit_code, 0)
+            result = json.loads(stdout.getvalue())
+            bundle_dir = Path(result["bundle_dir"])
+            bundled_manifest = json.loads(
+                (bundle_dir / "manifest.json").read_text(encoding="utf-8")
+            )
+            join_script = (bundle_dir / "participant-join.sh").read_text(
+                encoding="utf-8"
+            )
+
+            self.assertEqual(
+                bundled_manifest["genesis_source"],
+                "./genesis.json",
+            )
+            self.assertIsNone(bundled_manifest["genesis_preset"])
+            self.assertEqual(
+                bundled_manifest["seed_nodes"],
+                ["abc@seed.example:26656"],
+            )
+            self.assertNotIn("runtime_backend", bundled_manifest)
+            self.assertNotIn("tracer_mode", bundled_manifest)
+            self.assertTrue((bundle_dir / "genesis.json").exists())
+            self.assertTrue(
+                (bundle_dir / "privacy" / "artifacts.json").exists()
+            )
+            self.assertEqual(
+                (bundle_dir / "bootstrap-seed.txt").read_text(
+                    encoding="utf-8"
+                ),
+                "abc@seed.example:26656\n",
+            )
+            self.assertIn("--parallel-execution-enabled", join_script)
+            self.assertNotIn("--tracer-mode", join_script)
+            self.assertNotIn("--runtime-backend", join_script)
+            self.assertTrue(
+                os.access(bundle_dir / "participant-join.sh", os.X_OK)
+            )
+            self.assertTrue(
+                os.access(bundle_dir / "participant-service-node.sh", os.X_OK)
+            )
 
     def test_network_join_writes_node_profile(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -1114,7 +1327,7 @@ class NetworkManifestTests(unittest.TestCase):
             self.assertEqual(profile["dashboard_port"], 18080)
             self.assertEqual(profile["block_policy_mode"], "idle_interval")
             self.assertEqual(profile["block_policy_interval"], "5s")
-            self.assertEqual(profile["tracer_mode"], "native_instruction_v1")
+            self.assertNotIn("tracer_mode", profile)
             self.assertEqual(profile["node_image_mode"], "local_build")
             self.assertIsNone(profile["node_integrated_image"])
             self.assertIsNone(profile["node_split_image"])
@@ -1214,13 +1427,11 @@ class NetworkManifestTests(unittest.TestCase):
                         "name": "canonical",
                         "chain_id": "xian-canonical-1",
                         "mode": "join",
-                        "runtime_backend": "xian-stack",
                         "genesis_source": "./genesis.json",
                         "snapshot_url": "https://example.invalid/snapshot",
                         "seed_nodes": ["seed-1@127.0.0.1:26656"],
                         "block_policy_mode": "periodic",
                         "block_policy_interval": "10s",
-                        "tracer_mode": "native_instruction_v1",
                         "node_image_mode": "registry",
                         "node_integrated_image": (
                             "ghcr.io/xian-technology/xian-node@sha256:abc"
@@ -1257,12 +1468,12 @@ class NetworkManifestTests(unittest.TestCase):
 
             self.assertEqual(exit_code, 0)
             profile = json.loads(output_path.read_text(encoding="utf-8"))
-            self.assertEqual(profile["runtime_backend"], "xian-stack")
+            self.assertNotIn("runtime_backend", profile)
             self.assertEqual(profile["seeds"], [])
             self.assertIsNone(profile["snapshot_url"])
             self.assertEqual(profile["block_policy_mode"], "periodic")
             self.assertEqual(profile["block_policy_interval"], "10s")
-            self.assertEqual(profile["tracer_mode"], "native_instruction_v1")
+            self.assertNotIn("tracer_mode", profile)
             self.assertEqual(profile["node_image_mode"], "registry")
             self.assertEqual(
                 profile["node_integrated_image"],
@@ -1292,13 +1503,11 @@ class NetworkManifestTests(unittest.TestCase):
                         "name": "canonical",
                         "chain_id": "xian-canonical-1",
                         "mode": "join",
-                        "runtime_backend": "xian-stack",
                         "genesis_source": "./genesis.json",
                         "snapshot_url": None,
                         "seed_nodes": [],
                         "block_policy_mode": "on_demand",
                         "block_policy_interval": "0s",
-                        "tracer_mode": "python_line_v1",
                     }
                 ),
                 encoding="utf-8",
@@ -1310,10 +1519,8 @@ class NetworkManifestTests(unittest.TestCase):
                         "name": "embedded-backend",
                         "display_name": "Embedded Backend",
                         "description": "App backend defaults",
-                        "runtime_backend": "xian-stack",
                         "block_policy_mode": "on_demand",
                         "block_policy_interval": "0s",
-                        "tracer_mode": "native_instruction_v1",
                         "transaction_trace_logging": True,
                         "app_log_level": "WARNING",
                         "app_log_json": True,
@@ -1381,7 +1588,7 @@ class NetworkManifestTests(unittest.TestCase):
             self.assertEqual(profile["monitoring_profile"], "service_node")
             self.assertTrue(profile["monitoring_enabled"])
             self.assertFalse(profile["dashboard_enabled"])
-            self.assertEqual(profile["tracer_mode"], "native_instruction_v1")
+            self.assertNotIn("tracer_mode", profile)
 
     def test_network_join_drops_release_manifest_for_local_build_override(
         self,
@@ -1398,13 +1605,11 @@ class NetworkManifestTests(unittest.TestCase):
                         "name": "canonical",
                         "chain_id": "xian-canonical-1",
                         "mode": "join",
-                        "runtime_backend": "xian-stack",
                         "genesis_source": "./genesis.json",
                         "snapshot_url": None,
                         "seed_nodes": [],
                         "block_policy_mode": "on_demand",
                         "block_policy_interval": "0s",
-                        "tracer_mode": "python_line_v1",
                         "node_image_mode": "registry",
                         "node_integrated_image": (
                             "ghcr.io/xian-technology/xian-node@sha256:abc"
@@ -1461,13 +1666,11 @@ class NetworkManifestTests(unittest.TestCase):
                         "name": "canonical",
                         "chain_id": "xian-canonical-1",
                         "mode": "join",
-                        "runtime_backend": "xian-stack",
                         "genesis_source": "./genesis.json",
                         "snapshot_url": None,
                         "seed_nodes": [],
                         "block_policy_mode": "on_demand",
                         "block_policy_interval": "0s",
-                        "tracer_mode": "python_line_v1",
                     }
                 ),
                 encoding="utf-8",
@@ -1491,8 +1694,6 @@ class NetworkManifestTests(unittest.TestCase):
                             "idle_interval",
                             "--block-policy-interval",
                             "10s",
-                            "--tracer-mode",
-                            "native_instruction_v1",
                             "--transaction-trace-logging",
                             "--app-log-level",
                             "ERROR",
@@ -1522,7 +1723,7 @@ class NetworkManifestTests(unittest.TestCase):
             profile = json.loads(output_path.read_text(encoding="utf-8"))
             self.assertEqual(profile["block_policy_mode"], "idle_interval")
             self.assertEqual(profile["block_policy_interval"], "10s")
-            self.assertEqual(profile["tracer_mode"], "native_instruction_v1")
+            self.assertNotIn("tracer_mode", profile)
             self.assertTrue(profile["transaction_trace_logging"])
             self.assertEqual(profile["app_log_level"], "ERROR")
             self.assertTrue(profile["app_log_json"])
@@ -1549,11 +1750,9 @@ class NetworkManifestTests(unittest.TestCase):
                         "name": "canonical",
                         "chain_id": "xian-canonical-1",
                         "mode": "join",
-                        "runtime_backend": "xian-stack",
                         "genesis_source": "./genesis.json",
                         "snapshot_url": None,
                         "seed_nodes": ["seed-1@127.0.0.1:26656"],
-                        "tracer_mode": "python_line_v1",
                     }
                 ),
                 encoding="utf-8",
@@ -1584,13 +1783,13 @@ class NetworkManifestTests(unittest.TestCase):
 
             self.assertEqual(exit_code, 0)
             profile = json.loads(output_path.read_text(encoding="utf-8"))
-            self.assertEqual(profile["runtime_backend"], "xian-stack")
+            self.assertNotIn("runtime_backend", profile)
             self.assertEqual(profile["seeds"], ["local-seed@127.0.0.1:26656"])
             self.assertEqual(
                 profile["snapshot_url"],
                 "https://example.invalid/node-snapshot",
             )
-            self.assertEqual(profile["tracer_mode"], "python_line_v1")
+            self.assertNotIn("tracer_mode", profile)
 
     def test_network_join_rejects_negative_parallel_settings(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -1605,11 +1804,9 @@ class NetworkManifestTests(unittest.TestCase):
                         "name": "canonical",
                         "chain_id": "xian-canonical-1",
                         "mode": "join",
-                        "runtime_backend": "xian-stack",
                         "genesis_source": "./genesis.json",
                         "snapshot_url": None,
                         "seed_nodes": [],
-                        "tracer_mode": "python_line_v1",
                     }
                 ),
                 encoding="utf-8",
@@ -1650,11 +1847,9 @@ class NetworkManifestTests(unittest.TestCase):
                         "name": "canonical",
                         "chain_id": "xian-canonical-1",
                         "mode": "join",
-                        "runtime_backend": "xian-stack",
                         "genesis_source": "./genesis.json",
                         "snapshot_url": None,
                         "seed_nodes": [],
-                        "tracer_mode": "python_line_v1",
                     }
                 ),
                 encoding="utf-8",
@@ -1693,11 +1888,9 @@ class NetworkManifestTests(unittest.TestCase):
                         "name": "canonical",
                         "chain_id": "xian-canonical-1",
                         "mode": "join",
-                        "runtime_backend": "xian-stack",
                         "genesis_source": "./genesis.json",
                         "snapshot_url": None,
                         "seed_nodes": [],
-                        "tracer_mode": "python_line_v1",
                     }
                 ),
                 encoding="utf-8",
@@ -2658,7 +2851,6 @@ class NodeInitTests(unittest.TestCase):
                         "name": "canonical",
                         "chain_id": "xian-canonical-1",
                         "mode": "join",
-                        "runtime_backend": "xian-stack",
                         "genesis_source": "./genesis.json",
                         "snapshot_url": None,
                         "seed_nodes": ["seed-1@127.0.0.1:26656"],
@@ -2939,7 +3131,6 @@ class NodeRuntimeTests(unittest.TestCase):
                         "name": "mainnet",
                         "chain_id": "xian-1",
                         "mode": "join",
-                        "runtime_backend": "xian-stack",
                         "node_image_mode": "registry",
                         "node_integrated_image": (
                             CANONICAL_RELEASE_INTEGRATED_IMAGE
@@ -2950,7 +3141,6 @@ class NodeRuntimeTests(unittest.TestCase):
                         "seed_nodes": [],
                         "block_policy_mode": "on_demand",
                         "block_policy_interval": "0s",
-                        "tracer_mode": "python_line_v1",
                     }
                 ),
                 encoding="utf-8",
@@ -2962,7 +3152,6 @@ class NodeRuntimeTests(unittest.TestCase):
                         "name": "validator-1",
                         "network": "mainnet",
                         "moniker": "validator-1",
-                        "runtime_backend": "xian-stack",
                         "stack_dir": str(stack_dir),
                         "seeds": [],
                         "genesis_url": None,
@@ -2973,7 +3162,6 @@ class NodeRuntimeTests(unittest.TestCase):
                         "blocks_to_keep": 100000,
                         "block_policy_mode": "on_demand",
                         "block_policy_interval": "0s",
-                        "tracer_mode": "python_line_v1",
                         "transaction_trace_logging": False,
                         "app_log_level": "INFO",
                         "app_log_json": False,
@@ -3049,7 +3237,6 @@ class NodeRuntimeTests(unittest.TestCase):
                         "name": "mainnet",
                         "chain_id": "xian-1",
                         "mode": "join",
-                        "runtime_backend": "xian-stack",
                         "node_image_mode": "registry",
                         "node_integrated_image": (
                             CANONICAL_RELEASE_INTEGRATED_IMAGE
@@ -3063,7 +3250,6 @@ class NodeRuntimeTests(unittest.TestCase):
                         "seed_nodes": [],
                         "block_policy_mode": "on_demand",
                         "block_policy_interval": "0s",
-                        "tracer_mode": "python_line_v1",
                     }
                 ),
                 encoding="utf-8",
@@ -3075,7 +3261,6 @@ class NodeRuntimeTests(unittest.TestCase):
                         "name": "validator-1",
                         "network": "mainnet",
                         "moniker": "validator-1",
-                        "runtime_backend": "xian-stack",
                         "node_image_mode": "registry",
                         "node_integrated_image": (
                             CANONICAL_RELEASE_INTEGRATED_IMAGE
@@ -3094,7 +3279,6 @@ class NodeRuntimeTests(unittest.TestCase):
                         "blocks_to_keep": 100000,
                         "block_policy_mode": "on_demand",
                         "block_policy_interval": "0s",
-                        "tracer_mode": "python_line_v1",
                         "transaction_trace_logging": False,
                         "app_log_level": "INFO",
                         "app_log_json": False,
@@ -3260,7 +3444,6 @@ class NodeRuntimeTests(unittest.TestCase):
                 kwargs["cometbft_home"],
                 default_home_for_backend(
                     base_dir=base_dir,
-                    runtime_backend="xian-stack",
                     stack_dir=stack_dir.resolve(),
                 ),
             )
@@ -4767,7 +4950,6 @@ class ConfigRepoTests(unittest.TestCase):
                     {
                         "name": "mainnet",
                         "chain_id": "xian-1",
-                        "runtime_backend": "xian-stack",
                     }
                 ),
                 encoding="utf-8",
@@ -4808,7 +4990,6 @@ class ConfigRepoTests(unittest.TestCase):
                         "name": "single-node-dev",
                         "display_name": "Single-Node Dev",
                         "description": "Local dev template",
-                        "runtime_backend": "xian-stack",
                     }
                 ),
                 encoding="utf-8",
@@ -5294,6 +5475,138 @@ class ConfigRepoTests(unittest.TestCase):
             self.assertTrue(payload["ok"])
             self.assertEqual(payload["name"], "demo")
             self.assertEqual(payload["contracts"][0]["role"], "demo")
+
+    def test_contract_build_artifacts_emits_xian_vm_artifacts(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            source_path = Path(tmp_dir) / "con_counter.s.py"
+            source_path.write_text(
+                "\n".join(
+                    [
+                        "counter = Variable()",
+                        "",
+                        "@construct",
+                        "def seed():",
+                        "    counter.set(0)",
+                        "",
+                        "@export",
+                        "def get():",
+                        "    return counter.get()",
+                        "",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+
+            stdout = io.StringIO()
+            with redirect_stdout(stdout):
+                exit_code = main(
+                    ["contract", "build-artifacts", str(source_path)]
+                )
+
+            self.assertEqual(exit_code, 0)
+            payload = json.loads(stdout.getvalue())
+            self.assertEqual(payload["format"], "xian_contract_artifact_v1")
+            self.assertEqual(payload["module_name"], "con_counter")
+            self.assertEqual(payload["vm_profile"], "xian_vm_v1")
+            self.assertIn("vm_ir_json", payload)
+            self.assertIn("vm_ir_sha256", payload["hashes"])
+
+    def test_contract_build_artifacts_writes_output_file(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            source_path = tmp_path / "counter.py"
+            output_path = tmp_path / "artifacts.json"
+            source_path.write_text(
+                "\n".join(
+                    [
+                        "counter = Variable()",
+                        "",
+                        "@export",
+                        "def get():",
+                        "    return counter.get()",
+                        "",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+
+            stdout = io.StringIO()
+            with redirect_stdout(stdout):
+                exit_code = main(
+                    [
+                        "contract",
+                        "build-artifacts",
+                        str(source_path),
+                        "--name",
+                        "con_counter",
+                        "--output",
+                        str(output_path),
+                    ]
+                )
+
+            self.assertEqual(exit_code, 0)
+            self.assertEqual(stdout.getvalue(), "")
+            payload = json.loads(output_path.read_text(encoding="utf-8"))
+            self.assertEqual(payload["module_name"], "con_counter")
+            self.assertEqual(payload["vm_profile"], "xian_vm_v1")
+
+    def test_contract_build_artifacts_reads_stdin_and_preserves_hashes(
+        self,
+    ) -> None:
+        source = "\n".join(
+            [
+                "balances = Hash(default_value=0)",
+                "allowances = Hash(default_value=0)",
+                "",
+                "@construct",
+                "def seed(owner: str, supply: int):",
+                "    balances[owner] = supply",
+                "",
+                "@export",
+                "def approve(spender: str, amount: int):",
+                "    assert amount > 0, 'amount must be positive!'",
+                "    allowances[ctx.caller, spender] = amount",
+                "    return allowances[ctx.caller, spender]",
+                "",
+                "@export",
+                "def transfer_from(owner: str, to: str, amount: int):",
+                "    assert allowances[owner, ctx.caller] >= amount, (",
+                "        'allowance too low!'",
+                "    )",
+                "    assert balances[owner] >= amount, 'balance too low!'",
+                "    allowances[owner, ctx.caller] -= amount",
+                "    balances[owner] -= amount",
+                "    balances[to] += amount",
+                "    return balances[to]",
+                "",
+            ]
+        )
+
+        stdout = io.StringIO()
+        with patch("sys.stdin", io.StringIO(source)), redirect_stdout(stdout):
+            exit_code = main(
+                [
+                    "contract",
+                    "build-artifacts",
+                    "-",
+                    "--name",
+                    "con_allowance_probe",
+                ]
+            )
+
+        self.assertEqual(exit_code, 0)
+        payload = json.loads(stdout.getvalue())
+        self.assertEqual(payload["format"], "xian_contract_artifact_v1")
+        self.assertEqual(payload["module_name"], "con_allowance_probe")
+        self.assertNotIn("runtime_code", payload)
+        self.assertEqual(
+            payload["hashes"]["source_sha256"],
+            hashlib.sha256(payload["source"].encode()).hexdigest(),
+        )
+        self.assertEqual(
+            payload["hashes"]["vm_ir_sha256"],
+            hashlib.sha256(payload["vm_ir_json"].encode()).hexdigest(),
+        )
 
     def test_read_module_requires_explicit_schema_version(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:

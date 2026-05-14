@@ -552,7 +552,6 @@ requires-dist = [
     { name = "xian-tech-accounts", editable = "../xian-contracting/packages/xian-accounts" },
     { name = "xian-tech-contracting", editable = "../xian-contracting" },
     { name = "xian-tech-fastpath-core", marker = "extra == 'native'", editable = "../xian-contracting/packages/xian-fastpath-core" },
-    { name = "xian-tech-native-tracer", marker = "extra == 'native'", editable = "../xian-contracting/packages/xian-native-tracer" },
     { name = "xian-tech-runtime-types", editable = "../xian-contracting/packages/xian-runtime-types" },
     { name = "xian-tech-vm-core", marker = "extra == 'vm'", editable = "../xian-contracting/packages/xian-vm-core" },
 ]
@@ -585,6 +584,7 @@ source = { editable = "." }
 dependencies = [
     { name = "pynacl" },
     { name = "xian-tech-abci" },
+    { name = "xian-tech-contracting" },
     { name = "xian-tech-py" },
 ]
 
@@ -599,6 +599,7 @@ dev = [
 requires-dist = [
     { name = "pynacl", specifier = ">=1.6.2,<2" },
     { name = "xian-tech-abci", editable = "../xian-abci" },
+    { name = "xian-tech-contracting", editable = "../xian-contracting" },
     { name = "xian-tech-py", editable = "../xian-py" },
 ]
 
@@ -610,6 +611,11 @@ dev = [
 ]
 
 [[package]]
+name = "xian-tech-compiler-core"
+version = "0.1.0"
+source = { directory = "../xian-contracting/packages/xian-compiler-core" }
+
+[[package]]
 name = "xian-tech-contracting"
 version = "1.0.6"
 source = { editable = "../xian-contracting" }
@@ -617,6 +623,7 @@ dependencies = [
     { name = "cachetools" },
     { name = "lmdb" },
     { name = "pynacl" },
+    { name = "xian-tech-compiler-core" },
     { name = "xian-tech-runtime-types" },
 ]
 
@@ -625,8 +632,8 @@ requires-dist = [
     { name = "cachetools", specifier = ">=7.0.6,<8" },
     { name = "lmdb", specifier = ">=2.2.0,<3" },
     { name = "pynacl", specifier = ">=1.5.0,<2" },
+    { name = "xian-tech-compiler-core", directory = "../xian-contracting/packages/xian-compiler-core" },
     { name = "xian-tech-fastpath-core", marker = "extra == 'native'", editable = "../xian-contracting/packages/xian-fastpath-core" },
-    { name = "xian-tech-native-tracer", marker = "extra == 'native'", editable = "../xian-contracting/packages/xian-native-tracer" },
     { name = "xian-tech-runtime-types", editable = "../xian-contracting/packages/xian-runtime-types" },
     { name = "xian-tech-zk", marker = "extra == 'zk'", editable = "../xian-contracting/packages/xian-zk" },
 ]
@@ -648,6 +655,7 @@ dependencies = [
     { name = "aiohttp" },
     { name = "pynacl" },
     { name = "xian-tech-accounts" },
+    { name = "xian-tech-contracting" },
     { name = "xian-tech-runtime-types" },
 ]
 
@@ -661,6 +669,7 @@ requires-dist = [
     { name = "pynacl", specifier = ">=1.5.0,<2" },
     { name = "uvicorn", marker = "extra == 'app'", specifier = ">=0.46.0,<0.47" },
     { name = "xian-tech-accounts", editable = "../xian-contracting/packages/xian-accounts" },
+    { name = "xian-tech-contracting", editable = "../xian-contracting" },
     { name = "xian-tech-runtime-types", editable = "../xian-contracting/packages/xian-runtime-types" },
 ]
 provides-extras = ["hd", "eth", "app"]

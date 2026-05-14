@@ -53,10 +53,11 @@ class GoldenSetupPlanTests(unittest.TestCase):
 
             self.assertEqual(manifest["chain_id"], "xian-golden-1")
             self.assertEqual(profile["network"], "golden-local")
-            self.assertEqual(profile["runtime_backend"], "xian-stack")
+            self.assertNotIn("runtime_backend", manifest)
+            self.assertNotIn("runtime_backend", profile)
             self.assertEqual(cometbft_config["moniker"], "node-0")
             self.assertEqual(cometbft_config["p2p"]["seeds"], "")
-            self.assertEqual(xian_config["tracer_mode"], "python_line_v1")
+            self.assertNotIn("tracer_mode", xian_config)
             self.assertEqual(xian_config["metrics_host"], "0.0.0.0")
             self.assertTrue((home / "config" / "genesis.json").exists())
 

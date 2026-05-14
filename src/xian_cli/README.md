@@ -9,10 +9,12 @@ behind network manifests, node profiles, and backend integration.
 
 - `cli.py`: the top-level command parser and workflow implementation
 - `client/`: automation-oriented wallet/query/transaction commands backed by
-  `xian-py`
+  `xian-py`, including artifact-backed contract submission
 - `models.py`: typed manifest, profile, and related config models
 - `config_repo.py`: canonical network/template/module/solution resolution
 - `contract_bundles.py`: hash-pinned contract bundle validation helpers
+- `contract build-artifacts`: command surface for compiler-backed deployment
+  artifact generation
 - `runtime.py`: local runtime backend integration
 - `abci_bridge.py`: direct integration points with backend node tooling
 

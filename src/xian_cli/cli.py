@@ -31,7 +31,6 @@ from xian_cli.config_repo import (
 from xian_cli.contract_bundles import validate_contract_bundle
 from xian_cli.models import (
     SUPPORTED_NODE_IMAGE_MODES,
-    SUPPORTED_RUNTIME_BACKENDS,
     NetworkManifest,
     NodeProfile,
     read_json,
@@ -773,6 +772,47 @@ def _handle_contract_bundle_validate(args: argparse.Namespace) -> int:
     return 0
 
 
+def _handle_contract_build_artifacts(args: argparse.Namespace) -> int:
+    source_path = args.source
+    if str(source_path) == "-":
+        source = sys.stdin.read()
+        if not args.name:
+            raise ValueError(
+                "--name is required when reading source from stdin"
+            )
+        module_name = args.name
+    else:
+        source_path = source_path.resolve()
+        source = source_path.read_text(encoding="utf-8")
+        module_name = args.name or _infer_contract_module_name(source_path)
+
+    try:
+        from contracting.artifacts import build_contract_artifacts
+    except ImportError as exc:  # pragma: no cover - packaging guard
+        raise RuntimeError(
+            "xian contract build-artifacts requires xian-tech-contracting"
+        ) from exc
+
+    artifacts = build_contract_artifacts(
+        module_name=module_name,
+        source=source,
+        lint=not args.no_lint,
+        vm_profile="xian_vm_v1",
+    )
+    if args.output is None:
+        print(json.dumps(artifacts, indent=2, sort_keys=True))
+    else:
+        write_json(args.output.resolve(), artifacts, force=args.force)
+    return 0
+
+
+def _infer_contract_module_name(source_path: Path) -> str:
+    filename = source_path.name
+    if filename.endswith(".s.py"):
+        return filename[: -len(".s.py")]
+    return source_path.stem
+
+
 def _handle_keys_validator_generate(args: argparse.Namespace) -> int:
     if args.out_dir is not None:
         metadata_path = _write_validator_material_files(
@@ -1013,11 +1053,6 @@ def _handle_network_create(args: argparse.Namespace) -> int:
         name=args.name,
         chain_id=args.chain_id,
         mode=args.mode,
-        runtime_backend=_pick_template_value(
-            args.runtime_backend,
-            None if template is None else template.get("runtime_backend"),
-            "xian-stack",
-        ),
         genesis_source=genesis_source,
         snapshot_url=args.snapshot_url,
         snapshot_signing_keys=args.snapshot_signing_key or [],
@@ -1031,11 +1066,6 @@ def _handle_network_create(args: argparse.Namespace) -> int:
             args.block_policy_interval,
             None if template is None else template.get("block_policy_interval"),
             "0s",
-        ),
-        tracer_mode=_pick_template_value(
-            args.tracer_mode,
-            None if template is None else template.get("tracer_mode"),
-            "python_line_v1",
         ),
         node_image_mode=node_image_mode,
         node_integrated_image=node_integrated_image,
@@ -1072,7 +1102,6 @@ def _handle_network_create(args: argparse.Namespace) -> int:
             network=args.name,
             moniker=validator["moniker"],
             validator_key_ref=validator["validator_key_ref"],
-            runtime_backend=manifest.runtime_backend,
             node_image_mode=manifest.node_image_mode,
             node_integrated_image=manifest.node_integrated_image,
             node_split_image=manifest.node_split_image,
@@ -1099,7 +1128,6 @@ def _handle_network_create(args: argparse.Namespace) -> int:
             ),
             block_policy_mode=manifest.block_policy_mode,
             block_policy_interval=manifest.block_policy_interval,
-            tracer_mode=manifest.tracer_mode,
             **build_profile_runtime_fields(
                 args=args,
                 template=template,
@@ -1170,11 +1198,6 @@ def _handle_network_join(args: argparse.Namespace) -> int:
         configs_dir=args.configs_dir,
     )
     network = read_network_manifest(network_path)
-    runtime_backend = _pick_template_value(
-        args.runtime_backend,
-        None if template is None else template.get("runtime_backend"),
-        network.get("runtime_backend") or "xian-stack",
-    )
     if args.generate_validator_key and args.validator_key_ref is not None:
         raise ValueError(
             "pass either --validator-key-ref or --generate-validator-key, "
@@ -1255,7 +1278,6 @@ def _handle_network_join(args: argparse.Namespace) -> int:
         network=args.network,
         moniker=args.moniker or args.name,
         validator_key_ref=validator_key_ref,
-        runtime_backend=runtime_backend,
         node_image_mode=node_image_mode,
         node_integrated_image=node_integrated_image,
         node_split_image=node_split_image,
@@ -1282,11 +1304,6 @@ def _handle_network_join(args: argparse.Namespace) -> int:
             args.block_policy_interval,
             None if template is None else template.get("block_policy_interval"),
             network.get("block_policy_interval", "0s"),
-        ),
-        tracer_mode=_pick_template_value(
-            args.tracer_mode,
-            None if template is None else template.get("tracer_mode"),
-            network.get("tracer_mode", "python_line_v1"),
         ),
         **build_profile_runtime_fields(
             args=args,
@@ -1332,6 +1349,357 @@ def _handle_network_join(args: argparse.Namespace) -> int:
             indent=2,
         )
     )
+    return 0
+
+
+def _write_text_file(
+    path: Path,
+    content: str,
+    *,
+    force: bool = False,
+    executable: bool = False,
+) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if path.exists() and not force:
+        raise FileExistsError(
+            f"{path} already exists; pass --force to overwrite"
+        )
+    path.write_text(content, encoding="utf-8")
+    if executable:
+        path.chmod(path.stat().st_mode | 0o755)
+
+
+def _safe_bundle_relative_path(ref: str) -> Path:
+    path = Path(ref)
+    if path.is_absolute() or ".." in path.parts:
+        raise ValueError(f"bundle reference must stay relative: {ref}")
+    return path
+
+
+def _copy_optional_network_asset(
+    *,
+    manifest_path: Path,
+    bundle_dir: Path,
+    ref: str,
+    force: bool,
+) -> None:
+    source_path = _resolve_path(
+        ref,
+        base_dir=manifest_path.parent,
+        fallback_dir=manifest_path.parent,
+    )
+    if source_path is None or not source_path.exists():
+        raise FileNotFoundError(f"network asset not found: {ref}")
+    target_path = bundle_dir / _safe_bundle_relative_path(ref)
+    target_path.parent.mkdir(parents=True, exist_ok=True)
+    if target_path.exists() and not force:
+        raise FileExistsError(
+            f"{target_path} already exists; pass --force to overwrite"
+        )
+    shutil.copyfile(source_path, target_path)
+
+
+def _operator_join_script(*, network_name: str, service_node: bool) -> str:
+    if service_node:
+        service_args = """
+  --service-node
+  --enable-monitoring
+  --enable-dashboard
+  --dashboard-host "${DASHBOARD_HOST:-127.0.0.1}"
+  --dashboard-port "${DASHBOARD_PORT:-8080}"
+"""
+    else:
+        service_args = """
+  --no-service-node
+  --no-enable-monitoring
+  --no-enable-dashboard
+"""
+    return f"""#!/usr/bin/env bash
+set -euo pipefail
+
+BUNDLE_DIR="$(cd "$(dirname "${{BASH_SOURCE[0]}}")" && pwd)"
+XIAN_CMD="${{XIAN_CMD:-xian}}"
+NODE_NAME="${{NODE_NAME:?set NODE_NAME}}"
+if [[ -z "${{BOOTSTRAP_SEED:-}}" ]]; then
+  BOOTSTRAP_SEED="$(tr -d '\\n' < "${{BUNDLE_DIR}}/bootstrap-seed.txt")"
+fi
+PARALLEL_EXECUTION_WORKERS="${{PARALLEL_EXECUTION_WORKERS:-8}}"
+PARALLEL_MIN_TXS="${{PARALLEL_EXECUTION_MIN_TRANSACTIONS:-8}}"
+
+if [[ "${{BOOTSTRAP_SEED}}" == REPLACE_WITH_* ]]; then
+  echo "set BOOTSTRAP_SEED or update bootstrap-seed.txt before joining" >&2
+  exit 2
+fi
+
+args=(
+  network join "${{NODE_NAME}}"
+  --base-dir "${{BUNDLE_DIR}}"
+  --network "{network_name}"
+  --network-manifest "${{BUNDLE_DIR}}/manifest.json"
+  --generate-validator-key
+  --seed "${{BOOTSTRAP_SEED}}"
+  --simulation-enabled
+  --parallel-execution-enabled
+  --parallel-execution-workers "${{PARALLEL_EXECUTION_WORKERS}}"
+  --parallel-execution-min-transactions "${{PARALLEL_MIN_TXS}}"
+{service_args}  --init-node
+)
+
+if [[ -n "${{STACK_DIR:-}}" ]]; then
+  args+=(--stack-dir "${{STACK_DIR}}")
+fi
+if [[ -n "${{CONFIGS_DIR:-}}" ]]; then
+  args+=(--configs-dir "${{CONFIGS_DIR}}")
+fi
+if [[ -n "${{NODE_IMAGE_MODE:-}}" ]]; then
+  args+=(--node-image-mode "${{NODE_IMAGE_MODE}}")
+fi
+
+"${{XIAN_CMD}}" "${{args[@]}}"
+"${{XIAN_CMD}}" node start "${{NODE_NAME}}" --base-dir "${{BUNDLE_DIR}}"
+"${{XIAN_CMD}}" node health "${{NODE_NAME}}" --base-dir "${{BUNDLE_DIR}}"
+"""
+
+
+def _operator_bundle_readme(
+    *,
+    network_name: str,
+    chain_id: str,
+    includes_privacy_catalog: bool,
+) -> str:
+    privacy_note = (
+        "- `privacy/` - copied privacy artifact catalog referenced by the "
+        "manifest\n"
+        if includes_privacy_catalog
+        else ""
+    )
+    return f"""# {network_name} Operator Bundle
+
+This bundle is a shareable handoff for operators joining `{chain_id}`.
+
+## Included Files
+
+- `manifest.json` - modern network manifest
+- `genesis.json` - materialized genesis for this network
+- `bootstrap-seed.txt` - bootstrap seed placeholder or live seed
+- `participant-join.sh` - join as a lean validator-capable node
+- `participant-service-node.sh` - join with BDS, dashboard, and monitoring
+- `SMOKE-CHECKLIST.md` - quick post-start checks
+{privacy_note}
+No private validator keys, node homes, databases, or logs are included.
+
+## Lean Validator
+
+```bash
+NODE_NAME=<node-name> ./participant-join.sh
+```
+
+If `bootstrap-seed.txt` still contains a placeholder:
+
+```bash
+BOOTSTRAP_SEED='<node_id>@<public-host>:26656' \\
+  NODE_NAME=<node-name> \\
+  ./participant-join.sh
+```
+
+## Service Node
+
+```bash
+NODE_NAME=<node-name> ./participant-service-node.sh
+```
+
+Optional environment variables:
+
+- `XIAN_CMD` - xian CLI executable, defaults to `xian`
+- `STACK_DIR` - explicit `xian-stack` checkout
+- `CONFIGS_DIR` - explicit `xian-configs` checkout
+- `NODE_IMAGE_MODE` - override manifest image mode, for example `local_build`
+- `DASHBOARD_HOST` / `DASHBOARD_PORT` - service-node dashboard bind settings
+- `PARALLEL_EXECUTION_WORKERS` - defaults to `8`
+- `PARALLEL_EXECUTION_MIN_TRANSACTIONS` - defaults to `8`
+
+Keep RPC, GraphQL, Prometheus, and Grafana private unless you intentionally
+operate them as public services.
+"""
+
+
+def _operator_bundle_smoke_checklist(*, chain_id: str) -> str:
+    return f"""# Smoke Checklist
+
+Run after the node starts.
+
+```bash
+xian node health <node-name> --base-dir .
+xian node endpoints <node-name> --base-dir .
+curl -fsS http://127.0.0.1:26657/status
+```
+
+Confirm:
+
+- the status response reports network `{chain_id}`
+- `catching_up` becomes `false` after initial sync
+- service nodes expose dashboard status at `http://127.0.0.1:8080/api/status`
+- service nodes expose GraphQL at `http://127.0.0.1:5000/graphql`
+
+For validator onboarding, send the generated validator public key to the
+network coordinator after startup:
+
+```bash
+python3 - <<'PY'
+import json
+from pathlib import Path
+
+key_path = Path("keys/<node-name>/validator_key_info.json")
+payload = json.loads(key_path.read_text())
+print(payload["validator_public_key_hex"])
+PY
+```
+"""
+
+
+def _handle_network_package_operator_bundle(args: argparse.Namespace) -> int:
+    base_dir = args.base_dir.resolve()
+    manifest_path = resolve_network_manifest_path(
+        base_dir=base_dir,
+        network_name=args.network,
+        explicit_manifest=args.network_manifest,
+        configs_dir=args.configs_dir,
+    )
+    network = read_network_manifest(manifest_path)
+    output_dir = args.output or (
+        base_dir / "dist" / f"{network['name']}-operator-bundle"
+    )
+    if not output_dir.is_absolute():
+        output_dir = (base_dir / output_dir).resolve()
+    if output_dir.exists() and not output_dir.is_dir():
+        raise FileExistsError(f"bundle output is not a directory: {output_dir}")
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    genesis, genesis_ref = _resolve_effective_genesis_payload(
+        profile={},
+        network=network,
+        base_dir=base_dir,
+        manifest_path=manifest_path,
+        configs_dir=args.configs_dir,
+    )
+
+    bundled_manifest = dict(network)
+    bundled_manifest["genesis_source"] = "./genesis.json"
+    bundled_manifest["genesis_preset"] = None
+    bundled_manifest["genesis_time"] = None
+    if args.bootstrap_seed:
+        seed_nodes = list(bundled_manifest.get("seed_nodes") or [])
+        if args.bootstrap_seed not in seed_nodes:
+            seed_nodes.append(args.bootstrap_seed)
+        bundled_manifest["seed_nodes"] = seed_nodes
+
+    write_json(output_dir / "manifest.json", bundled_manifest, force=args.force)
+    write_json(
+        output_dir / "genesis.json",
+        genesis,
+        force=args.force,
+        preserve_runtime_types=True,
+    )
+
+    privacy_catalog = bundled_manifest.get("privacy_artifact_catalog")
+    includes_privacy_catalog = False
+    if isinstance(privacy_catalog, dict) and privacy_catalog.get("path"):
+        _copy_optional_network_asset(
+            manifest_path=manifest_path,
+            bundle_dir=output_dir,
+            ref=str(privacy_catalog["path"]),
+            force=args.force,
+        )
+        includes_privacy_catalog = True
+
+    bootstrap_seed = args.bootstrap_seed
+    if bootstrap_seed is None:
+        seed_nodes = bundled_manifest.get("seed_nodes") or []
+        bootstrap_seed = (
+            seed_nodes[0]
+            if seed_nodes
+            else "REPLACE_WITH_<node_id>@<public-host>:26656"
+        )
+    _write_text_file(
+        output_dir / "bootstrap-seed.txt",
+        f"{bootstrap_seed}\n",
+        force=args.force,
+    )
+    _write_text_file(
+        output_dir / "README.md",
+        _operator_bundle_readme(
+            network_name=network["name"],
+            chain_id=network["chain_id"],
+            includes_privacy_catalog=includes_privacy_catalog,
+        ),
+        force=args.force,
+    )
+    _write_text_file(
+        output_dir / "SMOKE-CHECKLIST.md",
+        _operator_bundle_smoke_checklist(chain_id=network["chain_id"]),
+        force=args.force,
+    )
+    _write_text_file(
+        output_dir / "participant-join.sh",
+        _operator_join_script(network_name=network["name"], service_node=False),
+        force=args.force,
+        executable=True,
+    )
+    _write_text_file(
+        output_dir / "participant-service-node.sh",
+        _operator_join_script(network_name=network["name"], service_node=True),
+        force=args.force,
+        executable=True,
+    )
+    bundle_metadata = {
+        "schema": "xian.operator_bundle.v1",
+        "schema_version": 1,
+        "network": network["name"],
+        "chain_id": network["chain_id"],
+        "source_manifest": str(manifest_path),
+        "source_genesis": genesis_ref,
+        "bootstrap_seed": bootstrap_seed,
+        "files": [
+            "manifest.json",
+            "genesis.json",
+            "bootstrap-seed.txt",
+            "README.md",
+            "SMOKE-CHECKLIST.md",
+            "participant-join.sh",
+            "participant-service-node.sh",
+        ],
+    }
+    if includes_privacy_catalog:
+        bundle_metadata["files"].append(str(privacy_catalog["path"]))
+    write_json(
+        output_dir / "operator-bundle.json",
+        bundle_metadata,
+        force=args.force,
+    )
+
+    archive_path = None
+    if args.archive:
+        candidate = output_dir.with_suffix(output_dir.suffix + ".tar.gz")
+        if candidate.exists() and not args.force:
+            raise FileExistsError(
+                f"{candidate} already exists; pass --force to overwrite"
+            )
+        archive_path = shutil.make_archive(
+            str(output_dir),
+            "gztar",
+            root_dir=output_dir.parent,
+            base_dir=output_dir.name,
+        )
+
+    result = {
+        "bundle_dir": str(output_dir),
+        "manifest_path": str(output_dir / "manifest.json"),
+        "genesis_path": str(output_dir / "genesis.json"),
+        "network": network["name"],
+        "chain_id": network["chain_id"],
+        "archive_path": archive_path,
+    }
+    print(json.dumps(result, indent=2))
     return 0
 
 
@@ -1539,21 +1907,11 @@ def _build_creation_genesis(
     )
 
 
-def _resolve_runtime_backend(profile: dict, network: dict) -> str:
-    runtime_backend = profile.get("runtime_backend") or network.get(
-        "runtime_backend"
-    )
-    if runtime_backend not in SUPPORTED_RUNTIME_BACKENDS:
-        raise ValueError(f"unsupported runtime backend: {runtime_backend}")
-    return runtime_backend
-
-
 def _resolve_home(
     *,
     base_dir: Path,
     profile: dict,
     profile_path: Path,
-    runtime_backend: str,
     stack_dir: Path | None,
     explicit_home: Path | None = None,
 ) -> Path:
@@ -1569,7 +1927,6 @@ def _resolve_home(
     if home is None:
         home = default_home_for_backend(
             base_dir=base_dir,
-            runtime_backend=runtime_backend,
             stack_dir=stack_dir,
         )
     return home
@@ -1608,7 +1965,6 @@ def _restore_snapshot(
     profile: dict,
     profile_path: Path,
     network: dict,
-    runtime_backend: str,
     stack_dir: Path | None,
     explicit_home: Path | None = None,
     explicit_snapshot_url: str | None = None,
@@ -1617,7 +1973,6 @@ def _restore_snapshot(
         base_dir=base_dir,
         profile=profile,
         profile_path=profile_path,
-        runtime_backend=runtime_backend,
         stack_dir=stack_dir,
         explicit_home=explicit_home,
     )
@@ -1729,7 +2084,7 @@ def _validate_recovery_context(
             if latest_height is not None:
                 try:
                     latest_height_int = int(latest_height)
-                except TypeError, ValueError:
+                except (TypeError, ValueError):
                     latest_height_int = None
                 if (
                     latest_height_int is not None
@@ -1782,7 +2137,6 @@ def _handle_recovery_validate(args: argparse.Namespace) -> int:
         network_arg=args.network,
         configs_dir=args.configs_dir,
     )
-    runtime_backend = _resolve_runtime_backend(profile, network)
     stack_dir = _resolve_stack_dir_from_profile(
         base_dir=base_dir,
         profile=profile,
@@ -1792,7 +2146,6 @@ def _handle_recovery_validate(args: argparse.Namespace) -> int:
         base_dir=base_dir,
         profile=profile,
         profile_path=profile_path,
-        runtime_backend=runtime_backend,
         stack_dir=stack_dir,
         explicit_home=args.home,
     )
@@ -1831,7 +2184,6 @@ def _handle_recovery_apply(args: argparse.Namespace) -> int:
         network_arg=args.network,
         configs_dir=args.configs_dir,
     )
-    runtime_backend = _resolve_runtime_backend(profile, network)
     stack_dir = _resolve_stack_dir_from_profile(
         base_dir=base_dir,
         profile=profile,
@@ -1841,7 +2193,6 @@ def _handle_recovery_apply(args: argparse.Namespace) -> int:
         base_dir=base_dir,
         profile=profile,
         profile_path=profile_path,
-        runtime_backend=runtime_backend,
         stack_dir=stack_dir,
         explicit_home=args.home,
     )
@@ -1866,7 +2217,7 @@ def _handle_recovery_apply(args: argparse.Namespace) -> int:
         return 0
 
     stop_result = None
-    if runtime_backend == "xian-stack" and not args.skip_stop:
+    if not args.skip_stop:
         if stack_dir is None:
             raise ValueError(
                 "recovery apply requires a resolved xian-stack directory "
@@ -1901,9 +2252,9 @@ def _handle_recovery_apply(args: argparse.Namespace) -> int:
 
     start_result = None
     if args.start_node:
-        if runtime_backend != "xian-stack" or stack_dir is None:
+        if stack_dir is None:
             raise ValueError(
-                "--start-node currently requires the xian-stack runtime backend"
+                "--start-node requires a resolved xian-stack directory"
             )
         start_result = start_xian_stack_node(
             stack_dir=stack_dir,
@@ -1977,7 +2328,6 @@ def _initialize_node_from_args(args: argparse.Namespace) -> dict:
         network_arg=args.network,
         configs_dir=args.configs_dir,
     )
-    runtime_backend = _resolve_runtime_backend(profile, network)
 
     stack_dir = _resolve_stack_dir_from_profile(
         base_dir=base_dir,
@@ -2024,7 +2374,6 @@ def _initialize_node_from_args(args: argparse.Namespace) -> dict:
         base_dir=base_dir,
         profile=profile,
         profile_path=profile_path,
-        runtime_backend=runtime_backend,
         stack_dir=stack_dir,
         explicit_home=args.home,
     )
@@ -2049,14 +2398,6 @@ def _initialize_node_from_args(args: argparse.Namespace) -> dict:
                 profile.get(
                     "block_policy_interval",
                     network.get("block_policy_interval", "0s"),
-                )
-            ),
-            execution=node_setup.ExecutionOptions(
-                tracer_mode=str(
-                    profile.get(
-                        "tracer_mode",
-                        network.get("tracer_mode", "python_line_v1"),
-                    )
                 )
             ),
             transaction_trace_logging=bool(
@@ -2085,13 +2426,7 @@ def _initialize_node_from_args(args: argparse.Namespace) -> dict:
             ),
             # The xian-stack runtime publishes the app metrics port from Docker,
             # so the in-container exporter must listen on all interfaces.
-            metrics=node_setup.MetricsOptions(
-                host=(
-                    "0.0.0.0"
-                    if runtime_backend == "xian-stack"
-                    else "127.0.0.1"
-                )
-            ),
+            metrics=node_setup.MetricsOptions(host="0.0.0.0"),
         )
     )
     config = configs["cometbft"]
@@ -2119,7 +2454,6 @@ def _initialize_node_from_args(args: argparse.Namespace) -> dict:
             profile=profile,
             profile_path=profile_path,
             network=network,
-            runtime_backend=runtime_backend,
             stack_dir=stack_dir,
             explicit_home=home,
             explicit_snapshot_url=getattr(args, "snapshot_url", None),
@@ -2144,7 +2478,6 @@ def _handle_node_start(args: argparse.Namespace) -> int:
         network_arg=args.network,
         configs_dir=args.configs_dir,
     )
-    runtime_backend = _resolve_runtime_backend(profile, network)
 
     stack_dir = resolve_stack_dir(
         base_dir,
@@ -2158,7 +2491,6 @@ def _handle_node_start(args: argparse.Namespace) -> int:
         base_dir=base_dir,
         profile=profile,
         profile_path=profile_path,
-        runtime_backend=runtime_backend,
         stack_dir=stack_dir,
     )
     config_path = home / "config" / "config.toml"
@@ -2209,7 +2541,6 @@ def _handle_node_stop(args: argparse.Namespace) -> int:
             base_dir=base_dir,
             profile=profile,
             profile_path=profile_path,
-            runtime_backend=_resolve_runtime_backend(profile, network),
             stack_dir=stack_dir,
         ),
         **_stack_runtime_profile_kwargs(profile, network),
@@ -2227,21 +2558,18 @@ def _resolve_node_context(args: argparse.Namespace) -> dict[str, object]:
         network_arg=args.network,
         configs_dir=args.configs_dir,
     )
-    runtime_backend = _resolve_runtime_backend(profile, network)
 
     stack_dir = _resolve_stack_dir_from_profile(
         base_dir=base_dir,
         profile=profile,
         explicit_stack_dir=args.stack_dir,
     )
-    if runtime_backend == "xian-stack":
-        stack_dir = resolve_stack_dir(base_dir, explicit=stack_dir)
+    stack_dir = resolve_stack_dir(base_dir, explicit=stack_dir)
 
     home = _resolve_home(
         base_dir=base_dir,
         profile=profile,
         profile_path=profile_path,
-        runtime_backend=runtime_backend,
         stack_dir=stack_dir,
         explicit_home=getattr(args, "home", None),
     )
@@ -2251,7 +2579,6 @@ def _resolve_node_context(args: argparse.Namespace) -> dict[str, object]:
         "profile": profile,
         "network_path": network_path,
         "network": network,
-        "runtime_backend": runtime_backend,
         "stack_dir": stack_dir,
         "home": home,
     }
@@ -2349,7 +2676,6 @@ def _collect_node_endpoints(args: argparse.Namespace) -> dict[str, object]:
     context = _resolve_node_context(args)
     profile = context["profile"]
     network = context["network"]
-    runtime_backend = context["runtime_backend"]
     stack_dir = context["stack_dir"]
     home = context["home"]
     rpc_status_url = getattr(args, "rpc_url", "http://127.0.0.1:26657/status")
@@ -2360,7 +2686,6 @@ def _collect_node_endpoints(args: argparse.Namespace) -> dict[str, object]:
     payload: dict[str, object] = {
         "profile_path": str(context["profile_path"]),
         "network_path": str(context["network_path"]),
-        "runtime_backend": runtime_backend,
         "node_image_mode": node_image_mode,
         "node_integrated_image": node_integrated_image,
         "node_split_image": node_split_image,
@@ -2379,7 +2704,7 @@ def _collect_node_endpoints(args: argparse.Namespace) -> dict[str, object]:
     if stack_dir is not None:
         payload["stack_dir"] = str(stack_dir)
 
-    if runtime_backend == "xian-stack" and stack_dir is not None:
+    if stack_dir is not None:
         try:
             backend_payload = get_xian_stack_node_endpoints(
                 stack_dir=stack_dir,
@@ -2553,7 +2878,6 @@ def _collect_node_status(
     profile = context["profile"]
     network_path = context["network_path"]
     network = context["network"]
-    runtime_backend = context["runtime_backend"]
     stack_dir = context["stack_dir"]
     home = context["home"]
     node_image_mode, node_integrated_image, node_split_image = (
@@ -2569,7 +2893,6 @@ def _collect_node_status(
     result: dict[str, object] = {
         "profile_path": str(profile_path),
         "network_path": str(network_path),
-        "runtime_backend": runtime_backend,
         "home": str(home),
         "initialized": config_path.exists() and xian_config_path.exists(),
         "config_present": config_path.exists(),
@@ -2620,11 +2943,7 @@ def _collect_node_status(
         except json.JSONDecodeError:
             result["node_id"] = None
 
-    if (
-        runtime_backend == "xian-stack"
-        and stack_dir is not None
-        and check_backend
-    ):
+    if stack_dir is not None and check_backend:
         try:
             backend_status = get_xian_stack_node_status(
                 stack_dir=stack_dir,
@@ -2724,7 +3043,6 @@ def _collect_node_health(args: argparse.Namespace) -> dict[str, object]:
     context = _resolve_node_context(args)
     profile = context["profile"]
     network = context["network"]
-    runtime_backend = context["runtime_backend"]
     stack_dir = context["stack_dir"]
     home = context["home"]
     node_image_mode, node_integrated_image, node_split_image = (
@@ -2734,7 +3052,6 @@ def _collect_node_health(args: argparse.Namespace) -> dict[str, object]:
     payload: dict[str, object] = {
         "profile_path": str(context["profile_path"]),
         "network_path": str(context["network_path"]),
-        "runtime_backend": runtime_backend,
         "node_image_mode": node_image_mode,
         "node_integrated_image": node_integrated_image,
         "node_split_image": node_split_image,
@@ -2763,7 +3080,7 @@ def _collect_node_health(args: argparse.Namespace) -> dict[str, object]:
             "error": str(exc),
         }
 
-    if runtime_backend == "xian-stack" and stack_dir is not None:
+    if stack_dir is not None:
         payload["health"] = get_xian_stack_node_health(
             stack_dir=stack_dir,
             cometbft_home=home,
@@ -2795,7 +3112,6 @@ def _handle_snapshot_restore(args: argparse.Namespace) -> int:
         network_arg=args.network,
         configs_dir=args.configs_dir,
     )
-    runtime_backend = _resolve_runtime_backend(profile, network)
     stack_dir = _resolve_stack_dir_from_profile(
         base_dir=base_dir,
         profile=profile,
@@ -2806,7 +3122,6 @@ def _handle_snapshot_restore(args: argparse.Namespace) -> int:
         profile=profile,
         profile_path=profile_path,
         network=network,
-        runtime_backend=runtime_backend,
         stack_dir=stack_dir,
         explicit_home=args.home,
         explicit_snapshot_url=args.snapshot_url,

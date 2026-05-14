@@ -8,8 +8,6 @@ from xian_cli.models import (
     SUPPORTED_BLOCK_POLICY_MODES,
     SUPPORTED_INTENTKIT_NETWORK_IDS,
     SUPPORTED_NODE_IMAGE_MODES,
-    SUPPORTED_RUNTIME_BACKENDS,
-    SUPPORTED_TRACER_MODES,
 )
 from xian_cli.runtime import DEFAULT_RPC_TIMEOUT_SECONDS
 
@@ -49,11 +47,6 @@ def add_node_profile_runtime_args(
         "--block-policy-interval",
         type=str,
         help="idle or periodic block interval, for example 10s",
-    )
-    parser.add_argument(
-        "--tracer-mode",
-        choices=sorted(SUPPORTED_TRACER_MODES),
-        help="execution tracer backend for contract metering",
     )
     parser.add_argument(
         "--transaction-trace-logging",
@@ -513,11 +506,44 @@ def build_parser() -> argparse.ArgumentParser:
     )
     solution_starter_parser.set_defaults(handler=cli._handle_solution_starter)
 
-    contract_parser = subparsers.add_parser(
-        "contract", help="contract bundle helpers"
-    )
+    contract_parser = subparsers.add_parser("contract", help="contract helpers")
     contract_subparsers = contract_parser.add_subparsers(
         dest="contract_command", required=True
+    )
+
+    contract_build_artifacts_parser = contract_subparsers.add_parser(
+        "build-artifacts",
+        help="build xian_vm_v1 deployment artifacts from contract source",
+    )
+    contract_build_artifacts_parser.add_argument(
+        "source",
+        type=Path,
+        help="contract source file path, or '-' to read from stdin",
+    )
+    contract_build_artifacts_parser.add_argument(
+        "--name",
+        help=(
+            "contract module name; defaults to the source filename, with "
+            "'.s.py' stripped when present"
+        ),
+    )
+    contract_build_artifacts_parser.add_argument(
+        "--output",
+        type=Path,
+        help="write artifact JSON to this path instead of stdout",
+    )
+    contract_build_artifacts_parser.add_argument(
+        "--no-lint",
+        action="store_true",
+        help="skip lint checks while building artifacts",
+    )
+    contract_build_artifacts_parser.add_argument(
+        "--force",
+        action="store_true",
+        help="overwrite --output when it already exists",
+    )
+    contract_build_artifacts_parser.set_defaults(
+        handler=cli._handle_contract_build_artifacts
     )
 
     contract_bundle_parser = contract_subparsers.add_parser(
@@ -567,13 +593,6 @@ def build_parser() -> argparse.ArgumentParser:
         help=(
             "whether this manifest describes joining an existing network "
             "or creating a new one"
-        ),
-    )
-    create_parser.add_argument(
-        "--runtime-backend",
-        choices=sorted(SUPPORTED_RUNTIME_BACKENDS),
-        help=(
-            "runtime backend used for this network; overrides template defaults"
         ),
     )
     create_parser.add_argument(
@@ -778,14 +797,6 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     join_parser.add_argument(
-        "--runtime-backend",
-        choices=sorted(SUPPORTED_RUNTIME_BACKENDS),
-        help=(
-            "node-local runtime backend override; defaults to the network "
-            "manifest value"
-        ),
-    )
-    join_parser.add_argument(
         "--node-image-mode",
         choices=sorted(SUPPORTED_NODE_IMAGE_MODES),
         help=(
@@ -877,6 +888,60 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     join_parser.set_defaults(handler=cli._handle_network_join)
+
+    operator_bundle_parser = network_subparsers.add_parser(
+        "package-operator-bundle",
+        help="package a shareable operator bundle for an existing network",
+    )
+    operator_bundle_parser.add_argument("network", help="network name")
+    operator_bundle_parser.add_argument(
+        "--base-dir",
+        type=Path,
+        default=Path.cwd(),
+        help=(
+            "workspace directory that may contain local ./networks and "
+            "optionally sibling repos"
+        ),
+    )
+    operator_bundle_parser.add_argument(
+        "--network-manifest",
+        type=Path,
+        help=(
+            "explicit network manifest path; overrides local and canonical "
+            "lookup"
+        ),
+    )
+    operator_bundle_parser.add_argument(
+        "--configs-dir",
+        type=Path,
+        help=(
+            "explicit xian-configs checkout path; defaults to XIAN_CONFIGS_DIR "
+            "or the sibling workspace layout"
+        ),
+    )
+    operator_bundle_parser.add_argument(
+        "--output",
+        type=Path,
+        help=(
+            "output directory; defaults to ./dist/<network>-operator-bundle"
+        ),
+    )
+    operator_bundle_parser.add_argument(
+        "--bootstrap-seed",
+        help=(
+            "bootstrap seed in <node_id>@<host>:26656 format to include in "
+            "the bundle and manifest"
+        ),
+    )
+    operator_bundle_parser.add_argument(
+        "--archive",
+        action="store_true",
+        help="also write a .tar.gz archive next to the output directory",
+    )
+    operator_bundle_parser.add_argument("--force", action="store_true")
+    operator_bundle_parser.set_defaults(
+        handler=cli._handle_network_package_operator_bundle
+    )
 
     node_parser = subparsers.add_parser("node", help="node lifecycle")
     node_subparsers = node_parser.add_subparsers(
