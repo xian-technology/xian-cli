@@ -39,16 +39,17 @@ jobs:
 
           expected = "${{ github.ref_name }}".removeprefix("v")
           dist_dir = pathlib.Path("dist")
-          files = [path.name for path in dist_dir.iterdir() if path.is_file()]
+          files = sorted(
+              path.name
+              for path in dist_dir.iterdir()
+              if path.is_file() and not path.name.startswith(".")
+          )
           if not files:
               raise SystemExit("No distribution artifacts were built")
 
           expected_wheel = f"xian_tech_cli-{expected}-py3-none-any.whl"
           expected_sdist = f"xian_tech_cli-{expected}.tar.gz"
-          if files != [expected_sdist, expected_wheel] and files != [
-              expected_wheel,
-              expected_sdist,
-          ]:
+          if files != sorted([expected_sdist, expected_wheel]):
               raise SystemExit(
                   "Built artifacts do not match the expected release set for "
                   f"{expected}: {files}"
