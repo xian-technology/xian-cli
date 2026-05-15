@@ -6,24 +6,39 @@ from pathlib import Path
 CONFIGS_REPO_NAME = "xian-configs"
 
 
+def _require_existing_dir(path: Path, *, label: str) -> Path:
+    resolved = path.expanduser().resolve()
+    if not resolved.exists():
+        raise FileNotFoundError(f"{label} does not exist: {resolved}")
+    if not resolved.is_dir():
+        raise NotADirectoryError(f"{label} is not a directory: {resolved}")
+    return resolved
+
+
 def resolve_configs_dir(
     base_dir: Path, *, explicit: Path | None = None
 ) -> Path:
-    candidates: list[Path] = []
-
     if explicit is not None:
-        candidates.append(explicit)
+        return _require_existing_dir(
+            explicit,
+            label="xian-configs directory",
+        )
 
     env_value = os.environ.get("XIAN_CONFIGS_DIR")
     if env_value:
-        candidates.append(Path(env_value))
+        return _require_existing_dir(
+            Path(env_value),
+            label="XIAN_CONFIGS_DIR",
+        )
+
+    candidates: list[Path] = []
 
     candidates.append(base_dir / CONFIGS_REPO_NAME)
     candidates.append(Path(__file__).resolve().parents[3] / CONFIGS_REPO_NAME)
 
     for candidate in candidates:
         resolved = candidate.expanduser().resolve()
-        if resolved.exists():
+        if resolved.is_dir():
             return resolved
 
     raise FileNotFoundError(
@@ -107,6 +122,8 @@ def list_network_template_paths(
             explicit=configs_dir,
         )
     except FileNotFoundError:
+        if configs_dir is not None or os.environ.get("XIAN_CONFIGS_DIR"):
+            raise
         resolved_configs_dir = None
 
     if resolved_configs_dir is not None:
@@ -161,6 +178,8 @@ def list_module_paths(
             explicit=configs_dir,
         )
     except FileNotFoundError:
+        if configs_dir is not None or os.environ.get("XIAN_CONFIGS_DIR"):
+            raise
         resolved_configs_dir = None
 
     if resolved_configs_dir is not None:
@@ -215,6 +234,8 @@ def list_solution_paths(
             explicit=configs_dir,
         )
     except FileNotFoundError:
+        if configs_dir is not None or os.environ.get("XIAN_CONFIGS_DIR"):
+            raise
         resolved_configs_dir = None
 
     if resolved_configs_dir is not None:

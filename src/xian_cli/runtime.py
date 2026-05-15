@@ -86,7 +86,16 @@ def _runtime_command_kwargs(values: Mapping[str, Any]) -> dict[str, Any]:
 
 def resolve_stack_dir(base_dir: Path, explicit: Path | None = None) -> Path:
     if explicit is not None:
-        return explicit.resolve()
+        resolved = explicit.expanduser().resolve()
+        if not resolved.exists():
+            raise FileNotFoundError(
+                f"xian-stack directory does not exist: {resolved}"
+            )
+        if not resolved.is_dir():
+            raise NotADirectoryError(
+                f"xian-stack path is not a directory: {resolved}"
+            )
+        return resolved
 
     candidate = (base_dir / "xian-stack").resolve()
     if candidate.exists():

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 
 from xian_cli.client.parser import register_client_commands
@@ -11,6 +12,13 @@ from xian_cli.models import (
     SUPPORTED_NODE_IMAGE_MODES,
 )
 from xian_cli.runtime import DEFAULT_RPC_TIMEOUT_SECONDS
+
+
+def _package_version() -> str:
+    try:
+        return version("xian-tech-cli")
+    except PackageNotFoundError:
+        return "unknown"
 
 
 def add_node_profile_runtime_args(
@@ -192,6 +200,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="xian",
         description="Operator CLI for Xian networks and nodes",
+    )
+    parser.add_argument(
+        "--version",
+        action="version",
+        version=f"%(prog)s {_package_version()}",
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
 

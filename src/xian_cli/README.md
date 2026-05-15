@@ -8,6 +8,14 @@ behind network manifests, node profiles, and backend integration.
 ## Contents
 
 - `cli.py`: the top-level command parser and workflow implementation
+- `commands/`: focused command implementations
+  - `catalog.py`: template, module, solution, contract, and key commands
+  - `network.py`: network create/join and operator bundle packaging
+  - `node.py`: node init/start/stop/status/endpoints/health and snapshots
+  - `node_context.py`: shared profile, genesis, key, home, and snapshot helpers
+  - `recovery.py`: recovery plan validation and application
+  - `doctor.py`: workspace and node diagnostics
+  - `common.py`: small shared formatting and runtime-option helpers
 - `client/`: automation-oriented wallet/query/transaction commands backed by
   `xian-py`, including artifact-backed contract submission
 - `models.py`: typed manifest, profile, and related config models
@@ -21,7 +29,9 @@ behind network manifests, node profiles, and backend integration.
 ```mermaid
 flowchart LR
   CLI["cli.py"] --> ConfigRepo["config_repo.py"]
-  CLI --> Runtime["runtime.py"]
+  CLI --> Commands["commands/*"]
+  Commands --> Runtime["runtime.py"]
+  Commands --> ConfigRepo
   CLI --> Client["client commands"]
   ConfigRepo --> Models["models.py"]
   ConfigRepo --> Bundles["contract_bundles.py"]

@@ -7,9 +7,11 @@ import io
 import json
 import os
 import subprocess
+import sys
 import tempfile
+import tomllib
 import unittest
-from contextlib import redirect_stdout
+from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
 from urllib.error import URLError
@@ -69,6 +71,23 @@ CANONICAL_RELEASE_SPLIT_IMAGE = (
     "ghcr.io/xian-technology/xian-node-split@sha256:"
     "2351ca938fe147af9bed8e827ac9c86de6686dbac228f3822de7e1b4ac41a54c"
 )
+
+
+class ParserUxTests(unittest.TestCase):
+    def test_top_level_version_flag_reports_package_version(self) -> None:
+        expected_version = tomllib.loads(
+            (Path(__file__).resolve().parents[1] / "pyproject.toml").read_text(
+                encoding="utf-8"
+            )
+        )["project"]["version"]
+        stdout = io.StringIO()
+
+        with redirect_stdout(stdout):
+            with self.assertRaises(SystemExit) as exc:
+                main(["--version"])
+
+        self.assertEqual(exc.exception.code, 0)
+        self.assertEqual(stdout.getvalue().strip(), f"xian {expected_version}")
 
 
 def _normalized_release_manifest(manifest: dict) -> dict:
@@ -799,6 +818,26 @@ class ClientCommandTests(unittest.TestCase):
                     "approve",
                 ]
             )
+
+    def test_console_main_reports_operational_errors_without_traceback(
+        self,
+    ) -> None:
+        stderr = io.StringIO()
+        with (
+            patch.object(
+                sys,
+                "argv",
+                ["xian", "client", "query", "balance", "alice"],
+            ),
+            redirect_stderr(stderr),
+        ):
+            exit_code = main()
+
+        self.assertEqual(exit_code, 1)
+        error = stderr.getvalue()
+        self.assertIn("xian: error:", error)
+        self.assertIn("node URL is required", error)
+        self.assertNotIn("Traceback", error)
 
 
 class ClientOutputTests(unittest.TestCase):
@@ -2107,7 +2146,7 @@ class NetworkManifestTests(unittest.TestCase):
             )()
 
             with patch(
-                "xian_cli.cli.get_genesis_builder_module",
+                "xian_cli.commands.node_context.get_genesis_builder_module",
                 return_value=genesis_builder,
             ):
                 with redirect_stdout(stdout):
@@ -2201,7 +2240,7 @@ class NetworkManifestTests(unittest.TestCase):
 
             stdout = io.StringIO()
             with patch(
-                "xian_cli.cli.get_genesis_builder_module",
+                "xian_cli.commands.node_context.get_genesis_builder_module",
                 return_value=genesis_builder,
             ):
                 with redirect_stdout(stdout):
@@ -2551,7 +2590,10 @@ class NodeInitTests(unittest.TestCase):
                 )
 
             stdout = io.StringIO()
-            with patch("xian_cli.cli.fetch_json", return_value=genesis_payload):
+            with patch(
+                "xian_cli.commands.node_context.fetch_json",
+                return_value=genesis_payload,
+            ):
                 with redirect_stdout(stdout):
                     exit_code = main(
                         [
@@ -2648,7 +2690,7 @@ class NodeInitTests(unittest.TestCase):
 
             stdout = io.StringIO()
             with patch(
-                "xian_cli.cli.fetch_json",
+                "xian_cli.commands.node_context.fetch_json",
                 return_value={
                     "chain_id": "xian-override-1",
                     "validators": [],
@@ -2982,7 +3024,7 @@ class NodeInitTests(unittest.TestCase):
             )()
             stdout = io.StringIO()
             with patch(
-                "xian_cli.cli.get_node_admin_module",
+                "xian_cli.commands.node_context.get_node_admin_module",
                 return_value=node_admin,
             ):
                 with redirect_stdout(stdout):
@@ -3071,7 +3113,9 @@ class NodeRuntimeTests(unittest.TestCase):
                 )
 
             stdout = io.StringIO()
-            with patch("xian_cli.cli.start_xian_stack_node") as start_node:
+            with patch(
+                "xian_cli.commands.node.start_xian_stack_node"
+            ) as start_node:
                 start_node.return_value = {
                     "stack_dir": str(stack_dir),
                     "container_target": "abci-up",
@@ -3189,7 +3233,9 @@ class NodeRuntimeTests(unittest.TestCase):
             )
 
             stdout = io.StringIO()
-            with patch("xian_cli.cli.start_xian_stack_node") as start_node:
+            with patch(
+                "xian_cli.commands.node.start_xian_stack_node"
+            ) as start_node:
                 start_node.return_value = {
                     "stack_dir": str(stack_dir),
                     "container_target": "abci-up",
@@ -3330,11 +3376,11 @@ class NodeRuntimeTests(unittest.TestCase):
 
             stdout = io.StringIO()
             with patch(
-                "xian_cli.cli.get_xian_stack_node_status",
+                "xian_cli.commands.node.get_xian_stack_node_status",
                 return_value=backend_status,
             ):
                 with patch(
-                    "xian_cli.cli.fetch_json",
+                    "xian_cli.commands.node.fetch_json",
                     return_value=rpc_status,
                 ):
                     with redirect_stdout(stdout):
@@ -3418,7 +3464,9 @@ class NodeRuntimeTests(unittest.TestCase):
                 )
 
             stdout = io.StringIO()
-            with patch("xian_cli.cli.stop_xian_stack_node") as stop_node:
+            with patch(
+                "xian_cli.commands.node.stop_xian_stack_node"
+            ) as stop_node:
                 stop_node.return_value = {
                     "stack_dir": str(stack_dir),
                     "container_target": "abci-bds-down",
@@ -3566,7 +3614,7 @@ class NodeRuntimeTests(unittest.TestCase):
 
             stdout = io.StringIO()
             with patch(
-                "xian_cli.cli.fetch_json",
+                "xian_cli.commands.node.fetch_json",
                 return_value={
                     "result": {
                         "node_info": {
@@ -3582,7 +3630,7 @@ class NodeRuntimeTests(unittest.TestCase):
                 },
             ):
                 with patch(
-                    "xian_cli.cli.get_xian_stack_node_status",
+                    "xian_cli.commands.node.get_xian_stack_node_status",
                     return_value={
                         "backend_running": True,
                         "node_id": "node-123",
@@ -3679,7 +3727,7 @@ class NodeRuntimeTests(unittest.TestCase):
 
             stdout = io.StringIO()
             with patch(
-                "xian_cli.cli.get_xian_stack_node_endpoints",
+                "xian_cli.commands.node.get_xian_stack_node_endpoints",
                 return_value={
                     "endpoints": {
                         "rpc": "http://127.0.0.1:26657",
@@ -3789,7 +3837,7 @@ trust_period = "336h0m0s"
 
             stdout = io.StringIO()
             with patch(
-                "xian_cli.cli.get_xian_stack_node_health",
+                "xian_cli.commands.node.get_xian_stack_node_health",
                 return_value={
                     "state": "healthy",
                     "checks": {"backend": {"ok": True}},
@@ -3907,19 +3955,19 @@ class DoctorTests(unittest.TestCase):
 
             stdout = io.StringIO()
             with patch(
-                "xian_cli.cli.get_node_setup_module",
+                "xian_cli.commands.doctor.get_node_setup_module",
                 return_value=type(
                     "NodeSetup", (), {"__name__": "node_setup"}
                 )(),
             ):
                 with patch(
-                    "xian_cli.cli.get_node_admin_module",
+                    "xian_cli.commands.doctor.get_node_admin_module",
                     return_value=type(
                         "NodeAdmin", (), {"__name__": "node_admin"}
                     )(),
                 ):
                     with patch(
-                        "xian_cli.cli.get_genesis_builder_module",
+                        "xian_cli.commands.doctor.get_genesis_builder_module",
                         return_value=type(
                             "GenesisBuilder",
                             (),
@@ -3928,7 +3976,7 @@ class DoctorTests(unittest.TestCase):
                     ):
                         with redirect_stdout(stdout):
                             with patch(
-                                "xian_cli.cli.get_xian_stack_node_status",
+                                "xian_cli.commands.node.get_xian_stack_node_status",
                                 return_value={
                                     "backend_running": True,
                                     "node_id": "node-123",
@@ -4025,19 +4073,19 @@ class DoctorTests(unittest.TestCase):
 
             stdout = io.StringIO()
             with patch(
-                "xian_cli.cli.get_node_setup_module",
+                "xian_cli.commands.doctor.get_node_setup_module",
                 return_value=type(
                     "NodeSetup", (), {"__name__": "node_setup"}
                 )(),
             ):
                 with patch(
-                    "xian_cli.cli.get_node_admin_module",
+                    "xian_cli.commands.doctor.get_node_admin_module",
                     return_value=type(
                         "NodeAdmin", (), {"__name__": "node_admin"}
                     )(),
                 ):
                     with patch(
-                        "xian_cli.cli.get_genesis_builder_module",
+                        "xian_cli.commands.doctor.get_genesis_builder_module",
                         return_value=type(
                             "GenesisBuilder",
                             (),
@@ -4045,7 +4093,7 @@ class DoctorTests(unittest.TestCase):
                         )(),
                     ):
                         with patch(
-                            "xian_cli.cli.fetch_json",
+                            "xian_cli.commands.node.fetch_json",
                             return_value={
                                 "result": {
                                     "node_info": {
@@ -4060,7 +4108,7 @@ class DoctorTests(unittest.TestCase):
                             },
                         ):
                             with patch(
-                                "xian_cli.cli.get_xian_stack_node_status",
+                                "xian_cli.commands.node.get_xian_stack_node_status",
                                 return_value={
                                     "backend_running": True,
                                     "node_id": "node-123",
@@ -4100,6 +4148,38 @@ class DoctorTests(unittest.TestCase):
             self.assertIn("dashboard", check_names)
             self.assertIn("prometheus", check_names)
             self.assertIn("grafana", check_names)
+
+    def test_doctor_returns_nonzero_when_workspace_check_fails(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            base_dir = Path(tmp_dir)
+            stdout = io.StringIO()
+            with redirect_stdout(stdout):
+                exit_code = main(
+                    [
+                        "doctor",
+                        "--base-dir",
+                        str(base_dir),
+                        "--configs-dir",
+                        str(base_dir / "missing-configs"),
+                        "--stack-dir",
+                        str(base_dir / "missing-stack"),
+                    ]
+                )
+
+            self.assertEqual(exit_code, 1)
+            result = json.loads(stdout.getvalue())
+            self.assertFalse(result["ok"])
+            failed_checks = {
+                check["name"]: check
+                for check in result["checks"]
+                if not check["ok"]
+            }
+            self.assertIn("configs_dir", failed_checks)
+            self.assertIn("stack_dir", failed_checks)
+            self.assertIn(
+                "does not exist",
+                failed_checks["configs_dir"]["detail"],
+            )
 
 
 class SnapshotCommandTests(unittest.TestCase):
@@ -4158,7 +4238,7 @@ class SnapshotCommandTests(unittest.TestCase):
             )()
             stdout = io.StringIO()
             with patch(
-                "xian_cli.cli.get_node_admin_module",
+                "xian_cli.commands.node_context.get_node_admin_module",
                 return_value=node_admin,
             ):
                 with redirect_stdout(stdout):
@@ -4499,15 +4579,15 @@ class SnapshotCommandTests(unittest.TestCase):
             stdout = io.StringIO()
             with (
                 patch(
-                    "xian_cli.cli.stop_xian_stack_node",
+                    "xian_cli.commands.recovery.stop_xian_stack_node",
                     stop_mock,
                 ),
                 patch(
-                    "xian_cli.cli.shutil.make_archive",
+                    "xian_cli.commands.recovery.shutil.make_archive",
                     backup_mock,
                 ),
                 patch(
-                    "xian_cli.cli.get_node_admin_module",
+                    "xian_cli.commands.recovery.get_node_admin_module",
                     return_value=node_admin,
                 ),
             ):
@@ -4556,6 +4636,16 @@ class RuntimeHelperTests(unittest.TestCase):
             Path(__file__).resolve().parents[2] / "xian-stack"
         ).resolve()
         self.assertEqual(resolved, expected)
+
+    def test_resolve_stack_dir_rejects_missing_explicit_path(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            missing = Path(tmp_dir) / "missing-stack"
+
+            with self.assertRaisesRegex(
+                FileNotFoundError,
+                "xian-stack directory does not exist",
+            ):
+                resolve_stack_dir(Path(tmp_dir), explicit=missing)
 
     def test_wait_for_rpc_ready_retries_until_result_is_available(self) -> None:
         expected_payload = {"result": {"node_info": {"network": "xian"}}}
@@ -4974,6 +5064,28 @@ class ConfigRepoTests(unittest.TestCase):
 
             with self.assertRaisesRegex(
                 ValueError, "unsupported schema_version"
+            ):
+                read_node_profile(profile_path)
+
+    def test_read_node_profile_rejects_boolean_port_values(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            profile_path = Path(tmp_dir) / "profile.json"
+            profile_path.write_text(
+                json.dumps(
+                    {
+                        "schema_version": 1,
+                        "name": "validator-1",
+                        "network": "mainnet",
+                        "moniker": "validator-1",
+                        "dashboard_port": True,
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            with self.assertRaisesRegex(
+                ValueError,
+                "dashboard_port must be an integer",
             ):
                 read_node_profile(profile_path)
 
@@ -5691,6 +5803,16 @@ class ConfigRepoTests(unittest.TestCase):
 
         expected = (WORKSPACE_ROOT / "xian-configs").resolve()
         self.assertEqual(resolved, expected)
+
+    def test_resolve_configs_dir_rejects_missing_explicit_path(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            missing = Path(tmp_dir) / "missing-configs"
+
+            with self.assertRaisesRegex(
+                FileNotFoundError,
+                "xian-configs directory does not exist",
+            ):
+                resolve_configs_dir(Path(tmp_dir), explicit=missing)
 
     def test_resolve_module_path_prefers_canonical_configs_repo(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
