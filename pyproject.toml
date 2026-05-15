@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "xian-tech-cli"
-version = "0.1.6"
+version = "0.1.7"
 description = "Operator CLI for Xian networks and nodes"
 readme = "README.md"
 license = "Apache-2.0"
@@ -12,7 +12,7 @@ authors = [{ name = "Xian Core Team" }]
 requires-python = ">=3.14"
 dependencies = [
     "pynacl>=1.6.2,<2",
-    "xian-tech-abci>=0.8.12,<0.9",
+    "xian-tech-abci>=0.8.13,<0.9",
     "xian-tech-contracting>=1.0.8,<2",
     "xian-tech-py>=0.4.17,<0.5",
 ]
