@@ -3390,10 +3390,28 @@ def build_parser() -> argparse.ArgumentParser:
     return _build_parser()
 
 
+def _resolve_handler(args: argparse.Namespace):
+    handler = getattr(args, "handler", None)
+    if callable(handler):
+        return handler
+
+    handler_name = getattr(args, "handler_name", None)
+    if isinstance(handler_name, str):
+        handler = globals().get(handler_name)
+        if callable(handler):
+            return handler
+
+    raise ValueError("parsed command has no callable handler")
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
-    return args.handler(args)
+    try:
+        handler = _resolve_handler(args)
+    except ValueError as exc:
+        parser.error(str(exc))
+    return handler(args)
 
 
 if __name__ == "__main__":

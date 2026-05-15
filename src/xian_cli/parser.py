@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
+from xian_cli.client.parser import register_client_commands
 from xian_cli.models import (
     SUPPORTED_APP_LOG_LEVELS,
     SUPPORTED_BLOCK_POLICY_MODES,
@@ -188,11 +189,6 @@ def add_node_profile_runtime_args(
 
 
 def build_parser() -> argparse.ArgumentParser:
-    # Import handlers lazily so parser wiring can live outside cli.py
-    # without creating an import cycle at module import time.
-    from xian_cli import cli
-    from xian_cli.client.parser import register_client_commands
-
     parser = argparse.ArgumentParser(
         prog="xian",
         description="Operator CLI for Xian networks and nodes",
@@ -232,7 +228,7 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="overwrite existing output files",
     )
-    generate_parser.set_defaults(handler=cli._handle_keys_validator_generate)
+    generate_parser.set_defaults(handler_name="_handle_keys_validator_generate")
 
     network_parser = subparsers.add_parser("network", help="network manifests")
     network_subparsers = network_parser.add_subparsers(
@@ -266,7 +262,9 @@ def build_parser() -> argparse.ArgumentParser:
             "or the sibling workspace layout"
         ),
     )
-    template_list_parser.set_defaults(handler=cli._handle_network_template_list)
+    template_list_parser.set_defaults(
+        handler_name="_handle_network_template_list"
+    )
 
     template_show_parser = template_subparsers.add_parser(
         "show", help="show one network template"
@@ -289,7 +287,9 @@ def build_parser() -> argparse.ArgumentParser:
             "or the sibling workspace layout"
         ),
     )
-    template_show_parser.set_defaults(handler=cli._handle_network_template_show)
+    template_show_parser.set_defaults(
+        handler_name="_handle_network_template_show"
+    )
 
     module_parser = subparsers.add_parser(
         "module",
@@ -319,7 +319,7 @@ def build_parser() -> argparse.ArgumentParser:
             "or the sibling workspace layout"
         ),
     )
-    module_list_parser.set_defaults(handler=cli._handle_module_list)
+    module_list_parser.set_defaults(handler_name="_handle_module_list")
 
     module_show_parser = module_subparsers.add_parser(
         "show", help="show one module"
@@ -342,7 +342,7 @@ def build_parser() -> argparse.ArgumentParser:
             "or the sibling workspace layout"
         ),
     )
-    module_show_parser.set_defaults(handler=cli._handle_module_show)
+    module_show_parser.set_defaults(handler_name="_handle_module_show")
 
     module_validate_parser = module_subparsers.add_parser(
         "validate", help="validate one module and its contract bundles"
@@ -365,7 +365,7 @@ def build_parser() -> argparse.ArgumentParser:
             "or the sibling workspace layout"
         ),
     )
-    module_validate_parser.set_defaults(handler=cli._handle_module_validate)
+    module_validate_parser.set_defaults(handler_name="_handle_module_validate")
 
     module_install_parser = module_subparsers.add_parser(
         "install", help="install a module onto a running network"
@@ -422,7 +422,7 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="print the resolved installer command without executing it",
     )
-    module_install_parser.set_defaults(handler=cli._handle_module_install)
+    module_install_parser.set_defaults(handler_name="_handle_module_install")
 
     solution_parser = subparsers.add_parser(
         "solution",
@@ -452,7 +452,7 @@ def build_parser() -> argparse.ArgumentParser:
             "or the sibling workspace layout"
         ),
     )
-    solution_list_parser.set_defaults(handler=cli._handle_solution_list)
+    solution_list_parser.set_defaults(handler_name="_handle_solution_list")
 
     solution_show_parser = solution_subparsers.add_parser(
         "show", help="show one solution"
@@ -475,7 +475,7 @@ def build_parser() -> argparse.ArgumentParser:
             "or the sibling workspace layout"
         ),
     )
-    solution_show_parser.set_defaults(handler=cli._handle_solution_show)
+    solution_show_parser.set_defaults(handler_name="_handle_solution_show")
 
     solution_starter_parser = solution_subparsers.add_parser(
         "starter",
@@ -504,7 +504,9 @@ def build_parser() -> argparse.ArgumentParser:
             "or the sibling workspace layout"
         ),
     )
-    solution_starter_parser.set_defaults(handler=cli._handle_solution_starter)
+    solution_starter_parser.set_defaults(
+        handler_name="_handle_solution_starter"
+    )
 
     contract_parser = subparsers.add_parser("contract", help="contract helpers")
     contract_subparsers = contract_parser.add_subparsers(
@@ -543,7 +545,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="overwrite --output when it already exists",
     )
     contract_build_artifacts_parser.set_defaults(
-        handler=cli._handle_contract_build_artifacts
+        handler_name="_handle_contract_build_artifacts"
     )
 
     contract_bundle_parser = contract_subparsers.add_parser(
@@ -560,7 +562,7 @@ def build_parser() -> argparse.ArgumentParser:
         "path", type=Path, help="path to contract-bundle.json"
     )
     contract_bundle_validate_parser.set_defaults(
-        handler=cli._handle_contract_bundle_validate
+        handler_name="_handle_contract_bundle_validate"
     )
 
     create_parser = network_subparsers.add_parser(
@@ -739,7 +741,7 @@ def build_parser() -> argparse.ArgumentParser:
             "without writing files"
         ),
     )
-    create_parser.set_defaults(handler=cli._handle_network_create)
+    create_parser.set_defaults(handler_name="_handle_network_create")
 
     join_parser = network_subparsers.add_parser(
         "join", help="create a node profile for joining an existing network"
@@ -887,7 +889,7 @@ def build_parser() -> argparse.ArgumentParser:
             "writing files"
         ),
     )
-    join_parser.set_defaults(handler=cli._handle_network_join)
+    join_parser.set_defaults(handler_name="_handle_network_join")
 
     operator_bundle_parser = network_subparsers.add_parser(
         "package-operator-bundle",
@@ -938,7 +940,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     operator_bundle_parser.add_argument("--force", action="store_true")
     operator_bundle_parser.set_defaults(
-        handler=cli._handle_network_package_operator_bundle
+        handler_name="_handle_network_package_operator_bundle"
     )
 
     node_parser = subparsers.add_parser("node", help="node lifecycle")
@@ -1015,7 +1017,7 @@ def build_parser() -> argparse.ArgumentParser:
             "if they already exist"
         ),
     )
-    init_parser.set_defaults(handler=cli._handle_node_init)
+    init_parser.set_defaults(handler_name="_handle_node_init")
 
     start_parser = node_subparsers.add_parser("start", help="start a node")
     start_parser.add_argument("name", help="node profile name")
@@ -1068,7 +1070,7 @@ def build_parser() -> argparse.ArgumentParser:
         default=DEFAULT_RPC_TIMEOUT_SECONDS,
         help="time to wait for the local RPC status endpoint",
     )
-    start_parser.set_defaults(handler=cli._handle_node_start)
+    start_parser.set_defaults(handler_name="_handle_node_start")
 
     stop_parser = node_subparsers.add_parser("stop", help="stop a node")
     stop_parser.add_argument("name", help="node profile name")
@@ -1110,7 +1112,7 @@ def build_parser() -> argparse.ArgumentParser:
             "or the sibling workspace layout"
         ),
     )
-    stop_parser.set_defaults(handler=cli._handle_node_stop)
+    stop_parser.set_defaults(handler_name="_handle_node_stop")
 
     status_parser = node_subparsers.add_parser(
         "status", help="inspect node bootstrap and RPC status"
@@ -1169,7 +1171,7 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="skip the live RPC status probe",
     )
-    status_parser.set_defaults(handler=cli._handle_node_status)
+    status_parser.set_defaults(handler_name="_handle_node_status")
 
     endpoints_parser = node_subparsers.add_parser(
         "endpoints",
@@ -1228,7 +1230,7 @@ def build_parser() -> argparse.ArgumentParser:
         default="http://127.0.0.1:26657/status",
         help="RPC status endpoint used to derive default host/port URLs",
     )
-    endpoints_parser.set_defaults(handler=cli._handle_node_endpoints)
+    endpoints_parser.set_defaults(handler_name="_handle_node_endpoints")
 
     health_parser = node_subparsers.add_parser(
         "health",
@@ -1291,7 +1293,7 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="skip the host-disk and data-volume health probe",
     )
-    health_parser.set_defaults(handler=cli._handle_node_health)
+    health_parser.set_defaults(handler_name="_handle_node_health")
 
     recovery_parser = subparsers.add_parser(
         "recovery",
@@ -1359,7 +1361,9 @@ def build_parser() -> argparse.ArgumentParser:
         default="http://127.0.0.1:26657/status",
         help="optional RPC status endpoint used for pre-recovery validation",
     )
-    recovery_validate_parser.set_defaults(handler=cli._handle_recovery_validate)
+    recovery_validate_parser.set_defaults(
+        handler_name="_handle_recovery_validate"
+    )
 
     recovery_apply_parser = recovery_subparsers.add_parser(
         "apply",
@@ -1463,7 +1467,7 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="confirm that the validated recovery plan should be applied",
     )
-    recovery_apply_parser.set_defaults(handler=cli._handle_recovery_apply)
+    recovery_apply_parser.set_defaults(handler_name="_handle_recovery_apply")
 
     snapshot_parser = subparsers.add_parser("snapshot", help="snapshot tools")
     snapshot_subparsers = snapshot_parser.add_subparsers(
@@ -1522,7 +1526,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--snapshot-url",
         help="explicit snapshot URL override",
     )
-    restore_parser.set_defaults(handler=cli._handle_snapshot_restore)
+    restore_parser.set_defaults(handler_name="_handle_snapshot_restore")
 
     doctor_parser = subparsers.add_parser(
         "doctor",
@@ -1586,6 +1590,6 @@ def build_parser() -> argparse.ArgumentParser:
             "skip backend, RPC, dashboard, and monitoring reachability"
         ),
     )
-    doctor_parser.set_defaults(handler=cli._handle_doctor)
+    doctor_parser.set_defaults(handler_name="_handle_doctor")
 
     return parser
