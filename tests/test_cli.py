@@ -1256,6 +1256,11 @@ class NetworkManifestTests(unittest.TestCase):
                             dashboard_host="0.0.0.0",
                             dashboard_port=18080,
                         ),
+                        "advanced": {
+                            "metrics": {
+                                "host": "0.0.0.0",
+                            },
+                        },
                         "pruning_enabled": False,
                         "blocks_to_keep": 100000,
                     }
@@ -1320,6 +1325,16 @@ class NetworkManifestTests(unittest.TestCase):
                 profile["services"]["dashboard"]["host"], "0.0.0.0"
             )
             self.assertEqual(profile["services"]["dashboard"]["port"], 18080)
+            self.assertEqual(profile["advanced"]["metrics"]["host"], "0.0.0.0")
+            self.assertEqual(
+                profile["advanced"]["metrics"]["bds_refresh_seconds"], 5.0
+            )
+            self.assertEqual(
+                profile["advanced"]["parallel_execution"][
+                    "max_speculative_waves"
+                ],
+                4,
+            )
 
     def test_network_package_operator_bundle_materializes_shareable_files(
         self,
@@ -2149,7 +2164,7 @@ class NetworkManifestTests(unittest.TestCase):
                 "keys/validator-1/validator_key_info.json",
             )
             self.assertNotIn("[xian]", config_toml)
-            self.assertIn('metrics_host = "0.0.0.0"', xian_toml)
+            self.assertIn('metrics_host = "127.0.0.1"', xian_toml)
 
     def test_network_create_can_bootstrap_local_network(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -5174,6 +5189,10 @@ class ConfigRepoTests(unittest.TestCase):
         self.assertFalse(profile["services"]["dex_automation"]["enabled"])
         self.assertFalse(profile["services"]["shielded_relayer"]["enabled"])
         self.assertEqual(profile["parallel_execution_workers"], 4)
+        self.assertEqual(
+            profile["advanced"]["metrics"]["host"],
+            "127.0.0.1",
+        )
         self.assertEqual(
             profile["advanced"]["parallel_execution"]["max_speculative_waves"],
             4,

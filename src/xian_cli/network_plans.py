@@ -68,6 +68,19 @@ def _nested_template_value(
     return default if item_value is None else item_value
 
 
+def _merge_mapping_defaults(
+    defaults: Mapping[str, Any],
+    overrides: Mapping[str, Any],
+) -> dict[str, Any]:
+    merged = deepcopy(defaults)
+    for key, value in overrides.items():
+        if isinstance(value, Mapping) and isinstance(merged.get(key), Mapping):
+            merged[key] = _merge_mapping_defaults(merged[key], value)
+        else:
+            merged[key] = deepcopy(value)
+    return merged
+
+
 def _service_template_value(
     template: Mapping[str, Any] | None,
     service: str,
@@ -460,7 +473,7 @@ def build_profile_runtime_fields(
     fields["services"] = services
     advanced = deepcopy(DEFAULT_ADVANCED_RUNTIME)
     if template is not None and isinstance(template.get("advanced"), Mapping):
-        advanced = deepcopy(template["advanced"])
+        advanced = _merge_mapping_defaults(advanced, template["advanced"])
     fields["advanced"] = advanced
     if (
         fields["parallel_execution_enabled"]

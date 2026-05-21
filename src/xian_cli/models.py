@@ -136,7 +136,7 @@ DEFAULT_ADVANCED_RUNTIME = {
     },
     "metrics": {
         "enabled": True,
-        "host": "0.0.0.0",
+        "host": "127.0.0.1",
         "port": 9108,
         "bds_refresh_seconds": 5.0,
     },

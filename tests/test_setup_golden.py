@@ -58,7 +58,7 @@ class GoldenSetupPlanTests(unittest.TestCase):
             self.assertEqual(cometbft_config["moniker"], "node-0")
             self.assertEqual(cometbft_config["p2p"]["seeds"], "")
             self.assertNotIn("tracer_mode", xian_config)
-            self.assertEqual(xian_config["metrics_host"], "0.0.0.0")
+            self.assertEqual(xian_config["metrics_host"], "127.0.0.1")
             self.assertTrue((home / "config" / "genesis.json").exists())
 
 
