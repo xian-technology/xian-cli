@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import decimal
 import json
+from copy import deepcopy
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
@@ -10,9 +11,9 @@ from xian_runtime_types.encoding import encode
 from xian_runtime_types.time import Datetime
 
 SCHEMA_VERSION = 1
-SUPPORTED_NETWORK_MODES = {"join", "create"}
 SUPPORTED_BLOCK_POLICY_MODES = {"on_demand", "idle_interval", "periodic"}
 SUPPORTED_NODE_IMAGE_MODES = {"local_build", "registry"}
+SUPPORTED_GENESIS_KINDS = {"source", "bundle"}
 SUPPORTED_OPERATOR_PROFILES = {
     "local_development",
     "indexed_development",
@@ -22,7 +23,7 @@ SUPPORTED_OPERATOR_PROFILES = {
 SUPPORTED_MONITORING_PROFILES = {
     "none",
     "local_stack",
-    "service_node",
+    "bds",
 }
 SUPPORTED_INTENTKIT_NETWORK_IDS = {
     "xian-mainnet",
@@ -64,6 +65,94 @@ SUPPORTED_MODULE_INSTALL_KINDS = {
     "xian-stack.localnet-dex-bootstrap",
 }
 
+DEFAULT_P2P = {
+    "seeds": [],
+    "persistent_peers": [],
+}
+
+DEFAULT_SERVICES = {
+    "bds": {
+        "enabled": False,
+        "dsn": "",
+        "host": "",
+        "port": 5432,
+        "database": "xian",
+        "user": "",
+        "password": "",
+        "pool_min_size": 1,
+        "pool_max_size": 10,
+        "statement_timeout_ms": 0,
+        "acquire_timeout_ms": 10000,
+        "application_name": "xian-bds",
+        "queue_max_size": 128,
+        "catchup_enabled": True,
+        "catchup_poll_seconds": 1.0,
+        "rpc_url": None,
+        "spool_dir": "",
+        "spool_warn_entries": 256,
+        "spool_warn_bytes": 536_870_912,
+        "disk_free_warn_bytes": 2_147_483_648,
+    },
+    "dashboard": {
+        "enabled": False,
+        "host": "127.0.0.1",
+        "port": 8080,
+    },
+    "monitoring": {
+        "enabled": False,
+    },
+    "intentkit": {
+        "enabled": False,
+        "network_id": None,
+        "host": "127.0.0.1",
+        "port": 38000,
+        "api_port": 38080,
+    },
+    "dex_automation": {
+        "enabled": False,
+        "host": "127.0.0.1",
+        "port": 38280,
+        "config": None,
+    },
+    "shielded_relayer": {
+        "enabled": False,
+        "host": "127.0.0.1",
+        "port": 38180,
+    },
+}
+
+DEFAULT_ADVANCED_RUNTIME = {
+    "cometbft": {
+        "allow_cors": True,
+        "prometheus": True,
+        "proxy_app": "unix:///tmp/abci.sock",
+    },
+    "statesync": {
+        "enabled": False,
+        "rpc_servers": [],
+        "trust_height": 0,
+        "trust_hash": "",
+        "trust_period": "168h0m0s",
+    },
+    "metrics": {
+        "enabled": True,
+        "host": "0.0.0.0",
+        "port": 9108,
+        "bds_refresh_seconds": 5.0,
+    },
+    "pending_nonce": {
+        "reservation_ttl_seconds": 60.0,
+        "max_per_sender": 128,
+    },
+    "parallel_execution": {
+        "max_speculative_waves": 4,
+        "min_wave_acceptance_ratio": 0.25,
+        "low_acceptance_min_wave_size": 8,
+        "warm_workers": True,
+        "access_estimates_enabled": True,
+    },
+}
+
 
 def _require_str(payload: dict, key: str) -> str:
     value = payload.get(key)
@@ -76,8 +165,8 @@ def _require_optional_str(payload: dict, key: str) -> str | None:
     value = payload.get(key)
     if value is None:
         return None
-    if not isinstance(value, str) or not value:
-        raise ValueError(f"{key} must be a non-empty string when provided")
+    if not isinstance(value, str):
+        raise ValueError(f"{key} must be a string when provided")
     return value
 
 
@@ -117,6 +206,13 @@ def _require_int(payload: dict, key: str, *, default: int) -> int:
     return value
 
 
+def _require_float(payload: dict, key: str, *, default: float) -> float:
+    value = payload.get(key, default)
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise ValueError(f"{key} must be a number")
+    return float(value)
+
+
 def _require_non_negative_int(payload: dict, key: str, *, default: int) -> int:
     value = payload.get(key, default)
     if isinstance(value, bool) or not isinstance(value, int) or value < 0:
@@ -145,6 +241,49 @@ def _require_str_list(payload: dict, key: str) -> list[str]:
     ):
         raise ValueError(f"{key} must be a list of non-empty strings")
     return value
+
+
+def _require_object(
+    payload: dict,
+    key: str,
+    *,
+    default: dict | None = None,
+) -> dict:
+    value = payload.get(key, deepcopy(default or {}))
+    if not isinstance(value, dict):
+        raise ValueError(f"{key} must be an object")
+    return value
+
+
+def _require_optional_object(payload: dict, key: str) -> dict | None:
+    value = payload.get(key)
+    if value is None:
+        return None
+    if not isinstance(value, dict):
+        raise ValueError(f"{key} must be an object when provided")
+    return value
+
+
+def _require_port(payload: dict, key: str, *, default: int) -> int:
+    value = _require_int(payload, key, default=default)
+    if value < 1 or value > 65535:
+        raise ValueError(f"{key} must be between 1 and 65535")
+    return value
+
+
+def _merge_defaults(defaults: dict, value: dict | None) -> dict:
+    merged = deepcopy(defaults)
+    if value is None:
+        return merged
+    for key, nested in value.items():
+        if (
+            isinstance(nested, dict)
+            and isinstance(merged.get(key), dict)
+        ):
+            merged[key] = _merge_defaults(merged[key], nested)
+        else:
+            merged[key] = nested
+    return merged
 
 
 def _normalize_node_release_manifest(
@@ -385,10 +524,29 @@ def _require_schema(payload: dict, *, expected: str) -> str:
     return schema
 
 
-def _reject_removed_fields(payload: dict, *keys: str) -> None:
-    for key in keys:
-        if key in payload:
-            raise ValueError(f"{key} has been removed")
+def _reject_unknown_fields(
+    payload: dict,
+    *,
+    allowed: set[str],
+    label: str,
+) -> None:
+    unknown = sorted(set(payload) - allowed)
+    if unknown:
+        fields = ", ".join(unknown)
+        raise ValueError(f"{label} has unknown field(s): {fields}")
+
+
+def _reject_unknown_object_fields(
+    value: object,
+    *,
+    allowed: set[str],
+    label: str,
+) -> None:
+    if value is None:
+        return
+    if not isinstance(value, dict):
+        raise ValueError(f"{label} must be an object")
+    _reject_unknown_fields(value, allowed=allowed, label=label)
 
 
 def _require_node_image_mode(payload: dict, key: str) -> str:
@@ -460,19 +618,354 @@ def _require_app_log_level(payload: dict, key: str) -> str:
     return normalized
 
 
-def _require_mode(payload: dict) -> str:
-    mode = _require_str(payload, "mode")
-    if mode not in SUPPORTED_NETWORK_MODES:
+def _normalize_genesis(payload: dict, key: str = "genesis") -> dict:
+    value = _require_object(payload, key)
+    kind = _require_str(value, "kind")
+    if kind not in SUPPORTED_GENESIS_KINDS:
         raise ValueError(
-            f"mode must be one of {sorted(SUPPORTED_NETWORK_MODES)}"
+            f"{key}.kind must be one of {sorted(SUPPORTED_GENESIS_KINDS)}"
         )
-    return mode
+    if kind == "source":
+        _reject_unknown_fields(
+            value,
+            allowed={"kind", "source"},
+            label=key,
+        )
+        source = _require_str(value, "source")
+        if "bundle" in value or "genesis_time" in value:
+            raise ValueError(
+                f"{key}.source genesis must not include bundle or genesis_time"
+            )
+        return {"kind": "source", "source": source}
+
+    _reject_unknown_fields(
+        value,
+        allowed={"kind", "bundle", "genesis_time"},
+        label=key,
+    )
+    bundle = _require_str(value, "bundle")
+    if "source" in value:
+        raise ValueError(f"{key}.bundle genesis must not include source")
+    return {
+        "kind": "bundle",
+        "bundle": bundle,
+        "genesis_time": _require_optional_str(value, "genesis_time"),
+    }
+
+
+def _normalize_optional_genesis(
+    payload: dict,
+    key: str = "genesis",
+) -> dict | None:
+    if payload.get(key) is None:
+        return None
+    return _normalize_genesis(payload, key)
+
+
+def _normalize_p2p(payload: dict, key: str = "p2p") -> dict:
+    _reject_unknown_object_fields(
+        payload.get(key),
+        allowed=set(DEFAULT_P2P),
+        label=key,
+    )
+    value = _merge_defaults(DEFAULT_P2P, payload.get(key))
+    if not isinstance(value, dict):
+        raise ValueError(f"{key} must be an object")
+    return {
+        "seeds": _require_str_list(value, "seeds"),
+        "persistent_peers": _require_str_list(value, "persistent_peers"),
+    }
+
+
+def _normalize_bds_service(payload: dict, key: str) -> dict:
+    _reject_unknown_object_fields(
+        payload,
+        allowed=set(DEFAULT_SERVICES["bds"]),
+        label=key,
+    )
+    value = _merge_defaults(DEFAULT_SERVICES["bds"], payload)
+    pool_min_size = _require_non_negative_int(
+        value, "pool_min_size", default=1
+    )
+    pool_max_size = _require_positive_int(value, "pool_max_size", default=10)
+    if pool_min_size > pool_max_size:
+        raise ValueError(f"{key}.pool_min_size must be <= pool_max_size")
+    catchup_poll_seconds = _require_float(
+        value, "catchup_poll_seconds", default=1.0
+    )
+    if catchup_poll_seconds <= 0:
+        raise ValueError(
+            f"{key}.catchup_poll_seconds must be greater than zero"
+        )
+    return {
+        "enabled": _require_bool(value, "enabled", default=False),
+        "dsn": _require_optional_str(value, "dsn") or "",
+        "host": _require_optional_str(value, "host") or "",
+        "port": _require_port(value, "port", default=5432),
+        "database": _require_str(value, "database"),
+        "user": _require_optional_str(value, "user") or "",
+        "password": _require_optional_str(value, "password") or "",
+        "pool_min_size": pool_min_size,
+        "pool_max_size": pool_max_size,
+        "statement_timeout_ms": _require_non_negative_int(
+            value, "statement_timeout_ms", default=0
+        ),
+        "acquire_timeout_ms": _require_non_negative_int(
+            value, "acquire_timeout_ms", default=10000
+        ),
+        "application_name": _require_str(value, "application_name"),
+        "queue_max_size": _require_positive_int(
+            value, "queue_max_size", default=128
+        ),
+        "catchup_enabled": _require_bool(
+            value, "catchup_enabled", default=True
+        ),
+        "catchup_poll_seconds": catchup_poll_seconds,
+        "rpc_url": _require_optional_str(value, "rpc_url"),
+        "spool_dir": _require_optional_str(value, "spool_dir") or "",
+        "spool_warn_entries": _require_non_negative_int(
+            value, "spool_warn_entries", default=256
+        ),
+        "spool_warn_bytes": _require_non_negative_int(
+            value, "spool_warn_bytes", default=536_870_912
+        ),
+        "disk_free_warn_bytes": _require_non_negative_int(
+            value, "disk_free_warn_bytes", default=2_147_483_648
+        ),
+    }
+
+
+def _normalize_services(
+    payload: dict,
+    *,
+    intentkit_network_id_default: str | None = None,
+) -> dict:
+    services_input = payload.get("services")
+    _reject_unknown_object_fields(
+        services_input,
+        allowed=set(DEFAULT_SERVICES),
+        label="services",
+    )
+    if isinstance(services_input, dict):
+        for service_name, defaults in DEFAULT_SERVICES.items():
+            _reject_unknown_object_fields(
+                services_input.get(service_name),
+                allowed=set(defaults),
+                label=f"services.{service_name}",
+            )
+    raw = _merge_defaults(DEFAULT_SERVICES, services_input)
+    if not isinstance(raw, dict):
+        raise ValueError("services must be an object")
+    dashboard = _merge_defaults(
+        DEFAULT_SERVICES["dashboard"], raw.get("dashboard")
+    )
+    intentkit_defaults = deepcopy(DEFAULT_SERVICES["intentkit"])
+    if intentkit_network_id_default is not None:
+        intentkit_defaults["network_id"] = intentkit_network_id_default
+    intentkit = _merge_defaults(intentkit_defaults, raw.get("intentkit"))
+    dex = _merge_defaults(
+        DEFAULT_SERVICES["dex_automation"], raw.get("dex_automation")
+    )
+    relayer = _merge_defaults(
+        DEFAULT_SERVICES["shielded_relayer"], raw.get("shielded_relayer")
+    )
+    return {
+        "bds": _normalize_bds_service(raw.get("bds") or {}, "services.bds"),
+        "dashboard": {
+            "enabled": _require_bool(dashboard, "enabled", default=False),
+            "host": _require_str(dashboard, "host"),
+            "port": _require_port(dashboard, "port", default=8080),
+        },
+        "monitoring": {
+            "enabled": _require_bool(
+                raw.get("monitoring") or {}, "enabled", default=False
+            ),
+        },
+        "intentkit": {
+            "enabled": _require_bool(intentkit, "enabled", default=False),
+            "network_id": _require_optional_choice(
+                intentkit,
+                "network_id",
+                supported=SUPPORTED_INTENTKIT_NETWORK_IDS,
+                default=intentkit.get("network_id"),
+            ),
+            "host": _require_str(intentkit, "host"),
+            "port": _require_port(intentkit, "port", default=38000),
+            "api_port": _require_port(intentkit, "api_port", default=38080),
+        },
+        "dex_automation": {
+            "enabled": _require_bool(dex, "enabled", default=False),
+            "host": _require_str(dex, "host"),
+            "port": _require_port(dex, "port", default=38280),
+            "config": _require_optional_str(dex, "config"),
+        },
+        "shielded_relayer": {
+            "enabled": _require_bool(relayer, "enabled", default=False),
+            "host": _require_str(relayer, "host"),
+            "port": _require_port(relayer, "port", default=38180),
+        },
+    }
+
+
+def _normalize_advanced_runtime(payload: dict) -> dict:
+    advanced_input = payload.get("advanced")
+    _reject_unknown_object_fields(
+        advanced_input,
+        allowed=set(DEFAULT_ADVANCED_RUNTIME),
+        label="advanced",
+    )
+    if isinstance(advanced_input, dict):
+        for section_name, defaults in DEFAULT_ADVANCED_RUNTIME.items():
+            _reject_unknown_object_fields(
+                advanced_input.get(section_name),
+                allowed=set(defaults),
+                label=f"advanced.{section_name}",
+            )
+    raw = _merge_defaults(DEFAULT_ADVANCED_RUNTIME, advanced_input)
+    if not isinstance(raw, dict):
+        raise ValueError("advanced must be an object")
+    cometbft = _merge_defaults(
+        DEFAULT_ADVANCED_RUNTIME["cometbft"], raw.get("cometbft")
+    )
+    statesync = _merge_defaults(
+        DEFAULT_ADVANCED_RUNTIME["statesync"], raw.get("statesync")
+    )
+    metrics = _merge_defaults(
+        DEFAULT_ADVANCED_RUNTIME["metrics"], raw.get("metrics")
+    )
+    pending_nonce = _merge_defaults(
+        DEFAULT_ADVANCED_RUNTIME["pending_nonce"], raw.get("pending_nonce")
+    )
+    parallel_execution = _merge_defaults(
+        DEFAULT_ADVANCED_RUNTIME["parallel_execution"],
+        raw.get("parallel_execution"),
+    )
+    metrics_refresh = _require_float(
+        metrics, "bds_refresh_seconds", default=5.0
+    )
+    if metrics_refresh <= 0:
+        raise ValueError(
+            "advanced.metrics.bds_refresh_seconds must be greater than zero"
+        )
+    statesync_enabled = _require_bool(statesync, "enabled", default=False)
+    statesync_servers = _require_str_list(statesync, "rpc_servers")
+    statesync_trust_height = _require_non_negative_int(
+        statesync, "trust_height", default=0
+    )
+    statesync_trust_hash = _require_optional_str(statesync, "trust_hash") or ""
+    statesync_trust_period = _require_str(statesync, "trust_period")
+    if statesync_enabled:
+        if len(statesync_servers) < 2:
+            raise ValueError(
+                "advanced.statesync.rpc_servers must include at least two "
+                "servers when state sync is enabled"
+            )
+        if statesync_trust_height <= 0:
+            raise ValueError(
+                "advanced.statesync.trust_height must be greater than zero "
+                "when state sync is enabled"
+            )
+        if not statesync_trust_hash:
+            raise ValueError(
+                "advanced.statesync.trust_hash is required when state sync "
+                "is enabled"
+            )
+    min_wave_acceptance_ratio = _require_float(
+        parallel_execution, "min_wave_acceptance_ratio", default=0.25
+    )
+    if not 0.0 <= min_wave_acceptance_ratio <= 1.0:
+        raise ValueError(
+            "advanced.parallel_execution.min_wave_acceptance_ratio must be "
+            "between 0.0 and 1.0"
+        )
+    pending_nonce_ttl = _require_float(
+        pending_nonce, "reservation_ttl_seconds", default=60.0
+    )
+    if pending_nonce_ttl < 0:
+        raise ValueError(
+            "advanced.pending_nonce.reservation_ttl_seconds must be "
+            "non-negative"
+        )
+    return {
+        "cometbft": {
+            "allow_cors": _require_bool(cometbft, "allow_cors", default=True),
+            "prometheus": _require_bool(cometbft, "prometheus", default=True),
+            "proxy_app": _require_str(cometbft, "proxy_app"),
+        },
+        "statesync": {
+            "enabled": statesync_enabled,
+            "rpc_servers": statesync_servers,
+            "trust_height": statesync_trust_height,
+            "trust_hash": statesync_trust_hash,
+            "trust_period": statesync_trust_period,
+        },
+        "metrics": {
+            "enabled": _require_bool(metrics, "enabled", default=True),
+            "host": _require_str(metrics, "host"),
+            "port": _require_port(metrics, "port", default=9108),
+            "bds_refresh_seconds": metrics_refresh,
+        },
+        "pending_nonce": {
+            "reservation_ttl_seconds": pending_nonce_ttl,
+            "max_per_sender": _require_positive_int(
+                pending_nonce, "max_per_sender", default=128
+            ),
+        },
+        "parallel_execution": {
+            "max_speculative_waves": _require_non_negative_int(
+                parallel_execution, "max_speculative_waves", default=4
+            ),
+            "min_wave_acceptance_ratio": min_wave_acceptance_ratio,
+            "low_acceptance_min_wave_size": _require_positive_int(
+                parallel_execution, "low_acceptance_min_wave_size", default=8
+            ),
+            "warm_workers": _require_bool(
+                parallel_execution, "warm_workers", default=True
+            ),
+            "access_estimates_enabled": _require_bool(
+                parallel_execution, "access_estimates_enabled", default=True
+            ),
+        },
+    }
+
+
+def _validate_parallel_enabled_workers(
+    *, enabled: bool, workers: int
+) -> None:
+    if enabled and workers <= 0:
+        raise ValueError(
+            "parallel_execution_workers must be greater than zero when "
+            "parallel_execution_enabled is true"
+        )
 
 
 def normalize_network_manifest(payload: dict) -> dict:
     if not isinstance(payload, dict):
         raise ValueError("network manifest must be a JSON object")
-    _reject_removed_fields(payload, "runtime_backend")
+    _reject_unknown_fields(
+        payload,
+        allowed={
+            "schema_version",
+            "name",
+            "chain_id",
+            "genesis",
+            "genesis_build",
+            "snapshot_url",
+            "snapshot_signing_keys",
+            "p2p",
+            "block_policy_mode",
+            "block_policy_interval",
+            "node_image_mode",
+            "node_integrated_image",
+            "node_split_image",
+            "shielded_relayers",
+            "privacy_artifact_catalog",
+            "shielded_history_policy",
+            "privacy_submission_policy",
+            "node_release_manifest",
+        },
+        label="network manifest",
+    )
     shielded_relayers = _normalize_shielded_relayers_manifest(payload)
 
     node_image_mode, node_integrated_image, node_split_image = (
@@ -485,24 +978,17 @@ def normalize_network_manifest(payload: dict) -> dict:
         )
     )
 
-    genesis_preset = _require_optional_str(payload, "genesis_preset")
-    genesis_time = _require_optional_str(payload, "genesis_time")
-    if genesis_time is not None and genesis_preset is None:
-        raise ValueError("genesis_time requires genesis_preset")
-
     return {
         "schema_version": _require_schema_version(payload),
         "name": _require_str(payload, "name"),
         "chain_id": _require_str(payload, "chain_id"),
-        "mode": _require_mode(payload),
-        "genesis_source": _require_optional_str(payload, "genesis_source"),
-        "genesis_preset": genesis_preset,
-        "genesis_time": genesis_time,
+        "genesis": _normalize_genesis(payload),
+        "genesis_build": _require_optional_object(payload, "genesis_build"),
         "snapshot_url": _require_optional_str(payload, "snapshot_url"),
         "snapshot_signing_keys": _require_str_list(
             payload, "snapshot_signing_keys"
         ),
-        "seed_nodes": _require_str_list(payload, "seed_nodes"),
+        "p2p": _normalize_p2p(payload),
         "block_policy_mode": _require_block_policy_mode(
             payload, "block_policy_mode"
         ),
@@ -532,7 +1018,47 @@ def normalize_network_manifest(payload: dict) -> dict:
 def normalize_node_profile(payload: dict) -> dict:
     if not isinstance(payload, dict):
         raise ValueError("node profile must be a JSON object")
-    _reject_removed_fields(payload, "runtime_backend")
+    _reject_unknown_fields(
+        payload,
+        allowed={
+            "schema_version",
+            "name",
+            "network",
+            "moniker",
+            "validator_key_ref",
+            "node_image_mode",
+            "node_integrated_image",
+            "node_split_image",
+            "node_release_manifest",
+            "stack_dir",
+            "p2p",
+            "genesis",
+            "snapshot_url",
+            "snapshot_signing_keys",
+            "home",
+            "pruning_enabled",
+            "blocks_to_keep",
+            "block_policy_mode",
+            "block_policy_interval",
+            "transaction_trace_logging",
+            "app_log_level",
+            "app_log_json",
+            "app_log_rotation_hours",
+            "app_log_retention_days",
+            "simulation_enabled",
+            "simulation_max_concurrency",
+            "simulation_timeout_ms",
+            "simulation_max_chi",
+            "parallel_execution_enabled",
+            "parallel_execution_workers",
+            "parallel_execution_min_transactions",
+            "operator_profile",
+            "monitoring_profile",
+            "services",
+            "advanced",
+        },
+        label="node profile",
+    )
 
     node_image_mode, node_integrated_image, node_split_image = (
         _validate_node_image_config(
@@ -542,6 +1068,16 @@ def normalize_node_profile(payload: dict) -> dict:
             ),
             split_image=_require_optional_str(payload, "node_split_image"),
         )
+    )
+    parallel_execution_enabled = _require_bool(
+        payload, "parallel_execution_enabled", default=False
+    )
+    parallel_execution_workers = _require_non_negative_int(
+        payload, "parallel_execution_workers", default=4
+    )
+    _validate_parallel_enabled_workers(
+        enabled=parallel_execution_enabled,
+        workers=parallel_execution_workers,
     )
 
     return {
@@ -561,18 +1097,17 @@ def normalize_node_profile(payload: dict) -> dict:
             "node_release_manifest",
         ),
         "stack_dir": _require_optional_str(payload, "stack_dir"),
-        "seeds": _require_str_list(payload, "seeds"),
-        "genesis_url": _require_optional_str(payload, "genesis_url"),
+        "p2p": _normalize_p2p(payload),
+        "genesis": _normalize_optional_genesis(payload),
         "snapshot_url": _require_optional_str(payload, "snapshot_url"),
         "snapshot_signing_keys": _require_str_list(
             payload, "snapshot_signing_keys"
         ),
-        "service_node": _require_bool(payload, "service_node", default=False),
         "home": _require_optional_str(payload, "home"),
         "pruning_enabled": _require_bool(
             payload, "pruning_enabled", default=False
         ),
-        "blocks_to_keep": _require_int(
+        "blocks_to_keep": _require_positive_int(
             payload, "blocks_to_keep", default=100000
         ),
         "block_policy_mode": _require_block_policy_mode(
@@ -604,13 +1139,9 @@ def normalize_node_profile(payload: dict) -> dict:
         "simulation_max_chi": _require_positive_int(
             payload, "simulation_max_chi", default=1_000_000
         ),
-        "parallel_execution_enabled": _require_bool(
-            payload, "parallel_execution_enabled", default=False
-        ),
-        "parallel_execution_workers": _require_non_negative_int(
-            payload, "parallel_execution_workers", default=0
-        ),
-        "parallel_execution_min_transactions": _require_non_negative_int(
+        "parallel_execution_enabled": parallel_execution_enabled,
+        "parallel_execution_workers": parallel_execution_workers,
+        "parallel_execution_min_transactions": _require_positive_int(
             payload, "parallel_execution_min_transactions", default=8
         ),
         "operator_profile": _require_optional_choice(
@@ -625,69 +1156,59 @@ def normalize_node_profile(payload: dict) -> dict:
             supported=SUPPORTED_MONITORING_PROFILES,
             default=None,
         ),
-        "dashboard_enabled": _require_bool(
-            payload, "dashboard_enabled", default=False
-        ),
-        "monitoring_enabled": _require_bool(
-            payload, "monitoring_enabled", default=False
-        ),
-        "dashboard_host": _require_str(payload, "dashboard_host")
-        if "dashboard_host" in payload
-        else "127.0.0.1",
-        "dashboard_port": _require_int(payload, "dashboard_port", default=8080),
-        "intentkit_enabled": _require_bool(
-            payload, "intentkit_enabled", default=False
-        ),
-        "intentkit_network_id": _require_optional_choice(
+        "services": _normalize_services(
             payload,
-            "intentkit_network_id",
-            supported=SUPPORTED_INTENTKIT_NETWORK_IDS,
-            default=None,
+            intentkit_network_id_default=None,
         ),
-        "intentkit_host": _require_str(payload, "intentkit_host")
-        if "intentkit_host" in payload
-        else "127.0.0.1",
-        "intentkit_port": _require_int(
-            payload,
-            "intentkit_port",
-            default=38000,
-        ),
-        "intentkit_api_port": _require_int(
-            payload, "intentkit_api_port", default=38080
-        ),
-        "dex_automation_enabled": _require_bool(
-            payload, "dex_automation_enabled", default=False
-        ),
-        "dex_automation_host": _require_str(payload, "dex_automation_host")
-        if "dex_automation_host" in payload
-        else "127.0.0.1",
-        "dex_automation_port": _require_int(
-            payload,
-            "dex_automation_port",
-            default=38280,
-        ),
-        "dex_automation_config": _require_optional_str(
-            payload,
-            "dex_automation_config",
-        ),
-        "shielded_relayer_enabled": _require_bool(
-            payload, "shielded_relayer_enabled", default=False
-        ),
-        "shielded_relayer_host": _require_str(payload, "shielded_relayer_host")
-        if "shielded_relayer_host" in payload
-        else "127.0.0.1",
-        "shielded_relayer_port": _require_int(
-            payload,
-            "shielded_relayer_port",
-            default=38180,
-        ),
+        "advanced": _normalize_advanced_runtime(payload),
     }
 
 
 def normalize_network_template(payload: dict) -> dict:
     if not isinstance(payload, dict):
         raise ValueError("network template must be a JSON object")
-    _reject_removed_fields(payload, "runtime_backend")
+    _reject_unknown_fields(
+        payload,
+        allowed={
+            "schema_version",
+            "name",
+            "display_name",
+            "description",
+            "block_policy_mode",
+            "block_policy_interval",
+            "transaction_trace_logging",
+            "app_log_level",
+            "app_log_json",
+            "app_log_rotation_hours",
+            "app_log_retention_days",
+            "simulation_enabled",
+            "simulation_max_concurrency",
+            "simulation_timeout_ms",
+            "simulation_max_chi",
+            "parallel_execution_enabled",
+            "parallel_execution_workers",
+            "parallel_execution_min_transactions",
+            "operator_profile",
+            "monitoring_profile",
+            "bootstrap_node_name",
+            "additional_validator_names",
+            "services",
+            "advanced",
+            "pruning_enabled",
+            "blocks_to_keep",
+        },
+        label="network template",
+    )
+    parallel_execution_enabled = _require_bool(
+        payload, "parallel_execution_enabled", default=False
+    )
+    parallel_execution_workers = _require_non_negative_int(
+        payload, "parallel_execution_workers", default=4
+    )
+    _validate_parallel_enabled_workers(
+        enabled=parallel_execution_enabled,
+        workers=parallel_execution_workers,
+    )
 
     return {
         "schema_version": _require_schema_version(payload),
@@ -723,13 +1244,9 @@ def normalize_network_template(payload: dict) -> dict:
         "simulation_max_chi": _require_positive_int(
             payload, "simulation_max_chi", default=1_000_000
         ),
-        "parallel_execution_enabled": _require_bool(
-            payload, "parallel_execution_enabled", default=False
-        ),
-        "parallel_execution_workers": _require_non_negative_int(
-            payload, "parallel_execution_workers", default=0
-        ),
-        "parallel_execution_min_transactions": _require_non_negative_int(
+        "parallel_execution_enabled": parallel_execution_enabled,
+        "parallel_execution_workers": parallel_execution_workers,
+        "parallel_execution_min_transactions": _require_positive_int(
             payload, "parallel_execution_min_transactions", default=8
         ),
         "operator_profile": _require_optional_choice(
@@ -748,67 +1265,12 @@ def normalize_network_template(payload: dict) -> dict:
         "additional_validator_names": _require_str_list(
             payload, "additional_validator_names"
         ),
-        "service_node": _require_bool(payload, "service_node", default=False),
-        "dashboard_enabled": _require_bool(
-            payload, "dashboard_enabled", default=False
-        ),
-        "monitoring_enabled": _require_bool(
-            payload, "monitoring_enabled", default=False
-        ),
-        "dashboard_host": _require_str(payload, "dashboard_host")
-        if "dashboard_host" in payload
-        else "127.0.0.1",
-        "dashboard_port": _require_int(payload, "dashboard_port", default=8080),
-        "intentkit_enabled": _require_bool(
-            payload, "intentkit_enabled", default=False
-        ),
-        "intentkit_network_id": _require_optional_choice(
-            payload,
-            "intentkit_network_id",
-            supported=SUPPORTED_INTENTKIT_NETWORK_IDS,
-            default=None,
-        ),
-        "intentkit_host": _require_str(payload, "intentkit_host")
-        if "intentkit_host" in payload
-        else "127.0.0.1",
-        "intentkit_port": _require_int(
-            payload,
-            "intentkit_port",
-            default=38000,
-        ),
-        "intentkit_api_port": _require_int(
-            payload, "intentkit_api_port", default=38080
-        ),
-        "dex_automation_enabled": _require_bool(
-            payload, "dex_automation_enabled", default=False
-        ),
-        "dex_automation_host": _require_str(payload, "dex_automation_host")
-        if "dex_automation_host" in payload
-        else "127.0.0.1",
-        "dex_automation_port": _require_int(
-            payload,
-            "dex_automation_port",
-            default=38280,
-        ),
-        "dex_automation_config": _require_optional_str(
-            payload,
-            "dex_automation_config",
-        ),
-        "shielded_relayer_enabled": _require_bool(
-            payload, "shielded_relayer_enabled", default=False
-        ),
-        "shielded_relayer_host": _require_str(payload, "shielded_relayer_host")
-        if "shielded_relayer_host" in payload
-        else "127.0.0.1",
-        "shielded_relayer_port": _require_int(
-            payload,
-            "shielded_relayer_port",
-            default=38180,
-        ),
+        "services": _normalize_services(payload),
+        "advanced": _normalize_advanced_runtime(payload),
         "pruning_enabled": _require_bool(
             payload, "pruning_enabled", default=False
         ),
-        "blocks_to_keep": _require_int(
+        "blocks_to_keep": _require_positive_int(
             payload, "blocks_to_keep", default=100000
         ),
     }
@@ -1043,7 +1505,14 @@ def normalize_recovery_plan(payload: dict) -> dict:
 class NetworkManifest:
     name: str
     chain_id: str
-    mode: str = "join"
+    genesis: dict = field(
+        default_factory=lambda: {
+            "kind": "bundle",
+            "bundle": "local",
+            "genesis_time": None,
+        }
+    )
+    genesis_build: dict | None = None
     node_image_mode: str = "local_build"
     node_integrated_image: str | None = None
     node_split_image: str | None = None
@@ -1052,12 +1521,9 @@ class NetworkManifest:
     shielded_history_policy: dict | None = None
     privacy_submission_policy: dict | None = None
     node_release_manifest: dict | None = None
-    genesis_source: str | None = None
-    genesis_preset: str | None = None
-    genesis_time: str | None = None
     snapshot_url: str | None = None
     snapshot_signing_keys: list[str] = field(default_factory=list)
-    seed_nodes: list[str] = field(default_factory=list)
+    p2p: dict = field(default_factory=lambda: deepcopy(DEFAULT_P2P))
     block_policy_mode: str = "on_demand"
     block_policy_interval: str = "0s"
     schema_version: int = SCHEMA_VERSION
@@ -1077,11 +1543,10 @@ class NodeProfile:
     node_split_image: str | None = None
     node_release_manifest: dict | None = None
     stack_dir: str | None = None
-    seeds: list[str] = field(default_factory=list)
-    genesis_url: str | None = None
+    p2p: dict = field(default_factory=lambda: deepcopy(DEFAULT_P2P))
+    genesis: dict | None = None
     snapshot_url: str | None = None
     snapshot_signing_keys: list[str] = field(default_factory=list)
-    service_node: bool = False
     home: str | None = None
     pruning_enabled: bool = False
     blocks_to_keep: int = 100000
@@ -1097,26 +1562,14 @@ class NodeProfile:
     simulation_timeout_ms: int = 3000
     simulation_max_chi: int = 1_000_000
     parallel_execution_enabled: bool = False
-    parallel_execution_workers: int = 0
+    parallel_execution_workers: int = 4
     parallel_execution_min_transactions: int = 8
     operator_profile: str | None = None
     monitoring_profile: str | None = None
-    dashboard_enabled: bool = False
-    monitoring_enabled: bool = False
-    dashboard_host: str = "127.0.0.1"
-    dashboard_port: int = 8080
-    intentkit_enabled: bool = False
-    intentkit_network_id: str | None = None
-    intentkit_host: str = "127.0.0.1"
-    intentkit_port: int = 38000
-    intentkit_api_port: int = 38080
-    dex_automation_enabled: bool = False
-    dex_automation_host: str = "127.0.0.1"
-    dex_automation_port: int = 38280
-    dex_automation_config: str | None = None
-    shielded_relayer_enabled: bool = False
-    shielded_relayer_host: str = "127.0.0.1"
-    shielded_relayer_port: int = 38180
+    services: dict = field(default_factory=lambda: deepcopy(DEFAULT_SERVICES))
+    advanced: dict = field(
+        default_factory=lambda: deepcopy(DEFAULT_ADVANCED_RUNTIME)
+    )
     schema_version: int = SCHEMA_VERSION
 
     def to_dict(self) -> dict:
@@ -1140,29 +1593,16 @@ class NetworkTemplate:
     simulation_timeout_ms: int = 3000
     simulation_max_chi: int = 1_000_000
     parallel_execution_enabled: bool = False
-    parallel_execution_workers: int = 0
+    parallel_execution_workers: int = 4
     parallel_execution_min_transactions: int = 8
     operator_profile: str | None = None
     monitoring_profile: str | None = None
     bootstrap_node_name: str | None = None
     additional_validator_names: list[str] = field(default_factory=list)
-    service_node: bool = False
-    dashboard_enabled: bool = False
-    monitoring_enabled: bool = False
-    dashboard_host: str = "127.0.0.1"
-    dashboard_port: int = 8080
-    intentkit_enabled: bool = False
-    intentkit_network_id: str | None = None
-    intentkit_host: str = "127.0.0.1"
-    intentkit_port: int = 38000
-    intentkit_api_port: int = 38080
-    dex_automation_enabled: bool = False
-    dex_automation_host: str = "127.0.0.1"
-    dex_automation_port: int = 38280
-    dex_automation_config: str | None = None
-    shielded_relayer_enabled: bool = False
-    shielded_relayer_host: str = "127.0.0.1"
-    shielded_relayer_port: int = 38180
+    services: dict = field(default_factory=lambda: deepcopy(DEFAULT_SERVICES))
+    advanced: dict = field(
+        default_factory=lambda: deepcopy(DEFAULT_ADVANCED_RUNTIME)
+    )
     pruning_enabled: bool = False
     blocks_to_keep: int = 100000
     schema_version: int = SCHEMA_VERSION

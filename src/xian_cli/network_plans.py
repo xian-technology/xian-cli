@@ -2,7 +2,10 @@ from __future__ import annotations
 
 import argparse
 from collections.abc import Callable, Mapping
+from copy import deepcopy
 from typing import Any
+
+from xian_cli.models import DEFAULT_ADVANCED_RUNTIME, DEFAULT_SERVICES
 
 
 def pick_value(
@@ -48,6 +51,37 @@ def _template_value(
         None if template is None else template.get(template_key),
         default,
     )
+
+
+def _nested_template_value(
+    template: Mapping[str, Any] | None,
+    section: str,
+    key: str,
+    default: Any,
+) -> Any:
+    if template is None:
+        return default
+    section_value = template.get(section)
+    if not isinstance(section_value, Mapping):
+        return default
+    item_value = section_value.get(key)
+    return default if item_value is None else item_value
+
+
+def _service_template_value(
+    template: Mapping[str, Any] | None,
+    service: str,
+    key: str,
+    default: Any,
+) -> Any:
+    services = None if template is None else template.get("services")
+    if not isinstance(services, Mapping):
+        return default
+    service_value = services.get(service)
+    if not isinstance(service_value, Mapping):
+        return default
+    item_value = service_value.get(key)
+    return default if item_value is None else item_value
 
 
 def _profile_field_value(
@@ -184,7 +218,7 @@ def build_profile_runtime_fields(
             "parallel_execution_workers",
             "parallel_execution_workers",
             "parallel_execution_workers",
-            0,
+            4,
             False,
             validate_non_negative_int,
         ),
@@ -196,140 +230,11 @@ def build_profile_runtime_fields(
             False,
             validate_non_negative_int,
         ),
-        ("service_node", "service_node", "service_node", False, True, None),
         ("operator_profile", None, "operator_profile", None, True, None),
         ("monitoring_profile", None, "monitoring_profile", None, True, None),
-        (
-            "dashboard_enabled",
-            "enable_dashboard",
-            "dashboard_enabled",
-            False,
-            True,
-            None,
-        ),
-        (
-            "monitoring_enabled",
-            "enable_monitoring",
-            "monitoring_enabled",
-            False,
-            True,
-            None,
-        ),
-        (
-            "dashboard_host",
-            "dashboard_host",
-            "dashboard_host",
-            "127.0.0.1",
-            True,
-            None,
-        ),
-        (
-            "dashboard_port",
-            "dashboard_port",
-            "dashboard_port",
-            8080,
-            True,
-            None,
-        ),
-        (
-            "intentkit_enabled",
-            "enable_intentkit",
-            "intentkit_enabled",
-            False,
-            True,
-            None,
-        ),
-        (
-            "intentkit_network_id",
-            "intentkit_network_id",
-            "intentkit_network_id",
-            intentkit_network_id_default,
-            True,
-            None,
-        ),
-        (
-            "intentkit_host",
-            "intentkit_host",
-            "intentkit_host",
-            "127.0.0.1",
-            True,
-            None,
-        ),
-        (
-            "intentkit_port",
-            "intentkit_port",
-            "intentkit_port",
-            38000,
-            True,
-            None,
-        ),
-        (
-            "intentkit_api_port",
-            "intentkit_api_port",
-            "intentkit_api_port",
-            38080,
-            True,
-            None,
-        ),
-        (
-            "dex_automation_enabled",
-            "enable_dex_automation",
-            "dex_automation_enabled",
-            False,
-            True,
-            None,
-        ),
-        (
-            "dex_automation_host",
-            "dex_automation_host",
-            "dex_automation_host",
-            "127.0.0.1",
-            True,
-            None,
-        ),
-        (
-            "dex_automation_port",
-            "dex_automation_port",
-            "dex_automation_port",
-            38280,
-            True,
-            None,
-        ),
-        (
-            "dex_automation_config",
-            "dex_automation_config",
-            "dex_automation_config",
-            None,
-            True,
-            None,
-        ),
-        (
-            "shielded_relayer_enabled",
-            None,
-            "shielded_relayer_enabled",
-            False,
-            True,
-            None,
-        ),
-        (
-            "shielded_relayer_host",
-            None,
-            "shielded_relayer_host",
-            "127.0.0.1",
-            True,
-            None,
-        ),
-        (
-            "shielded_relayer_port",
-            None,
-            "shielded_relayer_port",
-            38180,
-            True,
-            None,
-        ),
     )
 
-    return {
+    fields = {
         field_name: _profile_field_value(
             args,
             template,
@@ -350,3 +255,219 @@ def build_profile_runtime_fields(
             validator,
         ) in specs
     }
+    services = deepcopy(DEFAULT_SERVICES)
+    services["bds"]["enabled"] = _profile_field_value(
+        args,
+        template,
+        runtime_services=runtime_services,
+        field_name="services.bds.enabled",
+        arg_name="enable_bds",
+        template_key="unused",
+        default=_service_template_value(template, "bds", "enabled", False),
+        runtime_only=True,
+    )
+    services["dashboard"]["enabled"] = _profile_field_value(
+        args,
+        template,
+        runtime_services=runtime_services,
+        field_name="services.dashboard.enabled",
+        arg_name="enable_dashboard",
+        template_key="unused",
+        default=_service_template_value(
+            template, "dashboard", "enabled", False
+        ),
+        runtime_only=True,
+    )
+    services["dashboard"]["host"] = _profile_field_value(
+        args,
+        template,
+        runtime_services=runtime_services,
+        field_name="services.dashboard.host",
+        arg_name="dashboard_host",
+        template_key="unused",
+        default=_service_template_value(
+            template, "dashboard", "host", "127.0.0.1"
+        ),
+        runtime_only=True,
+    )
+    services["dashboard"]["port"] = _profile_field_value(
+        args,
+        template,
+        runtime_services=runtime_services,
+        field_name="services.dashboard.port",
+        arg_name="dashboard_port",
+        template_key="unused",
+        default=_service_template_value(template, "dashboard", "port", 8080),
+        runtime_only=True,
+    )
+    services["monitoring"]["enabled"] = _profile_field_value(
+        args,
+        template,
+        runtime_services=runtime_services,
+        field_name="services.monitoring.enabled",
+        arg_name="enable_monitoring",
+        template_key="unused",
+        default=_service_template_value(
+            template, "monitoring", "enabled", False
+        ),
+        runtime_only=True,
+    )
+    services["intentkit"]["enabled"] = _profile_field_value(
+        args,
+        template,
+        runtime_services=runtime_services,
+        field_name="services.intentkit.enabled",
+        arg_name="enable_intentkit",
+        template_key="unused",
+        default=_service_template_value(
+            template, "intentkit", "enabled", False
+        ),
+        runtime_only=True,
+    )
+    services["intentkit"]["network_id"] = _profile_field_value(
+        args,
+        template,
+        runtime_services=runtime_services,
+        field_name="services.intentkit.network_id",
+        arg_name="intentkit_network_id",
+        template_key="unused",
+        default=_service_template_value(
+            template,
+            "intentkit",
+            "network_id",
+            intentkit_network_id_default,
+        ),
+        runtime_only=True,
+    )
+    services["intentkit"]["host"] = _profile_field_value(
+        args,
+        template,
+        runtime_services=runtime_services,
+        field_name="services.intentkit.host",
+        arg_name="intentkit_host",
+        template_key="unused",
+        default=_service_template_value(
+            template, "intentkit", "host", "127.0.0.1"
+        ),
+        runtime_only=True,
+    )
+    services["intentkit"]["port"] = _profile_field_value(
+        args,
+        template,
+        runtime_services=runtime_services,
+        field_name="services.intentkit.port",
+        arg_name="intentkit_port",
+        template_key="unused",
+        default=_service_template_value(template, "intentkit", "port", 38000),
+        runtime_only=True,
+    )
+    services["intentkit"]["api_port"] = _profile_field_value(
+        args,
+        template,
+        runtime_services=runtime_services,
+        field_name="services.intentkit.api_port",
+        arg_name="intentkit_api_port",
+        template_key="unused",
+        default=_service_template_value(
+            template, "intentkit", "api_port", 38080
+        ),
+        runtime_only=True,
+    )
+    services["dex_automation"]["enabled"] = _profile_field_value(
+        args,
+        template,
+        runtime_services=runtime_services,
+        field_name="services.dex_automation.enabled",
+        arg_name="enable_dex_automation",
+        template_key="unused",
+        default=_service_template_value(
+            template, "dex_automation", "enabled", False
+        ),
+        runtime_only=True,
+    )
+    services["dex_automation"]["host"] = _profile_field_value(
+        args,
+        template,
+        runtime_services=runtime_services,
+        field_name="services.dex_automation.host",
+        arg_name="dex_automation_host",
+        template_key="unused",
+        default=_service_template_value(
+            template, "dex_automation", "host", "127.0.0.1"
+        ),
+        runtime_only=True,
+    )
+    services["dex_automation"]["port"] = _profile_field_value(
+        args,
+        template,
+        runtime_services=runtime_services,
+        field_name="services.dex_automation.port",
+        arg_name="dex_automation_port",
+        template_key="unused",
+        default=_service_template_value(
+            template, "dex_automation", "port", 38280
+        ),
+        runtime_only=True,
+    )
+    services["dex_automation"]["config"] = _profile_field_value(
+        args,
+        template,
+        runtime_services=runtime_services,
+        field_name="services.dex_automation.config",
+        arg_name="dex_automation_config",
+        template_key="unused",
+        default=_service_template_value(
+            template, "dex_automation", "config", None
+        ),
+        runtime_only=True,
+    )
+    services["shielded_relayer"]["enabled"] = _profile_field_value(
+        args,
+        template,
+        runtime_services=runtime_services,
+        field_name="services.shielded_relayer.enabled",
+        arg_name=None,
+        template_key="unused",
+        default=_service_template_value(
+            template, "shielded_relayer", "enabled", False
+        ),
+        runtime_only=True,
+    )
+    services["shielded_relayer"]["host"] = _profile_field_value(
+        args,
+        template,
+        runtime_services=runtime_services,
+        field_name="services.shielded_relayer.host",
+        arg_name=None,
+        template_key="unused",
+        default=_service_template_value(
+            template, "shielded_relayer", "host", "127.0.0.1"
+        ),
+        runtime_only=True,
+    )
+    services["shielded_relayer"]["port"] = _profile_field_value(
+        args,
+        template,
+        runtime_services=runtime_services,
+        field_name="services.shielded_relayer.port",
+        arg_name=None,
+        template_key="unused",
+        default=_service_template_value(
+            template, "shielded_relayer", "port", 38180
+        ),
+        runtime_only=True,
+    )
+    fields["services"] = services
+    advanced = deepcopy(DEFAULT_ADVANCED_RUNTIME)
+    if template is not None and isinstance(template.get("advanced"), Mapping):
+        advanced = deepcopy(template["advanced"])
+    fields["advanced"] = advanced
+    if (
+        fields["parallel_execution_enabled"]
+        and fields["parallel_execution_workers"] <= 0
+    ):
+        raise ValueError(
+            "parallel_execution_workers must be greater than zero when "
+            "parallel_execution_enabled is true"
+        )
+    return fields

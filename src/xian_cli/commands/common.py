@@ -153,38 +153,63 @@ def _stack_runtime_profile_kwargs(
     node_image_mode, node_integrated_image, node_split_image = (
         _effective_node_image_config(profile, network)
     )
+    services = profile.get("services")
+    if not isinstance(services, dict):
+        services = {}
+    bds = services.get("bds") if isinstance(services.get("bds"), dict) else {}
+    dashboard = (
+        services.get("dashboard")
+        if isinstance(services.get("dashboard"), dict)
+        else {}
+    )
+    monitoring = (
+        services.get("monitoring")
+        if isinstance(services.get("monitoring"), dict)
+        else {}
+    )
+    intentkit = (
+        services.get("intentkit")
+        if isinstance(services.get("intentkit"), dict)
+        else {}
+    )
+    dex_automation = (
+        services.get("dex_automation")
+        if isinstance(services.get("dex_automation"), dict)
+        else {}
+    )
+    shielded_relayer = (
+        services.get("shielded_relayer")
+        if isinstance(services.get("shielded_relayer"), dict)
+        else {}
+    )
     return {
         "node_image_mode": node_image_mode,
         "node_integrated_image": node_integrated_image,
         "node_split_image": node_split_image,
-        "service_node": bool(profile.get("service_node")),
-        "dashboard_enabled": bool(profile.get("dashboard_enabled")),
-        "monitoring_enabled": bool(profile.get("monitoring_enabled")),
-        "dashboard_host": str(profile.get("dashboard_host", "127.0.0.1")),
-        "dashboard_port": int(profile.get("dashboard_port", 8080)),
-        "intentkit_enabled": bool(profile.get("intentkit_enabled")),
+        "bds_enabled": bool(bds.get("enabled")),
+        "dashboard_enabled": bool(dashboard.get("enabled")),
+        "monitoring_enabled": bool(monitoring.get("enabled")),
+        "dashboard_host": str(dashboard.get("host", "127.0.0.1")),
+        "dashboard_port": int(dashboard.get("port", 8080)),
+        "intentkit_enabled": bool(intentkit.get("enabled")),
         "intentkit_network_id": str(
-            profile.get("intentkit_network_id")
+            intentkit.get("network_id")
             or _default_intentkit_network_id(profile.get("network"))
         ),
-        "intentkit_host": str(profile.get("intentkit_host", "127.0.0.1")),
-        "intentkit_port": int(profile.get("intentkit_port", 38000)),
-        "intentkit_api_port": int(profile.get("intentkit_api_port", 38080)),
-        "dex_automation_enabled": bool(profile.get("dex_automation_enabled")),
-        "dex_automation_host": str(
-            profile.get("dex_automation_host", "127.0.0.1")
-        ),
-        "dex_automation_port": int(profile.get("dex_automation_port", 38280)),
-        "dex_automation_config": profile.get("dex_automation_config"),
+        "intentkit_host": str(intentkit.get("host", "127.0.0.1")),
+        "intentkit_port": int(intentkit.get("port", 38000)),
+        "intentkit_api_port": int(intentkit.get("api_port", 38080)),
+        "dex_automation_enabled": bool(dex_automation.get("enabled")),
+        "dex_automation_host": str(dex_automation.get("host", "127.0.0.1")),
+        "dex_automation_port": int(dex_automation.get("port", 38280)),
+        "dex_automation_config": dex_automation.get("config"),
         "shielded_relayer_enabled": bool(
-            profile.get("shielded_relayer_enabled")
+            shielded_relayer.get("enabled")
         ),
         "shielded_relayer_host": str(
-            profile.get("shielded_relayer_host", "127.0.0.1")
+            shielded_relayer.get("host", "127.0.0.1")
         ),
-        "shielded_relayer_port": int(
-            profile.get("shielded_relayer_port", 38180)
-        ),
+        "shielded_relayer_port": int(shielded_relayer.get("port", 38180)),
     }
 
 

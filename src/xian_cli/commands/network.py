@@ -176,7 +176,11 @@ def _handle_network_create(args: argparse.Namespace) -> int:
             "bootstrap_node": args.bootstrap_node,
             "generate_validator_key": bool(args.generate_validator_key),
             "init_node": bool(args.init_node),
-            "genesis_source": args.genesis_source,
+            "genesis": (
+                {"kind": "source", "source": args.genesis_source}
+                if args.genesis_source
+                else {"kind": "bundle", "bundle": args.genesis_bundle}
+            ),
         }
         print(json.dumps(dry_plan, indent=2))
         return 0
@@ -193,9 +197,14 @@ def _handle_network_create(args: argparse.Namespace) -> int:
         validator_names=validator_names,
     )
 
-    genesis_source = args.genesis_source
+    genesis = (
+        {"kind": "source", "source": args.genesis_source}
+        if args.genesis_source is not None
+        else None
+    )
+    genesis_build: dict[str, object] | None = None
     generated_genesis_path: Path | None = None
-    if genesis_source is None:
+    if genesis is None:
         if not validators or any(
             validator["validator_key_payload"] is None
             for validator in validators
@@ -218,7 +227,7 @@ def _handle_network_create(args: argparse.Namespace) -> int:
                 chain_id=args.chain_id,
                 founder_private_key=founder_private_key,
                 validators=validators,
-                genesis_preset=args.genesis_preset,
+                genesis_bundle=args.genesis_bundle,
             )
             write_json(
                 generated_genesis_path,
@@ -226,8 +235,14 @@ def _handle_network_create(args: argparse.Namespace) -> int:
                 force=args.force,
                 preserve_runtime_types=True,
             )
-            genesis_source = "./genesis.json"
-    if bootstrap_name is not None and genesis_source is None and not validators:
+            genesis = {"kind": "source", "source": "./genesis.json"}
+            genesis_build = {
+                "bundle": args.genesis_bundle,
+                "generated_by": "xian network create",
+            }
+    if genesis is None:
+        genesis = {"kind": "bundle", "bundle": args.genesis_bundle}
+    if bootstrap_name is not None and genesis is None and not validators:
         raise ValueError(
             "--bootstrap-node requires either --genesis-source or local "
             "genesis generation via validator key material"
@@ -255,11 +270,11 @@ def _handle_network_create(args: argparse.Namespace) -> int:
     manifest = NetworkManifest(
         name=args.name,
         chain_id=args.chain_id,
-        mode=args.mode,
-        genesis_source=genesis_source,
+        genesis=genesis,
+        genesis_build=genesis_build,
         snapshot_url=args.snapshot_url,
         snapshot_signing_keys=args.snapshot_signing_key or [],
-        seed_nodes=args.seed or [],
+        p2p={"seeds": args.seed or [], "persistent_peers": []},
         block_policy_mode=_pick_template_value(
             args.block_policy_mode,
             None if template is None else template.get("block_policy_mode"),
@@ -279,8 +294,7 @@ def _handle_network_create(args: argparse.Namespace) -> int:
 
     result: dict[str, object] = {
         "manifest_path": str(target),
-        "mode": args.mode,
-        "genesis_source": genesis_source,
+        "genesis": genesis,
         "template": None if template is None else template["name"],
     }
     if generated_genesis_path is not None:
@@ -314,8 +328,8 @@ def _handle_network_create(args: argparse.Namespace) -> int:
                 if validator["is_bootstrap"] and args.stack_dir is not None
                 else None
             ),
-            seeds=[],
-            genesis_url=None,
+            p2p={"seeds": [], "persistent_peers": []},
+            genesis=None,
             snapshot_url=(
                 args.snapshot_url if validator["is_bootstrap"] else None
             ),
@@ -493,8 +507,12 @@ def _handle_network_join(args: argparse.Namespace) -> int:
             network,
         ),
         stack_dir=str(args.stack_dir) if args.stack_dir is not None else None,
-        seeds=args.seed or [],
-        genesis_url=args.genesis_url,
+        p2p={"seeds": args.seed or [], "persistent_peers": []},
+        genesis=(
+            {"kind": "source", "source": args.genesis_source}
+            if args.genesis_source
+            else None
+        ),
         snapshot_url=args.snapshot_url,
         snapshot_signing_keys=args.snapshot_signing_key or [],
         home=str(args.home) if args.home is not None else None,
@@ -602,10 +620,10 @@ def _copy_optional_network_asset(
     shutil.copyfile(source_path, target_path)
 
 
-def _operator_join_script(*, network_name: str, service_node: bool) -> str:
-    if service_node:
+def _operator_join_script(*, network_name: str, bds_enabled: bool) -> str:
+    if bds_enabled:
         service_args = """
-  --service-node
+  --enable-bds
   --enable-monitoring
   --enable-dashboard
   --dashboard-host "${DASHBOARD_HOST:-127.0.0.1}"
@@ -613,7 +631,7 @@ def _operator_join_script(*, network_name: str, service_node: bool) -> str:
 """
     else:
         service_args = """
-  --no-service-node
+  --no-enable-bds
   --no-enable-monitoring
   --no-enable-dashboard
 """
@@ -686,7 +704,7 @@ This bundle is a shareable handoff for operators joining `{chain_id}`.
 - `genesis.json` - materialized genesis for this network
 - `bootstrap-seed.txt` - bootstrap seed placeholder or live seed
 - `participant-join.sh` - join as a lean validator-capable node
-- `participant-service-node.sh` - join with BDS, dashboard, and monitoring
+- `participant-bds-node.sh` - join with BDS, dashboard, and monitoring
 - `SMOKE-CHECKLIST.md` - quick post-start checks
 {privacy_note}
 No private validator keys, node homes, databases, or logs are included.
@@ -705,10 +723,10 @@ BOOTSTRAP_SEED='<node_id>@<public-host>:26656' \\
   ./participant-join.sh
 ```
 
-## Service Node
+## BDS Node
 
 ```bash
-NODE_NAME=<node-name> ./participant-service-node.sh
+NODE_NAME=<node-name> ./participant-bds-node.sh
 ```
 
 Optional environment variables:
@@ -717,7 +735,7 @@ Optional environment variables:
 - `STACK_DIR` - explicit `xian-stack` checkout
 - `CONFIGS_DIR` - explicit `xian-configs` checkout
 - `NODE_IMAGE_MODE` - override manifest image mode, for example `local_build`
-- `DASHBOARD_HOST` / `DASHBOARD_PORT` - service-node dashboard bind settings
+- `DASHBOARD_HOST` / `DASHBOARD_PORT` - dashboard bind settings
 - `PARALLEL_EXECUTION_WORKERS` - defaults to `8`
 - `PARALLEL_EXECUTION_MIN_TRANSACTIONS` - defaults to `8`
 
@@ -741,8 +759,8 @@ Confirm:
 
 - the status response reports network `{chain_id}`
 - `catching_up` becomes `false` after initial sync
-- service nodes expose dashboard status at `http://127.0.0.1:8080/api/status`
-- service nodes expose GraphQL at `http://127.0.0.1:5000/graphql`
+- BDS nodes expose dashboard status at `http://127.0.0.1:8080/api/status`
+- BDS nodes expose GraphQL at `http://127.0.0.1:5000/graphql`
 
 For validator onboarding, send the generated validator public key to the
 network coordinator after startup:
@@ -787,14 +805,15 @@ def _handle_network_package_operator_bundle(args: argparse.Namespace) -> int:
     )
 
     bundled_manifest = dict(network)
-    bundled_manifest["genesis_source"] = "./genesis.json"
-    bundled_manifest["genesis_preset"] = None
-    bundled_manifest["genesis_time"] = None
+    bundled_manifest["genesis"] = {"kind": "source", "source": "./genesis.json"}
     if args.bootstrap_seed:
-        seed_nodes = list(bundled_manifest.get("seed_nodes") or [])
-        if args.bootstrap_seed not in seed_nodes:
-            seed_nodes.append(args.bootstrap_seed)
-        bundled_manifest["seed_nodes"] = seed_nodes
+        p2p = dict(bundled_manifest.get("p2p") or {})
+        p2p_seeds = list(p2p.get("seeds") or [])
+        if args.bootstrap_seed not in p2p_seeds:
+            p2p_seeds.append(args.bootstrap_seed)
+        p2p["seeds"] = p2p_seeds
+        p2p.setdefault("persistent_peers", [])
+        bundled_manifest["p2p"] = p2p
 
     write_json(output_dir / "manifest.json", bundled_manifest, force=args.force)
     write_json(
@@ -817,10 +836,11 @@ def _handle_network_package_operator_bundle(args: argparse.Namespace) -> int:
 
     bootstrap_seed = args.bootstrap_seed
     if bootstrap_seed is None:
-        seed_nodes = bundled_manifest.get("seed_nodes") or []
+        p2p = bundled_manifest.get("p2p") or {}
+        p2p_seeds = p2p.get("seeds") if isinstance(p2p, dict) else []
         bootstrap_seed = (
-            seed_nodes[0]
-            if seed_nodes
+            p2p_seeds[0]
+            if p2p_seeds
             else "REPLACE_WITH_<node_id>@<public-host>:26656"
         )
     _write_text_file(
@@ -844,13 +864,13 @@ def _handle_network_package_operator_bundle(args: argparse.Namespace) -> int:
     )
     _write_text_file(
         output_dir / "participant-join.sh",
-        _operator_join_script(network_name=network["name"], service_node=False),
+        _operator_join_script(network_name=network["name"], bds_enabled=False),
         force=args.force,
         executable=True,
     )
     _write_text_file(
-        output_dir / "participant-service-node.sh",
-        _operator_join_script(network_name=network["name"], service_node=True),
+        output_dir / "participant-bds-node.sh",
+        _operator_join_script(network_name=network["name"], bds_enabled=True),
         force=args.force,
         executable=True,
     )
@@ -869,7 +889,7 @@ def _handle_network_package_operator_bundle(args: argparse.Namespace) -> int:
             "README.md",
             "SMOKE-CHECKLIST.md",
             "participant-join.sh",
-            "participant-service-node.sh",
+            "participant-bds-node.sh",
         ],
     }
     if includes_privacy_catalog:

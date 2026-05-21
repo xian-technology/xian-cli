@@ -109,6 +109,16 @@ def _doctor_service_check(
     }
 
 
+def _profile_service_enabled(profile: dict[str, object], name: str) -> bool:
+    services = profile.get("services")
+    if not isinstance(services, dict):
+        return False
+    service = services.get(name)
+    if not isinstance(service, dict):
+        return False
+    return bool(service.get("enabled"))
+
+
 def _handle_doctor(args: argparse.Namespace) -> int:
     base_dir = args.base_dir.resolve()
     checks = [
@@ -191,7 +201,9 @@ def _handle_doctor(args: argparse.Namespace) -> int:
                 )
             )
             profile = node_status.get("profile", {})
-            if profile.get("dashboard_enabled"):
+            if not isinstance(profile, dict):
+                profile = {}
+            if _profile_service_enabled(profile, "dashboard"):
                 checks.append(
                     _run_check(
                         "dashboard",
@@ -203,7 +215,7 @@ def _handle_doctor(args: argparse.Namespace) -> int:
                         ),
                     )
                 )
-            if profile.get("monitoring_enabled"):
+            if _profile_service_enabled(profile, "monitoring"):
                 checks.append(
                     _run_check(
                         "prometheus",
@@ -215,7 +227,7 @@ def _handle_doctor(args: argparse.Namespace) -> int:
                         ),
                     )
                 )
-            if profile.get("intentkit_enabled"):
+            if _profile_service_enabled(profile, "intentkit"):
                 checks.append(
                     _run_check(
                         "intentkit",
@@ -238,7 +250,7 @@ def _handle_doctor(args: argparse.Namespace) -> int:
                         ),
                     )
                 )
-            if profile.get("dex_automation_enabled"):
+            if _profile_service_enabled(profile, "dex_automation"):
                 checks.append(
                     _run_check(
                         "dex_automation",
@@ -250,7 +262,7 @@ def _handle_doctor(args: argparse.Namespace) -> int:
                         ),
                     )
                 )
-            if profile.get("monitoring_enabled"):
+            if _profile_service_enabled(profile, "monitoring"):
                 checks.append(
                     _run_check(
                         "grafana",
