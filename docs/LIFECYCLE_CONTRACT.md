@@ -60,7 +60,7 @@ This stage produces the validator material required for `priv_validator_key.json
 
 - Owner: `xian-cli`
 - Source of truth: network manifest JSON, either local or canonical from `xian-configs`
-- Inputs: chain ID, bootstrap mode, genesis source, seeds, optional snapshot
+- Inputs: chain ID, genesis declaration, P2P seeds, optional snapshot
   source, and block-time policy
 - Outputs: immutable network-level description
 
@@ -70,8 +70,8 @@ This stage defines facts about a network, not about a specific node.
 
 - Owner: `xian-cli`
 - Source of truth: node profile JSON
-- Inputs: network reference, moniker, key references, role flags, home path,
-  and optional local block-policy override
+- Inputs: network reference, moniker, key references, services, advanced runtime
+  settings, home path, and optional local block-policy override
 - Outputs: local node intent
 
 This stage defines machine-local choices. It should reference keys and networks, not duplicate them.
@@ -83,10 +83,9 @@ Resolution policy:
 - `network join` should resolve the referenced network manifest immediately
 - template resolution should prefer a local `./templates/<name>.json` file and
   otherwise fall back to `xian-configs/templates/<name>.json`
-- runtime backend selection is no longer configurable; generated profiles use
-  `xian-stack`
-- node-local overrides such as extra seeds, snapshot URL overrides, and genesis
-  URL overrides belong in the node profile
+- generated profiles use `xian-stack`
+- node-local overrides such as extra P2P seeds, snapshot URL overrides, and
+  genesis overrides belong in the node profile
 - `network create` may write a colocated `genesis.json` beside the manifest
 - `network join --init-node` should immediately hand the new profile into the
   same node initialization path used by `node init`
@@ -105,8 +104,8 @@ For the current stack, this means building or starting the Docker runtime and en
 - Owner: `xian-cli`
 - Helpers: `xian-abci`
 - Inputs:
-  - join flow: genesis URL/file or deterministic preset manifest, optional snapshot URL
-  - create flow: contract preset, founder key, network preset, validator set inputs
+  - join flow: genesis source URL/file or deterministic bundle manifest, optional snapshot URL
+  - create flow: contract bundle, founder key, network bundle, validator set inputs
 - Outputs: materialized CometBFT genesis and optional snapshot payload
 
 Joining an existing network and creating a new network are different paths, but they converge on the same artifact: a valid `genesis.json` in the node home.
@@ -169,11 +168,16 @@ The network manifest is the network-level source of truth. Target fields:
   "schema_version": 1,
   "name": "devnet",
   "chain_id": "xian-devnet-1",
-  "mode": "join",
-  "genesis_preset": "devnet",
-  "genesis_time": "2026-03-30T00:00:00.000000Z",
+  "genesis": {
+    "kind": "bundle",
+    "bundle": "devnet",
+    "genesis_time": "2026-03-30T00:00:00.000000Z"
+  },
   "snapshot_url": null,
-  "seed_nodes": [],
+  "p2p": {
+    "seeds": [],
+    "persistent_peers": []
+  },
   "block_policy_mode": "idle_interval",
   "block_policy_interval": "5s"
 }
@@ -197,19 +201,33 @@ The node profile is the machine-local source of truth. Target fields:
   "moniker": "validator-1",
   "validator_key_ref": "./keys/validator-1/validator_key_info.json",
   "home": "~/.cometbft",
-  "service_node": false,
+  "p2p": {
+    "seeds": [],
+    "persistent_peers": []
+  },
+  "services": {
+    "bds": {
+      "enabled": false
+    },
+    "monitoring": {
+      "enabled": false
+    },
+    "intentkit": {
+      "enabled": false,
+      "network_id": "xian-devnet",
+      "host": "127.0.0.1",
+      "port": 38000,
+      "api_port": 38080
+    },
+    "dex_automation": {
+      "enabled": false,
+      "host": "127.0.0.1",
+      "port": 38280,
+      "config": null
+    }
+  },
   "pruning_enabled": false,
   "blocks_to_keep": 100000,
-  "monitoring_enabled": false,
-  "intentkit_enabled": false,
-  "intentkit_network_id": "xian-devnet",
-  "intentkit_host": "127.0.0.1",
-  "intentkit_port": 38000,
-  "intentkit_api_port": 38080,
-  "dex_automation_enabled": false,
-  "dex_automation_host": "127.0.0.1",
-  "dex_automation_port": 38280,
-  "dex_automation_config": null,
   "block_policy_mode": "on_demand",
   "block_policy_interval": "0s"
 }
@@ -229,11 +247,11 @@ Rules:
   changes whether time advances while the chain is idle
 - `network create` may generate a local `genesis.json`, but that file remains a
   derived network artifact rather than a place to hide node-local state
-- canonical preset manifests build genesis deterministically from a contract
+- canonical bundle manifests build genesis deterministically from a contract
   bundle plus a fixed `genesis_time`; they do not carry a checked-in
   `genesis.json`
-- templates may provide defaults for runtime backend, tracing, bootstrap
-  validator names, service-node mode, dashboard exposure, monitoring,
+- templates may provide defaults for tracing, bootstrap validator names, BDS,
+  dashboard exposure, monitoring,
   `xian-intentkit` exposure, `xian-dex-automation` exposure, and pruning, but
   explicit CLI flags should still win
 - `intentkit_network_id` selects the Xian network slot inside

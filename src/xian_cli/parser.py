@@ -27,10 +27,10 @@ def add_node_profile_runtime_args(
     subject: str,
 ) -> None:
     parser.add_argument(
-        "--service-node",
+        "--enable-bds",
         action=argparse.BooleanOptionalAction,
         default=None,
-        help=f"mark {subject} as a service node",
+        help=f"enable Blockchain Data Service indexing for {subject}",
     )
     parser.add_argument(
         "--enable-pruning",
@@ -602,15 +602,6 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     create_parser.add_argument(
-        "--mode",
-        default="create",
-        choices=["join", "create"],
-        help=(
-            "whether this manifest describes joining an existing network "
-            "or creating a new one"
-        ),
-    )
-    create_parser.add_argument(
         "--node-image-mode",
         choices=sorted(SUPPORTED_NODE_IMAGE_MODES),
         help=(
@@ -632,11 +623,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="path or URL for the genesis source used to bootstrap the network",
     )
     create_parser.add_argument(
-        "--genesis-preset",
+        "--genesis-bundle",
         default="local",
         help=(
-            "genesis contract preset used when generating a local genesis "
-            "file; defaults to the universal local preset"
+            "genesis contract bundle used when generating a local genesis "
+            "file or when no local genesis file is generated; defaults to "
+            "the universal local bundle"
         ),
     )
     create_parser.add_argument(
@@ -840,10 +832,11 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     join_parser.add_argument(
-        "--genesis-url",
+        "--genesis-source",
+        dest="genesis_source",
         help=(
-            "node-local genesis URL override; when set it takes precedence "
-            "over the network manifest genesis_source"
+            "node-local genesis file or URL override; when set it takes "
+            "precedence over the network manifest genesis"
         ),
     )
     join_parser.add_argument(

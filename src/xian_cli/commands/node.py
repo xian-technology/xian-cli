@@ -36,6 +36,53 @@ from xian_cli.runtime import (
 )
 
 
+def _service_config(profile: dict, name: str) -> dict:
+    services = profile.get("services")
+    if not isinstance(services, dict):
+        return {}
+    value = services.get(name)
+    return value if isinstance(value, dict) else {}
+
+
+def _advanced_config(profile: dict, name: str) -> dict:
+    advanced = profile.get("advanced")
+    if not isinstance(advanced, dict):
+        return {}
+    value = advanced.get(name)
+    return value if isinstance(value, dict) else {}
+
+
+def _profile_service_summary(profile: dict) -> dict[str, object]:
+    bds = _service_config(profile, "bds")
+    dashboard = _service_config(profile, "dashboard")
+    monitoring = _service_config(profile, "monitoring")
+    intentkit = _service_config(profile, "intentkit")
+    dex_automation = _service_config(profile, "dex_automation")
+    shielded_relayer = _service_config(profile, "shielded_relayer")
+    return {
+        "bds_enabled": bool(bds.get("enabled")),
+        "dashboard_enabled": bool(dashboard.get("enabled")),
+        "monitoring_enabled": bool(monitoring.get("enabled")),
+        "intentkit_enabled": bool(intentkit.get("enabled")),
+        "intentkit_network_id": intentkit.get("network_id"),
+        "dex_automation_enabled": bool(dex_automation.get("enabled")),
+        "shielded_relayer_enabled": bool(shielded_relayer.get("enabled")),
+    }
+
+
+def _describe_effective_genesis(*, profile: dict, network: dict) -> str | None:
+    genesis = profile.get("genesis") or network.get("genesis")
+    if not isinstance(genesis, dict):
+        return None
+    if genesis.get("kind") == "source":
+        source = genesis.get("source")
+        return str(source) if source is not None else None
+    if genesis.get("kind") == "bundle":
+        bundle = genesis.get("bundle")
+        return f"bundle:{bundle}" if bundle is not None else None
+    return None
+
+
 def _initialize_node_from_args(args: argparse.Namespace) -> dict:
     node_setup = get_node_setup_module()
 
@@ -97,14 +144,29 @@ def _initialize_node_from_args(args: argparse.Namespace) -> dict:
         explicit_home=args.home,
     )
 
-    seed_nodes = list(network.get("seed_nodes") or [])
-    seed_nodes.extend(profile.get("seeds") or [])
+    network_p2p = (
+        network.get("p2p") if isinstance(network.get("p2p"), dict) else {}
+    )
+    profile_p2p = (
+        profile.get("p2p") if isinstance(profile.get("p2p"), dict) else {}
+    )
+    p2p_seeds = list(network_p2p.get("seeds") or [])
+    p2p_seeds.extend(profile_p2p.get("seeds") or [])
+    p2p_persistent_peers = list(profile_p2p.get("persistent_peers") or [])
+    services_bds = _service_config(profile, "bds")
+    advanced_cometbft = _advanced_config(profile, "cometbft")
+    advanced_statesync = _advanced_config(profile, "statesync")
+    advanced_metrics = _advanced_config(profile, "metrics")
+    advanced_pending_nonce = _advanced_config(profile, "pending_nonce")
+    advanced_parallel = _advanced_config(profile, "parallel_execution")
 
     configs = node_setup.render_node_configs(
         options=node_setup.NodeConfigOptions(
             moniker=profile["moniker"],
-            seed_nodes=tuple(seed_nodes),
-            service_node=bool(profile.get("service_node")),
+            p2p_seeds=tuple(p2p_seeds),
+            p2p_persistent_peers=tuple(p2p_persistent_peers),
+            allow_cors=bool(advanced_cometbft.get("allow_cors", True)),
+            bds_enabled=bool(services_bds.get("enabled")),
             enable_pruning=bool(profile.get("pruning_enabled")),
             blocks_to_keep=int(profile.get("blocks_to_keep", 100000)),
             block_policy_mode=str(
@@ -122,6 +184,23 @@ def _initialize_node_from_args(args: argparse.Namespace) -> dict:
             transaction_trace_logging=bool(
                 profile.get("transaction_trace_logging", False)
             ),
+            statesync=node_setup.StateSyncOptions(
+                enable=bool(advanced_statesync.get("enabled", False)),
+                rpc_servers=tuple(advanced_statesync.get("rpc_servers") or ()),
+                trust_height=int(advanced_statesync.get("trust_height", 0)),
+                trust_hash=str(advanced_statesync.get("trust_hash", "")),
+                trust_period=str(
+                    advanced_statesync.get("trust_period", "168h0m0s")
+                ),
+            ),
+            metrics=node_setup.MetricsOptions(
+                enabled=bool(advanced_metrics.get("enabled", True)),
+                host=str(advanced_metrics.get("host", "0.0.0.0")),
+                port=int(advanced_metrics.get("port", 9108)),
+                bds_refresh_seconds=float(
+                    advanced_metrics.get("bds_refresh_seconds", 5.0)
+                ),
+            ),
             app_logging=node_setup.AppLoggingOptions(
                 level=str(profile.get("app_log_level", "INFO")),
                 json_logging=bool(profile.get("app_log_json", False)),
@@ -138,14 +217,71 @@ def _initialize_node_from_args(args: argparse.Namespace) -> dict:
             ),
             parallel_execution=node_setup.ParallelExecutionOptions(
                 enabled=bool(profile.get("parallel_execution_enabled", False)),
-                workers=int(profile.get("parallel_execution_workers", 0)),
+                workers=int(profile.get("parallel_execution_workers", 4)),
                 min_transactions=int(
                     profile.get("parallel_execution_min_transactions", 8)
                 ),
+                max_speculative_waves=int(
+                    advanced_parallel.get("max_speculative_waves", 4)
+                ),
+                min_wave_acceptance_ratio=float(
+                    advanced_parallel.get("min_wave_acceptance_ratio", 0.25)
+                ),
+                low_acceptance_min_wave_size=int(
+                    advanced_parallel.get("low_acceptance_min_wave_size", 8)
+                ),
+                warm_workers=bool(advanced_parallel.get("warm_workers", True)),
+                access_estimates_enabled=bool(
+                    advanced_parallel.get("access_estimates_enabled", True)
+                ),
             ),
-            # The xian-stack runtime publishes the app metrics port from Docker,
-            # so the in-container exporter must listen on all interfaces.
-            metrics=node_setup.MetricsOptions(host="0.0.0.0"),
+            pending_nonce_reservation_ttl_seconds=float(
+                advanced_pending_nonce.get("reservation_ttl_seconds", 60.0)
+            ),
+            max_pending_nonces_per_sender=int(
+                advanced_pending_nonce.get("max_per_sender", 128)
+            ),
+            bds=node_setup.BdsOptions(
+                dsn=str(services_bds.get("dsn", "")),
+                host=str(services_bds.get("host", "")),
+                port=int(services_bds.get("port", 5432)),
+                database=str(services_bds.get("database", "xian")),
+                user=str(services_bds.get("user", "")),
+                password=str(services_bds.get("password", "")),
+                pool_min_size=int(services_bds.get("pool_min_size", 1)),
+                pool_max_size=int(services_bds.get("pool_max_size", 10)),
+                statement_timeout_ms=int(
+                    services_bds.get("statement_timeout_ms", 0)
+                ),
+                acquire_timeout_ms=int(
+                    services_bds.get("acquire_timeout_ms", 10000)
+                ),
+                application_name=str(
+                    services_bds.get("application_name", "xian-bds")
+                ),
+                queue_max_size=int(services_bds.get("queue_max_size", 128)),
+                catchup_enabled=bool(
+                    services_bds.get("catchup_enabled", True)
+                ),
+                catchup_poll_seconds=float(
+                    services_bds.get("catchup_poll_seconds", 1.0)
+                ),
+                rpc_url=str(services_bds.get("rpc_url") or ""),
+                spool_dir=str(services_bds.get("spool_dir", "")),
+                spool_warn_entries=int(
+                    services_bds.get("spool_warn_entries", 256)
+                ),
+                spool_warn_bytes=int(
+                    services_bds.get("spool_warn_bytes", 536_870_912)
+                ),
+                disk_free_warn_bytes=int(
+                    services_bds.get("disk_free_warn_bytes", 2_147_483_648)
+                ),
+            ),
+            proxy_app=str(
+                advanced_cometbft.get("proxy_app", "unix:///tmp/abci.sock")
+            ),
+            prometheus=bool(advanced_cometbft.get("prometheus", True)),
         )
     )
     config = configs["cometbft"]
@@ -352,33 +488,37 @@ def _fallback_node_endpoints(
             suffix="/metrics",
         ),
     }
-    if bool(profile.get("dashboard_enabled")):
+    dashboard = _service_config(profile, "dashboard")
+    monitoring = _service_config(profile, "monitoring")
+    intentkit = _service_config(profile, "intentkit")
+    shielded_relayer = _service_config(profile, "shielded_relayer")
+    if bool(dashboard.get("enabled")):
         dashboard_host = _display_endpoint_host(
-            str(profile.get("dashboard_host", "127.0.0.1"))
+            str(dashboard.get("host", "127.0.0.1"))
         )
-        dashboard_port = int(profile.get("dashboard_port", 8080))
+        dashboard_port = int(dashboard.get("port", 8080))
         dashboard_url = f"http://{dashboard_host}:{dashboard_port}"
         endpoints["dashboard"] = dashboard_url
         endpoints["dashboard_status"] = f"{dashboard_url}/api/status"
-    if bool(profile.get("monitoring_enabled")):
+    if bool(monitoring.get("enabled")):
         endpoints["prometheus"] = _replace_url_port(base_url, port=9090)
         endpoints["grafana"] = _replace_url_port(base_url, port=3000)
-    if bool(profile.get("intentkit_enabled")):
+    if bool(intentkit.get("enabled")):
         intentkit_host = _display_endpoint_host(
-            str(profile.get("intentkit_host", "127.0.0.1"))
+            str(intentkit.get("host", "127.0.0.1"))
         )
-        intentkit_port = int(profile.get("intentkit_port", 38000))
-        intentkit_api_port = int(profile.get("intentkit_api_port", 38080))
+        intentkit_port = int(intentkit.get("port", 38000))
+        intentkit_api_port = int(intentkit.get("api_port", 38080))
         frontend_url = f"http://{intentkit_host}:{intentkit_port}"
         api_url = f"http://{intentkit_host}:{intentkit_api_port}"
         endpoints["intentkit"] = frontend_url
         endpoints["intentkit_api"] = api_url
         endpoints["intentkit_api_health"] = f"{api_url}/health"
-    if bool(profile.get("shielded_relayer_enabled")):
+    if bool(shielded_relayer.get("enabled")):
         relayer_host = _display_endpoint_host(
-            str(profile.get("shielded_relayer_host", "127.0.0.1"))
+            str(shielded_relayer.get("host", "127.0.0.1"))
         )
-        relayer_port = int(profile.get("shielded_relayer_port", 38180))
+        relayer_port = int(shielded_relayer.get("port", 38180))
         relayer_url = f"http://{relayer_host}:{relayer_port}"
         endpoints["shielded_relayer"] = relayer_url
         endpoints["shielded_relayer_health"] = f"{relayer_url}/health"
@@ -408,17 +548,9 @@ def _collect_node_endpoints(args: argparse.Namespace) -> dict[str, object]:
         "node_image_mode": node_image_mode,
         "node_integrated_image": node_integrated_image,
         "node_split_image": node_split_image,
-        "service_node": bool(profile.get("service_node")),
         "operator_profile": profile.get("operator_profile"),
         "monitoring_profile": profile.get("monitoring_profile"),
-        "dashboard_enabled": bool(profile.get("dashboard_enabled")),
-        "monitoring_enabled": bool(profile.get("monitoring_enabled")),
-        "intentkit_enabled": bool(profile.get("intentkit_enabled")),
-        "dex_automation_enabled": bool(profile.get("dex_automation_enabled")),
-        "shielded_relayer_enabled": bool(
-            profile.get("shielded_relayer_enabled")
-        ),
-        "intentkit_network_id": profile.get("intentkit_network_id"),
+        **_profile_service_summary(profile),
     }
     if stack_dir is not None:
         payload["stack_dir"] = str(stack_dir)
@@ -469,26 +601,11 @@ def _summarize_node_status(result: dict[str, object]) -> dict[str, object]:
     summary: dict[str, object] = {
         "state": state,
         "initialized": bool(result.get("initialized")),
-        "service_node": bool(result.get("profile", {}).get("service_node")),
         "operator_profile": result.get("profile", {}).get("operator_profile"),
         "monitoring_profile": result.get("profile", {}).get(
             "monitoring_profile"
         ),
-        "dashboard_enabled": bool(
-            result.get("profile", {}).get("dashboard_enabled")
-        ),
-        "monitoring_enabled": bool(
-            result.get("profile", {}).get("monitoring_enabled")
-        ),
-        "intentkit_enabled": bool(
-            result.get("profile", {}).get("intentkit_enabled")
-        ),
-        "dex_automation_enabled": bool(
-            result.get("profile", {}).get("dex_automation_enabled")
-        ),
-        "shielded_relayer_enabled": bool(
-            result.get("profile", {}).get("shielded_relayer_enabled")
-        ),
+        **_profile_service_summary(result.get("profile", {})),
         "backend_running": result.get("backend_running"),
         "rpc_reachable": result.get("rpc_reachable"),
         "rpc_height": sync_info.get("latest_block_height"),
@@ -619,14 +736,9 @@ def _collect_node_status(
         "genesis_present": genesis_path.exists(),
         "node_key_present": node_key_path.exists(),
         "priv_validator_state_present": validator_state_path.exists(),
-        "effective_genesis_source": (
-            profile.get("genesis_url")
-            or network.get("genesis_source")
-            or (
-                None
-                if network.get("genesis_preset") is None
-                else f"preset:{network['genesis_preset']}"
-            )
+        "effective_genesis_source": _describe_effective_genesis(
+            profile=profile,
+            network=network,
         ),
         "effective_snapshot_url": _resolve_effective_snapshot_url(
             profile=profile,
@@ -640,16 +752,10 @@ def _collect_node_status(
             "node_integrated_image": node_integrated_image,
             "node_split_image": node_split_image,
             "node_release_manifest": node_release_manifest,
-            "service_node": bool(profile.get("service_node")),
             "operator_profile": profile.get("operator_profile"),
             "monitoring_profile": profile.get("monitoring_profile"),
-            "dashboard_enabled": bool(profile.get("dashboard_enabled")),
-            "monitoring_enabled": bool(profile.get("monitoring_enabled")),
-            "intentkit_enabled": bool(profile.get("intentkit_enabled")),
-            "intentkit_network_id": profile.get("intentkit_network_id"),
-            "dex_automation_enabled": bool(
-                profile.get("dex_automation_enabled")
-            ),
+            "services": profile.get("services"),
+            **_profile_service_summary(profile),
         },
     }
     result["node_release_manifest"] = node_release_manifest
@@ -775,14 +881,9 @@ def _collect_node_health(args: argparse.Namespace) -> dict[str, object]:
         "node_integrated_image": node_integrated_image,
         "node_split_image": node_split_image,
         "home": str(home),
-        "service_node": bool(profile.get("service_node")),
         "operator_profile": profile.get("operator_profile"),
         "monitoring_profile": profile.get("monitoring_profile"),
-        "dashboard_enabled": bool(profile.get("dashboard_enabled")),
-        "monitoring_enabled": bool(profile.get("monitoring_enabled")),
-        "intentkit_enabled": bool(profile.get("intentkit_enabled")),
-        "intentkit_network_id": profile.get("intentkit_network_id"),
-        "dex_automation_enabled": bool(profile.get("dex_automation_enabled")),
+        **_profile_service_summary(profile),
         "effective_snapshot_url": _resolve_effective_snapshot_url(
             profile=profile,
             network=context["network"],

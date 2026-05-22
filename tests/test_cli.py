@@ -110,6 +110,93 @@ def _normalized_release_manifest(manifest: dict) -> dict:
     }
 
 
+def _manifest_payload(
+    *,
+    name: str = "canonical",
+    chain_id: str = "xian-canonical-1",
+    genesis: dict | None = None,
+    p2p_seeds: list[str] | None = None,
+    **overrides,
+) -> dict:
+    payload = {
+        "schema_version": 1,
+        "name": name,
+        "chain_id": chain_id,
+        "genesis": genesis or {"kind": "source", "source": "./genesis.json"},
+        "snapshot_url": None,
+        "p2p": {
+            "seeds": p2p_seeds or [],
+            "persistent_peers": [],
+        },
+    }
+    payload.update(overrides)
+    return payload
+
+
+def _services_payload(
+    *,
+    bds_enabled: bool = False,
+    dashboard_enabled: bool = False,
+    monitoring_enabled: bool = False,
+    dashboard_host: str = "127.0.0.1",
+    dashboard_port: int = 8080,
+) -> dict:
+    return {
+        "bds": {"enabled": bds_enabled},
+        "dashboard": {
+            "enabled": dashboard_enabled,
+            "host": dashboard_host,
+            "port": dashboard_port,
+        },
+        "monitoring": {"enabled": monitoring_enabled},
+    }
+
+
+def _profile_payload(
+    *,
+    name: str = "validator-1",
+    network: str = "mainnet",
+    moniker: str = "validator-1",
+    stack_dir: str | None = None,
+    p2p_seeds: list[str] | None = None,
+    services: dict | None = None,
+    **overrides,
+) -> dict:
+    payload = {
+        "schema_version": 1,
+        "name": name,
+        "network": network,
+        "moniker": moniker,
+        "stack_dir": stack_dir,
+        "p2p": {
+            "seeds": p2p_seeds or [],
+            "persistent_peers": [],
+        },
+        "genesis": None,
+        "snapshot_url": None,
+        "services": services or _services_payload(),
+    }
+    payload.update(overrides)
+    return payload
+
+
+def _template_services(
+    *,
+    bds_enabled: bool,
+    dashboard_enabled: bool,
+    monitoring_enabled: bool,
+    dashboard_host: str,
+    dashboard_port: int,
+) -> dict:
+    return _services_payload(
+        bds_enabled=bds_enabled,
+        dashboard_enabled=dashboard_enabled,
+        monitoring_enabled=monitoring_enabled,
+        dashboard_host=dashboard_host,
+        dashboard_port=dashboard_port,
+    )
+
+
 class ValidatorKeyTests(unittest.TestCase):
     def test_generate_validator_material_shape(self) -> None:
         payload = (
@@ -893,11 +980,13 @@ class NetworkManifestTests(unittest.TestCase):
                         "monitoring_profile": "none",
                         "bootstrap_node_name": "validator-1",
                         "additional_validator_names": [],
-                        "service_node": False,
-                        "dashboard_enabled": True,
-                        "monitoring_enabled": False,
-                        "dashboard_host": "0.0.0.0",
-                        "dashboard_port": 18080,
+                        "services": _template_services(
+                            bds_enabled=False,
+                            dashboard_enabled=True,
+                            monitoring_enabled=False,
+                            dashboard_host="0.0.0.0",
+                            dashboard_port=18080,
+                        ),
                         "pruning_enabled": False,
                         "blocks_to_keep": 100000,
                     }
@@ -926,7 +1015,7 @@ class NetworkManifestTests(unittest.TestCase):
             self.assertEqual(
                 payload[0]["operator_profile"], "local_development"
             )
-            self.assertTrue(payload[0]["dashboard_enabled"])
+            self.assertTrue(payload[0]["services"]["dashboard"]["enabled"])
 
     def test_network_create_writes_manifest(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -948,8 +1037,13 @@ class NetworkManifestTests(unittest.TestCase):
             self.assertEqual(manifest["schema_version"], 1)
             self.assertEqual(manifest["name"], "local-dev")
             self.assertEqual(manifest["chain_id"], "xian-local-1")
-            self.assertEqual(manifest["mode"], "create")
+            self.assertNotIn("mode", manifest)
             self.assertNotIn("runtime_backend", manifest)
+            self.assertEqual(
+                manifest["genesis"],
+                {"kind": "bundle", "bundle": "local"},
+            )
+            self.assertEqual(manifest["p2p"]["seeds"], [])
             self.assertEqual(manifest["block_policy_mode"], "on_demand")
             self.assertEqual(manifest["block_policy_interval"], "0s")
             self.assertNotIn("tracer_mode", manifest)
@@ -985,8 +1079,11 @@ class NetworkManifestTests(unittest.TestCase):
                 str(manifest_path.resolve()),
             )
             manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-            self.assertEqual(manifest["mode"], "create")
-            self.assertIsNone(manifest["genesis_source"])
+            self.assertNotIn("mode", manifest)
+            self.assertEqual(
+                manifest["genesis"],
+                {"kind": "bundle", "bundle": "local"},
+            )
             self.assertEqual(manifest["block_policy_mode"], "on_demand")
             self.assertEqual(manifest["block_policy_interval"], "0s")
             self.assertNotIn("tracer_mode", manifest)
@@ -1024,12 +1121,13 @@ class NetworkManifestTests(unittest.TestCase):
             )
             self.assertFalse(manifest_path.exists())
 
-    def test_read_network_manifest_accepts_preset_built_genesis(self) -> None:
+    def test_read_network_manifest_accepts_bundle_built_genesis(self) -> None:
         manifest = read_network_manifest(CANONICAL_DEVNET_MANIFEST)
-        self.assertIsNone(manifest["genesis_source"])
-        self.assertEqual(manifest["genesis_preset"], "devnet")
+        self.assertEqual(manifest["genesis"]["kind"], "bundle")
+        self.assertEqual(manifest["genesis"]["bundle"], "devnet")
         self.assertEqual(
-            manifest["genesis_time"], "2026-03-30T00:00:00.000000Z"
+            manifest["genesis"]["genesis_time"],
+            "2026-03-30T00:00:00.000000Z",
         )
 
     def test_read_network_manifest_accepts_privacy_policy_surfaces(
@@ -1039,18 +1137,23 @@ class NetworkManifestTests(unittest.TestCase):
             manifest_path = Path(tmp_dir) / "manifest.json"
             manifest_path.write_text(
                 json.dumps(
-                    {
-                        "schema_version": 1,
-                        "name": "privacy-test",
-                        "chain_id": "xian-privacy-1",
-                        "mode": "join",
-                        "node_image_mode": "local_build",
-                        "shielded_relayers": [],
-                        "privacy_artifact_catalog": {
+                    _manifest_payload(
+                        name="privacy-test",
+                        chain_id="xian-privacy-1",
+                        genesis={
+                            "kind": "bundle",
+                            "bundle": "devnet",
+                            "genesis_time": (
+                                "2026-03-30T00:00:00.000000Z"
+                            ),
+                        },
+                        node_image_mode="local_build",
+                        shielded_relayers=[],
+                        privacy_artifact_catalog={
                             "path": "./privacy/artifacts.json",
                             "sha256": "a" * 64,
                         },
-                        "shielded_history_policy": {
+                        shielded_history_policy={
                             "feed_version": 1,
                             "compatibility_commitment": "versioned",
                             "retention_class": "archive",
@@ -1059,7 +1162,7 @@ class NetworkManifestTests(unittest.TestCase):
                                 "retain encrypted payload history"
                             ),
                         },
-                        "privacy_submission_policy": {
+                        privacy_submission_policy={
                             "disclosure_policy": "user_controlled",
                             "shared_relayer_auth_required": True,
                             "hidden_sender_submission_mode": "relayer_optional",
@@ -1067,13 +1170,9 @@ class NetworkManifestTests(unittest.TestCase):
                                 "shared relayers require operator auth"
                             ),
                         },
-                        "genesis_preset": "devnet",
-                        "genesis_time": "2026-03-30T00:00:00.000000Z",
-                        "snapshot_url": None,
-                        "seed_nodes": [],
-                        "block_policy_mode": "on_demand",
-                        "block_policy_interval": "0s",
-                    }
+                        block_policy_mode="on_demand",
+                        block_policy_interval="0s",
+                    )
                 ),
                 encoding="utf-8",
             )
@@ -1102,21 +1201,14 @@ class NetworkManifestTests(unittest.TestCase):
             manifest_path = Path(tmp_dir) / "manifest.json"
             manifest_path.write_text(
                 json.dumps(
-                    {
-                        "schema_version": 1,
-                        "name": "canonical",
-                        "chain_id": "xian-canonical-1",
-                        "mode": "join",
-                        "node_image_mode": "registry",
-                        "node_integrated_image": (
+                    _manifest_payload(
+                        node_image_mode="registry",
+                        node_integrated_image=(
                             "ghcr.io/xian-technology/xian-node@sha256:abc"
                         ),
-                        "genesis_source": "./genesis.json",
-                        "snapshot_url": None,
-                        "seed_nodes": [],
-                        "block_policy_mode": "on_demand",
-                        "block_policy_interval": "0s",
-                    }
+                        block_policy_mode="on_demand",
+                        block_policy_interval="0s",
+                    )
                 ),
                 encoding="utf-8",
             )
@@ -1157,11 +1249,18 @@ class NetworkManifestTests(unittest.TestCase):
                         "monitoring_profile": "local_stack",
                         "bootstrap_node_name": "validator-1",
                         "additional_validator_names": [],
-                        "service_node": True,
-                        "dashboard_enabled": True,
-                        "monitoring_enabled": True,
-                        "dashboard_host": "0.0.0.0",
-                        "dashboard_port": 18080,
+                        "services": _template_services(
+                            bds_enabled=True,
+                            dashboard_enabled=True,
+                            monitoring_enabled=True,
+                            dashboard_host="0.0.0.0",
+                            dashboard_port=18080,
+                        ),
+                        "advanced": {
+                            "metrics": {
+                                "host": "0.0.0.0",
+                            },
+                        },
                         "pruning_enabled": False,
                         "blocks_to_keep": 100000,
                     }
@@ -1205,7 +1304,7 @@ class NetworkManifestTests(unittest.TestCase):
 
             self.assertEqual(result["template"], "single-node-indexed")
             self.assertNotIn("tracer_mode", manifest)
-            self.assertTrue(profile["service_node"])
+            self.assertTrue(profile["services"]["bds"]["enabled"])
             self.assertTrue(profile["transaction_trace_logging"])
             self.assertEqual(profile["app_log_level"], "DEBUG")
             self.assertTrue(profile["app_log_json"])
@@ -1220,10 +1319,22 @@ class NetworkManifestTests(unittest.TestCase):
             self.assertEqual(profile["parallel_execution_min_transactions"], 12)
             self.assertEqual(profile["operator_profile"], "indexed_development")
             self.assertEqual(profile["monitoring_profile"], "local_stack")
-            self.assertTrue(profile["dashboard_enabled"])
-            self.assertTrue(profile["monitoring_enabled"])
-            self.assertEqual(profile["dashboard_host"], "0.0.0.0")
-            self.assertEqual(profile["dashboard_port"], 18080)
+            self.assertTrue(profile["services"]["dashboard"]["enabled"])
+            self.assertTrue(profile["services"]["monitoring"]["enabled"])
+            self.assertEqual(
+                profile["services"]["dashboard"]["host"], "0.0.0.0"
+            )
+            self.assertEqual(profile["services"]["dashboard"]["port"], 18080)
+            self.assertEqual(profile["advanced"]["metrics"]["host"], "0.0.0.0")
+            self.assertEqual(
+                profile["advanced"]["metrics"]["bds_refresh_seconds"], 5.0
+            )
+            self.assertEqual(
+                profile["advanced"]["parallel_execution"][
+                    "max_speculative_waves"
+                ],
+                4,
+            )
 
     def test_network_package_operator_bundle_materializes_shareable_files(
         self,
@@ -1254,23 +1365,18 @@ class NetworkManifestTests(unittest.TestCase):
             manifest_path = network_dir / "manifest.json"
             manifest_path.write_text(
                 json.dumps(
-                    {
-                        "schema_version": 1,
-                        "name": "private-dev",
-                        "chain_id": "xian-private-dev-1",
-                        "mode": "join",
-                        "node_image_mode": "local_build",
-                        "genesis_source": "./genesis.json",
-                        "snapshot_url": None,
-                        "snapshot_signing_keys": [],
-                        "seed_nodes": [],
-                        "block_policy_mode": "idle_interval",
-                        "block_policy_interval": "5s",
-                        "privacy_artifact_catalog": {
+                    _manifest_payload(
+                        name="private-dev",
+                        chain_id="xian-private-dev-1",
+                        node_image_mode="local_build",
+                        snapshot_signing_keys=[],
+                        block_policy_mode="idle_interval",
+                        block_policy_interval="5s",
+                        privacy_artifact_catalog={
                             "path": "./privacy/artifacts.json",
                             "sha256": "a" * 64,
                         },
-                    }
+                    )
                 ),
                 encoding="utf-8",
             )
@@ -1300,12 +1406,11 @@ class NetworkManifestTests(unittest.TestCase):
             )
 
             self.assertEqual(
-                bundled_manifest["genesis_source"],
-                "./genesis.json",
+                bundled_manifest["genesis"],
+                {"kind": "source", "source": "./genesis.json"},
             )
-            self.assertIsNone(bundled_manifest["genesis_preset"])
             self.assertEqual(
-                bundled_manifest["seed_nodes"],
+                bundled_manifest["p2p"]["seeds"],
                 ["abc@seed.example:26656"],
             )
             self.assertNotIn("runtime_backend", bundled_manifest)
@@ -1325,7 +1430,7 @@ class NetworkManifestTests(unittest.TestCase):
                 os.access(bundle_dir / "participant-join.sh", os.X_OK)
             )
             self.assertTrue(
-                os.access(bundle_dir / "participant-service-node.sh", os.X_OK)
+                os.access(bundle_dir / "participant-bds-node.sh", os.X_OK)
             )
 
     def test_network_join_writes_node_profile(self) -> None:
@@ -1341,7 +1446,7 @@ class NetworkManifestTests(unittest.TestCase):
                         "devnet",
                         "--seed",
                         "abc@127.0.0.1:26656",
-                        "--service-node",
+                        "--enable-bds",
                         "--enable-dashboard",
                         "--dashboard-host",
                         "0.0.0.0",
@@ -1357,11 +1462,15 @@ class NetworkManifestTests(unittest.TestCase):
             self.assertEqual(profile["name"], "validator-1")
             self.assertEqual(profile["network"], "devnet")
             self.assertEqual(profile["moniker"], "validator-1")
-            self.assertEqual(profile["seeds"], ["abc@127.0.0.1:26656"])
-            self.assertTrue(profile["service_node"])
-            self.assertTrue(profile["dashboard_enabled"])
-            self.assertEqual(profile["dashboard_host"], "0.0.0.0")
-            self.assertEqual(profile["dashboard_port"], 18080)
+            self.assertEqual(
+                profile["p2p"]["seeds"], ["abc@127.0.0.1:26656"]
+            )
+            self.assertTrue(profile["services"]["bds"]["enabled"])
+            self.assertTrue(profile["services"]["dashboard"]["enabled"])
+            self.assertEqual(
+                profile["services"]["dashboard"]["host"], "0.0.0.0"
+            )
+            self.assertEqual(profile["services"]["dashboard"]["port"], 18080)
             self.assertEqual(profile["block_policy_mode"], "idle_interval")
             self.assertEqual(profile["block_policy_interval"], "5s")
             self.assertNotIn("tracer_mode", profile)
@@ -1447,9 +1556,11 @@ class NetworkManifestTests(unittest.TestCase):
             result = json.loads(stdout.getvalue())
             profile_path = Path(result["validators"][0]["profile_path"])
             profile = json.loads(profile_path.read_text(encoding="utf-8"))
-            self.assertTrue(profile["dashboard_enabled"])
-            self.assertEqual(profile["dashboard_host"], "0.0.0.0")
-            self.assertEqual(profile["dashboard_port"], 18080)
+            self.assertTrue(profile["services"]["dashboard"]["enabled"])
+            self.assertEqual(
+                profile["services"]["dashboard"]["host"], "0.0.0.0"
+            )
+            self.assertEqual(profile["services"]["dashboard"]["port"], 18080)
 
     def test_network_join_uses_canonical_manifest_defaults(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -1459,27 +1570,22 @@ class NetworkManifestTests(unittest.TestCase):
             network_dir.mkdir(parents=True)
             (network_dir / "manifest.json").write_text(
                 json.dumps(
-                    {
-                        "schema_version": 1,
-                        "name": "canonical",
-                        "chain_id": "xian-canonical-1",
-                        "mode": "join",
-                        "genesis_source": "./genesis.json",
-                        "snapshot_url": "https://example.invalid/snapshot",
-                        "seed_nodes": ["seed-1@127.0.0.1:26656"],
-                        "block_policy_mode": "periodic",
-                        "block_policy_interval": "10s",
-                        "node_image_mode": "registry",
-                        "node_integrated_image": (
+                    _manifest_payload(
+                        snapshot_url="https://example.invalid/snapshot",
+                        p2p_seeds=["seed-1@127.0.0.1:26656"],
+                        block_policy_mode="periodic",
+                        block_policy_interval="10s",
+                        node_image_mode="registry",
+                        node_integrated_image=(
                             "ghcr.io/xian-technology/xian-node@sha256:abc"
                         ),
-                        "node_split_image": (
+                        node_split_image=(
                             "ghcr.io/xian-technology/xian-node-split@sha256:def"
                         ),
-                        "node_release_manifest": (
+                        node_release_manifest=(
                             CANONICAL_NODE_RELEASE_MANIFEST
                         ),
-                    }
+                    )
                 ),
                 encoding="utf-8",
             )
@@ -1506,7 +1612,7 @@ class NetworkManifestTests(unittest.TestCase):
             self.assertEqual(exit_code, 0)
             profile = json.loads(output_path.read_text(encoding="utf-8"))
             self.assertNotIn("runtime_backend", profile)
-            self.assertEqual(profile["seeds"], [])
+            self.assertEqual(profile["p2p"]["seeds"], [])
             self.assertIsNone(profile["snapshot_url"])
             self.assertEqual(profile["block_policy_mode"], "periodic")
             self.assertEqual(profile["block_policy_interval"], "10s")
@@ -1535,17 +1641,10 @@ class NetworkManifestTests(unittest.TestCase):
             templates_dir.mkdir(parents=True)
             (network_dir / "manifest.json").write_text(
                 json.dumps(
-                    {
-                        "schema_version": 1,
-                        "name": "canonical",
-                        "chain_id": "xian-canonical-1",
-                        "mode": "join",
-                        "genesis_source": "./genesis.json",
-                        "snapshot_url": None,
-                        "seed_nodes": [],
-                        "block_policy_mode": "on_demand",
-                        "block_policy_interval": "0s",
-                    }
+                    _manifest_payload(
+                        block_policy_mode="on_demand",
+                        block_policy_interval="0s",
+                    )
                 ),
                 encoding="utf-8",
             )
@@ -1571,14 +1670,16 @@ class NetworkManifestTests(unittest.TestCase):
                         "parallel_execution_workers": 3,
                         "parallel_execution_min_transactions": 9,
                         "operator_profile": "embedded_backend",
-                        "monitoring_profile": "service_node",
+                        "monitoring_profile": "bds",
                         "bootstrap_node_name": "validator-1",
                         "additional_validator_names": [],
-                        "service_node": True,
-                        "dashboard_enabled": False,
-                        "monitoring_enabled": True,
-                        "dashboard_host": "127.0.0.1",
-                        "dashboard_port": 8080,
+                        "services": _template_services(
+                            bds_enabled=True,
+                            dashboard_enabled=False,
+                            monitoring_enabled=True,
+                            dashboard_host="127.0.0.1",
+                            dashboard_port=8080,
+                        ),
                         "pruning_enabled": False,
                         "blocks_to_keep": 100000,
                     }
@@ -1608,7 +1709,7 @@ class NetworkManifestTests(unittest.TestCase):
 
             self.assertEqual(exit_code, 0)
             profile = json.loads(output_path.read_text(encoding="utf-8"))
-            self.assertTrue(profile["service_node"])
+            self.assertTrue(profile["services"]["bds"]["enabled"])
             self.assertTrue(profile["transaction_trace_logging"])
             self.assertEqual(profile["app_log_level"], "WARNING")
             self.assertTrue(profile["app_log_json"])
@@ -1622,9 +1723,9 @@ class NetworkManifestTests(unittest.TestCase):
             self.assertEqual(profile["parallel_execution_workers"], 3)
             self.assertEqual(profile["parallel_execution_min_transactions"], 9)
             self.assertEqual(profile["operator_profile"], "embedded_backend")
-            self.assertEqual(profile["monitoring_profile"], "service_node")
-            self.assertTrue(profile["monitoring_enabled"])
-            self.assertFalse(profile["dashboard_enabled"])
+            self.assertEqual(profile["monitoring_profile"], "bds")
+            self.assertTrue(profile["services"]["monitoring"]["enabled"])
+            self.assertFalse(profile["services"]["dashboard"]["enabled"])
             self.assertNotIn("tracer_mode", profile)
 
     def test_network_join_drops_release_manifest_for_local_build_override(
@@ -1637,27 +1738,20 @@ class NetworkManifestTests(unittest.TestCase):
             network_dir.mkdir(parents=True)
             (network_dir / "manifest.json").write_text(
                 json.dumps(
-                    {
-                        "schema_version": 1,
-                        "name": "canonical",
-                        "chain_id": "xian-canonical-1",
-                        "mode": "join",
-                        "genesis_source": "./genesis.json",
-                        "snapshot_url": None,
-                        "seed_nodes": [],
-                        "block_policy_mode": "on_demand",
-                        "block_policy_interval": "0s",
-                        "node_image_mode": "registry",
-                        "node_integrated_image": (
+                    _manifest_payload(
+                        block_policy_mode="on_demand",
+                        block_policy_interval="0s",
+                        node_image_mode="registry",
+                        node_integrated_image=(
                             "ghcr.io/xian-technology/xian-node@sha256:abc"
                         ),
-                        "node_split_image": (
+                        node_split_image=(
                             "ghcr.io/xian-technology/xian-node-split@sha256:def"
                         ),
-                        "node_release_manifest": (
+                        node_release_manifest=(
                             CANONICAL_NODE_RELEASE_MANIFEST
                         ),
-                    }
+                    )
                 ),
                 encoding="utf-8",
             )
@@ -1698,17 +1792,10 @@ class NetworkManifestTests(unittest.TestCase):
             network_dir.mkdir(parents=True)
             (network_dir / "manifest.json").write_text(
                 json.dumps(
-                    {
-                        "schema_version": 1,
-                        "name": "canonical",
-                        "chain_id": "xian-canonical-1",
-                        "mode": "join",
-                        "genesis_source": "./genesis.json",
-                        "snapshot_url": None,
-                        "seed_nodes": [],
-                        "block_policy_mode": "on_demand",
-                        "block_policy_interval": "0s",
-                    }
+                    _manifest_payload(
+                        block_policy_mode="on_demand",
+                        block_policy_interval="0s",
+                    )
                 ),
                 encoding="utf-8",
             )
@@ -1782,15 +1869,9 @@ class NetworkManifestTests(unittest.TestCase):
             network_dir.mkdir(parents=True)
             (network_dir / "manifest.json").write_text(
                 json.dumps(
-                    {
-                        "schema_version": 1,
-                        "name": "canonical",
-                        "chain_id": "xian-canonical-1",
-                        "mode": "join",
-                        "genesis_source": "./genesis.json",
-                        "snapshot_url": None,
-                        "seed_nodes": ["seed-1@127.0.0.1:26656"],
-                    }
+                    _manifest_payload(
+                        p2p_seeds=["seed-1@127.0.0.1:26656"],
+                    )
                 ),
                 encoding="utf-8",
             )
@@ -1821,7 +1902,9 @@ class NetworkManifestTests(unittest.TestCase):
             self.assertEqual(exit_code, 0)
             profile = json.loads(output_path.read_text(encoding="utf-8"))
             self.assertNotIn("runtime_backend", profile)
-            self.assertEqual(profile["seeds"], ["local-seed@127.0.0.1:26656"])
+            self.assertEqual(
+                profile["p2p"]["seeds"], ["local-seed@127.0.0.1:26656"]
+            )
             self.assertEqual(
                 profile["snapshot_url"],
                 "https://example.invalid/node-snapshot",
@@ -1836,15 +1919,7 @@ class NetworkManifestTests(unittest.TestCase):
             network_dir.mkdir(parents=True)
             (network_dir / "manifest.json").write_text(
                 json.dumps(
-                    {
-                        "schema_version": 1,
-                        "name": "canonical",
-                        "chain_id": "xian-canonical-1",
-                        "mode": "join",
-                        "genesis_source": "./genesis.json",
-                        "snapshot_url": None,
-                        "seed_nodes": [],
-                    }
+                    _manifest_payload()
                 ),
                 encoding="utf-8",
             )
@@ -1879,15 +1954,7 @@ class NetworkManifestTests(unittest.TestCase):
             network_dir.mkdir(parents=True)
             (network_dir / "manifest.json").write_text(
                 json.dumps(
-                    {
-                        "schema_version": 1,
-                        "name": "canonical",
-                        "chain_id": "xian-canonical-1",
-                        "mode": "join",
-                        "genesis_source": "./genesis.json",
-                        "snapshot_url": None,
-                        "seed_nodes": [],
-                    }
+                    _manifest_payload()
                 ),
                 encoding="utf-8",
             )
@@ -1920,15 +1987,7 @@ class NetworkManifestTests(unittest.TestCase):
             network_dir.mkdir(parents=True)
             (network_dir / "manifest.json").write_text(
                 json.dumps(
-                    {
-                        "schema_version": 1,
-                        "name": "canonical",
-                        "chain_id": "xian-canonical-1",
-                        "mode": "join",
-                        "genesis_source": "./genesis.json",
-                        "snapshot_url": None,
-                        "seed_nodes": [],
-                    }
+                    _manifest_payload()
                 ),
                 encoding="utf-8",
             )
@@ -2105,7 +2164,7 @@ class NetworkManifestTests(unittest.TestCase):
                 "keys/validator-1/validator_key_info.json",
             )
             self.assertNotIn("[xian]", config_toml)
-            self.assertIn('metrics_host = "0.0.0.0"', xian_toml)
+            self.assertIn('metrics_host = "127.0.0.1"', xian_toml)
 
     def test_network_create_can_bootstrap_local_network(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -2202,7 +2261,10 @@ class NetworkManifestTests(unittest.TestCase):
             generated_genesis = json.loads(
                 genesis_path.read_text(encoding="utf-8")
             )
-            self.assertEqual(manifest["genesis_source"], "./genesis.json")
+            self.assertEqual(
+                manifest["genesis"],
+                {"kind": "source", "source": "./genesis.json"},
+            )
             self.assertEqual(
                 profile["validator_key_ref"],
                 "keys/validator-1/validator_key_info.json",
@@ -2388,7 +2450,7 @@ class NodeInitTests(unittest.TestCase):
             self.assertEqual(rendered_genesis["chain_id"], "xian-devnet-1")
             self.assertEqual(
                 result["node_init"]["effective_genesis_source"],
-                "preset:devnet",
+                "bundle:devnet",
             )
             self.assertEqual(len(rendered_genesis["validators"]), 2)
             self.assertEqual(
@@ -2478,6 +2540,40 @@ class NodeInitTests(unittest.TestCase):
                     ]
                 )
 
+            profile_path = base_dir / "nodes" / "validator-1.json"
+            profile = json.loads(profile_path.read_text(encoding="utf-8"))
+            profile["p2p"]["persistent_peers"] = [
+                "peer1@127.0.0.1:26656"
+            ]
+            profile["services"]["bds"].update(
+                {
+                    "enabled": True,
+                    "host": "postgres",
+                    "port": 5544,
+                    "database": "xian_index",
+                    "user": "indexer",
+                    "password": "secret",
+                    "pool_min_size": 2,
+                    "pool_max_size": 6,
+                    "statement_timeout_ms": 5000,
+                    "acquire_timeout_ms": 15000,
+                    "application_name": "xian-bds-test",
+                    "queue_max_size": 321,
+                    "catchup_enabled": False,
+                    "catchup_poll_seconds": 2.5,
+                    "rpc_url": "http://rpc.internal:26657",
+                    "spool_dir": "/var/lib/xian/bds-spool",
+                    "spool_warn_entries": 512,
+                    "spool_warn_bytes": 1_073_741_824,
+                    "disk_free_warn_bytes": 4_294_967_296,
+                }
+            )
+            profile["advanced"]["metrics"]["bds_refresh_seconds"] = 7.5
+            profile["advanced"]["parallel_execution"][
+                "max_speculative_waves"
+            ] = 6
+            profile_path.write_text(json.dumps(profile), encoding="utf-8")
+
             stdout = io.StringIO()
             with redirect_stdout(stdout):
                 exit_code = main(
@@ -2525,8 +2621,51 @@ class NodeInitTests(unittest.TestCase):
                 "parallel_execution_min_transactions = 11",
                 xian_toml,
             )
+            rendered_config = tomllib.loads(config_toml)
+            rendered_xian = tomllib.loads(xian_toml)
+            self.assertEqual(
+                rendered_config["p2p"]["persistent_peers"],
+                "peer1@127.0.0.1:26656",
+            )
+            self.assertTrue(rendered_xian["bds_enabled"])
+            self.assertEqual(rendered_xian["metrics_bds_refresh_seconds"], 7.5)
+            self.assertEqual(
+                rendered_xian["parallel_execution_max_speculative_waves"], 6
+            )
+            self.assertEqual(rendered_xian["bds"]["host"], "postgres")
+            self.assertEqual(rendered_xian["bds"]["port"], 5544)
+            self.assertEqual(rendered_xian["bds"]["database"], "xian_index")
+            self.assertEqual(rendered_xian["bds"]["user"], "indexer")
+            self.assertEqual(rendered_xian["bds"]["password"], "secret")
+            self.assertEqual(rendered_xian["bds"]["pool_min_size"], 2)
+            self.assertEqual(rendered_xian["bds"]["pool_max_size"], 6)
+            self.assertEqual(
+                rendered_xian["bds"]["statement_timeout_ms"], 5000
+            )
+            self.assertEqual(rendered_xian["bds"]["acquire_timeout_ms"], 15000)
+            self.assertEqual(
+                rendered_xian["bds"]["application_name"], "xian-bds-test"
+            )
+            self.assertEqual(rendered_xian["bds"]["queue_max_size"], 321)
+            self.assertFalse(rendered_xian["bds"]["catchup_enabled"])
+            self.assertEqual(
+                rendered_xian["bds"]["catchup_poll_seconds"], 2.5
+            )
+            self.assertEqual(
+                rendered_xian["bds"]["rpc_url"], "http://rpc.internal:26657"
+            )
+            self.assertEqual(
+                rendered_xian["bds"]["spool_dir"], "/var/lib/xian/bds-spool"
+            )
+            self.assertEqual(rendered_xian["bds"]["spool_warn_entries"], 512)
+            self.assertEqual(
+                rendered_xian["bds"]["spool_warn_bytes"], 1_073_741_824
+            )
+            self.assertEqual(
+                rendered_xian["bds"]["disk_free_warn_bytes"], 4_294_967_296
+            )
 
-    def test_node_init_supports_remote_genesis_url(self) -> None:
+    def test_node_init_supports_remote_genesis_source(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             base_dir = Path(tmp_dir)
             (base_dir / "networks").mkdir()
@@ -2539,7 +2678,7 @@ class NodeInitTests(unittest.TestCase):
                 "validators": [],
                 "abci_genesis": {},
             }
-            genesis_url = "https://example.invalid/genesis.json"
+            remote_genesis_source = "https://example.invalid/genesis.json"
             with redirect_stdout(io.StringIO()):
                 main(
                     [
@@ -2549,7 +2688,7 @@ class NodeInitTests(unittest.TestCase):
                         "--chain-id",
                         "xian-remote-1",
                         "--genesis-source",
-                        genesis_url,
+                        remote_genesis_source,
                         "--output",
                         str(
                             base_dir
@@ -2617,7 +2756,7 @@ class NodeInitTests(unittest.TestCase):
                 (base_dir / "xian-stack" / ".cometbft").resolve(),
             )
 
-    def test_node_init_prefers_profile_genesis_url_override(self) -> None:
+    def test_node_init_prefers_profile_genesis_source_override(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             base_dir = Path(tmp_dir)
             (base_dir / "networks").mkdir()
@@ -2681,7 +2820,7 @@ class NodeInitTests(unittest.TestCase):
                             / "validator-1"
                             / "validator_key_info.json"
                         ),
-                        "--genesis-url",
+                        "--genesis-source",
                         "https://example.invalid/override-genesis.json",
                         "--output",
                         str(base_dir / "nodes" / "validator-1.json"),
@@ -2886,15 +3025,9 @@ class NodeInitTests(unittest.TestCase):
             )
             (network_dir / "manifest.json").write_text(
                 json.dumps(
-                    {
-                        "schema_version": 1,
-                        "name": "canonical",
-                        "chain_id": "xian-canonical-1",
-                        "mode": "join",
-                        "genesis_source": "./genesis.json",
-                        "snapshot_url": None,
-                        "seed_nodes": ["seed-1@127.0.0.1:26656"],
-                    }
+                    _manifest_payload(
+                        p2p_seeds=["seed-1@127.0.0.1:26656"],
+                    )
                 ),
                 encoding="utf-8",
             )
@@ -3142,7 +3275,7 @@ class NodeRuntimeTests(unittest.TestCase):
                 kwargs["cometbft_home"],
                 (stack_dir / ".cometbft").resolve(),
             )
-            self.assertFalse(kwargs["service_node"])
+            self.assertFalse(kwargs["bds_enabled"])
             self.assertTrue(kwargs["dashboard_enabled"])
             self.assertTrue(kwargs["monitoring_enabled"])
             self.assertEqual(kwargs["dashboard_host"], "0.0.0.0")
@@ -3168,66 +3301,32 @@ class NodeRuntimeTests(unittest.TestCase):
 
             (base_dir / "networks" / "mainnet" / "manifest.json").write_text(
                 json.dumps(
-                    {
-                        "schema_version": 1,
-                        "name": "mainnet",
-                        "chain_id": "xian-1",
-                        "mode": "join",
-                        "node_image_mode": "registry",
-                        "node_integrated_image": (
+                    _manifest_payload(
+                        name="mainnet",
+                        chain_id="xian-1",
+                        node_image_mode="registry",
+                        node_integrated_image=(
                             CANONICAL_RELEASE_INTEGRATED_IMAGE
                         ),
-                        "node_split_image": CANONICAL_RELEASE_SPLIT_IMAGE,
-                        "genesis_source": "./genesis.json",
-                        "snapshot_url": None,
-                        "seed_nodes": [],
-                        "block_policy_mode": "on_demand",
-                        "block_policy_interval": "0s",
-                    }
+                        node_split_image=CANONICAL_RELEASE_SPLIT_IMAGE,
+                        block_policy_mode="on_demand",
+                        block_policy_interval="0s",
+                    )
                 ),
                 encoding="utf-8",
             )
             (base_dir / "nodes" / "validator-1.json").write_text(
                 json.dumps(
-                    {
-                        "schema_version": 1,
-                        "name": "validator-1",
-                        "network": "mainnet",
-                        "moniker": "validator-1",
-                        "stack_dir": str(stack_dir),
-                        "seeds": [],
-                        "genesis_url": None,
-                        "snapshot_url": None,
-                        "service_node": False,
-                        "home": None,
-                        "pruning_enabled": False,
-                        "blocks_to_keep": 100000,
-                        "block_policy_mode": "on_demand",
-                        "block_policy_interval": "0s",
-                        "transaction_trace_logging": False,
-                        "app_log_level": "INFO",
-                        "app_log_json": False,
-                        "app_log_rotation_hours": 1,
-                        "app_log_retention_days": 7,
-                        "simulation_enabled": True,
-                        "simulation_max_concurrency": 2,
-                        "simulation_timeout_ms": 3000,
-                        "simulation_max_chi": 1000000,
-                        "parallel_execution_enabled": False,
-                        "parallel_execution_workers": 0,
-                        "parallel_execution_min_transactions": 8,
-                        "operator_profile": None,
-                        "monitoring_profile": None,
-                        "dashboard_enabled": False,
-                        "monitoring_enabled": False,
-                        "dashboard_host": "127.0.0.1",
-                        "dashboard_port": 8080,
-                        "intentkit_enabled": False,
-                        "intentkit_network_id": None,
-                        "intentkit_host": "127.0.0.1",
-                        "intentkit_port": 38000,
-                        "intentkit_api_port": 38080,
-                    }
+                    _profile_payload(
+                        network="mainnet",
+                        stack_dir=str(stack_dir),
+                        home=None,
+                        pruning_enabled=False,
+                        blocks_to_keep=100000,
+                        block_policy_mode="on_demand",
+                        block_policy_interval="0s",
+                        parallel_execution_workers=4,
+                    )
                 ),
                 encoding="utf-8",
             )
@@ -3276,77 +3375,43 @@ class NodeRuntimeTests(unittest.TestCase):
 
             (base_dir / "networks" / "mainnet" / "manifest.json").write_text(
                 json.dumps(
-                    {
-                        "schema_version": 1,
-                        "name": "mainnet",
-                        "chain_id": "xian-1",
-                        "mode": "join",
-                        "node_image_mode": "registry",
-                        "node_integrated_image": (
+                    _manifest_payload(
+                        name="mainnet",
+                        chain_id="xian-1",
+                        node_image_mode="registry",
+                        node_integrated_image=(
                             CANONICAL_RELEASE_INTEGRATED_IMAGE
                         ),
-                        "node_split_image": CANONICAL_RELEASE_SPLIT_IMAGE,
-                        "node_release_manifest": (
+                        node_split_image=CANONICAL_RELEASE_SPLIT_IMAGE,
+                        node_release_manifest=(
                             CANONICAL_NODE_RELEASE_MANIFEST
                         ),
-                        "genesis_source": "./genesis.json",
-                        "snapshot_url": None,
-                        "seed_nodes": [],
-                        "block_policy_mode": "on_demand",
-                        "block_policy_interval": "0s",
-                    }
+                        block_policy_mode="on_demand",
+                        block_policy_interval="0s",
+                    )
                 ),
                 encoding="utf-8",
             )
             (base_dir / "nodes" / "validator-1.json").write_text(
                 json.dumps(
-                    {
-                        "schema_version": 1,
-                        "name": "validator-1",
-                        "network": "mainnet",
-                        "moniker": "validator-1",
-                        "node_image_mode": "registry",
-                        "node_integrated_image": (
+                    _profile_payload(
+                        network="mainnet",
+                        node_image_mode="registry",
+                        node_integrated_image=(
                             CANONICAL_RELEASE_INTEGRATED_IMAGE
                         ),
-                        "node_split_image": CANONICAL_RELEASE_SPLIT_IMAGE,
-                        "node_release_manifest": (
+                        node_split_image=CANONICAL_RELEASE_SPLIT_IMAGE,
+                        node_release_manifest=(
                             CANONICAL_NODE_RELEASE_MANIFEST
                         ),
-                        "stack_dir": str(stack_dir),
-                        "seeds": [],
-                        "genesis_url": None,
-                        "snapshot_url": None,
-                        "service_node": False,
-                        "home": None,
-                        "pruning_enabled": False,
-                        "blocks_to_keep": 100000,
-                        "block_policy_mode": "on_demand",
-                        "block_policy_interval": "0s",
-                        "transaction_trace_logging": False,
-                        "app_log_level": "INFO",
-                        "app_log_json": False,
-                        "app_log_rotation_hours": 1,
-                        "app_log_retention_days": 7,
-                        "simulation_enabled": True,
-                        "simulation_max_concurrency": 2,
-                        "simulation_timeout_ms": 3000,
-                        "simulation_max_chi": 1000000,
-                        "parallel_execution_enabled": False,
-                        "parallel_execution_workers": 0,
-                        "parallel_execution_min_transactions": 8,
-                        "operator_profile": None,
-                        "monitoring_profile": None,
-                        "dashboard_enabled": False,
-                        "monitoring_enabled": False,
-                        "dashboard_host": "127.0.0.1",
-                        "dashboard_port": 8080,
-                        "intentkit_enabled": False,
-                        "intentkit_network_id": None,
-                        "intentkit_host": "127.0.0.1",
-                        "intentkit_port": 38000,
-                        "intentkit_api_port": 38080,
-                    }
+                        stack_dir=str(stack_dir),
+                        home=None,
+                        pruning_enabled=False,
+                        blocks_to_keep=100000,
+                        block_policy_mode="on_demand",
+                        block_policy_interval="0s",
+                        parallel_execution_workers=4,
+                    )
                 ),
                 encoding="utf-8",
             )
@@ -3457,7 +3522,7 @@ class NodeRuntimeTests(unittest.TestCase):
                         "local-dev",
                         "--stack-dir",
                         str(stack_dir),
-                        "--service-node",
+                        "--enable-bds",
                         "--output",
                         str(base_dir / "nodes" / "validator-1.json"),
                     ]
@@ -3493,7 +3558,7 @@ class NodeRuntimeTests(unittest.TestCase):
                     stack_dir=stack_dir.resolve(),
                 ),
             )
-            self.assertTrue(kwargs["service_node"])
+            self.assertTrue(kwargs["bds_enabled"])
             self.assertFalse(kwargs["monitoring_enabled"])
 
     def test_node_start_requires_initialized_home(self) -> None:
@@ -4676,7 +4741,7 @@ class RuntimeHelperTests(unittest.TestCase):
             result = start_xian_stack_node(
                 stack_dir=stack_dir,
                 cometbft_home=cometbft_home,
-                service_node=True,
+                bds_enabled=True,
                 dashboard_enabled=True,
                 monitoring_enabled=True,
                 dashboard_host="0.0.0.0",
@@ -4692,7 +4757,7 @@ class RuntimeHelperTests(unittest.TestCase):
             node_image_mode="local_build",
             node_integrated_image=None,
             node_split_image=None,
-            service_node=True,
+            bds_enabled=True,
             dashboard_enabled=True,
             monitoring_enabled=True,
             dashboard_host="0.0.0.0",
@@ -4727,7 +4792,7 @@ class RuntimeHelperTests(unittest.TestCase):
                 node_image_mode="registry",
                 node_integrated_image="ghcr.io/xian-technology/xian-node@sha256:abc",
                 node_split_image="ghcr.io/xian-technology/xian-node-split@sha256:def",
-                service_node=False,
+                bds_enabled=False,
                 wait_for_rpc=False,
             )
 
@@ -4738,7 +4803,7 @@ class RuntimeHelperTests(unittest.TestCase):
             node_image_mode="registry",
             node_integrated_image="ghcr.io/xian-technology/xian-node@sha256:abc",
             node_split_image="ghcr.io/xian-technology/xian-node-split@sha256:def",
-            service_node=False,
+            bds_enabled=False,
             dashboard_enabled=False,
             monitoring_enabled=False,
             dashboard_host="127.0.0.1",
@@ -4771,7 +4836,7 @@ class RuntimeHelperTests(unittest.TestCase):
             result = stop_xian_stack_node(
                 stack_dir=stack_dir,
                 cometbft_home=cometbft_home,
-                service_node=False,
+                bds_enabled=False,
                 dashboard_enabled=True,
                 monitoring_enabled=True,
                 dashboard_host="0.0.0.0",
@@ -4785,7 +4850,7 @@ class RuntimeHelperTests(unittest.TestCase):
             node_image_mode="local_build",
             node_integrated_image=None,
             node_split_image=None,
-            service_node=False,
+            bds_enabled=False,
             dashboard_enabled=True,
             monitoring_enabled=True,
             dashboard_host="0.0.0.0",
@@ -4818,7 +4883,7 @@ class RuntimeHelperTests(unittest.TestCase):
             result = get_xian_stack_node_status(
                 stack_dir=stack_dir,
                 cometbft_home=cometbft_home,
-                service_node=True,
+                bds_enabled=True,
                 dashboard_enabled=True,
                 monitoring_enabled=True,
                 dashboard_host="0.0.0.0",
@@ -4834,7 +4899,7 @@ class RuntimeHelperTests(unittest.TestCase):
             node_image_mode="local_build",
             node_integrated_image=None,
             node_split_image=None,
-            service_node=True,
+            bds_enabled=True,
             dashboard_enabled=True,
             monitoring_enabled=True,
             dashboard_host="0.0.0.0",
@@ -4865,7 +4930,7 @@ class RuntimeHelperTests(unittest.TestCase):
             result = get_xian_stack_node_endpoints(
                 stack_dir=stack_dir,
                 cometbft_home=cometbft_home,
-                service_node=True,
+                bds_enabled=True,
                 dashboard_enabled=True,
                 monitoring_enabled=True,
                 dashboard_host="0.0.0.0",
@@ -4883,7 +4948,7 @@ class RuntimeHelperTests(unittest.TestCase):
             node_image_mode="local_build",
             node_integrated_image=None,
             node_split_image=None,
-            service_node=True,
+            bds_enabled=True,
             dashboard_enabled=True,
             monitoring_enabled=True,
             dashboard_host="0.0.0.0",
@@ -4912,7 +4977,7 @@ class RuntimeHelperTests(unittest.TestCase):
             result = get_xian_stack_node_health(
                 stack_dir=stack_dir,
                 cometbft_home=cometbft_home,
-                service_node=True,
+                bds_enabled=True,
                 dashboard_enabled=True,
                 monitoring_enabled=True,
                 dashboard_host="0.0.0.0",
@@ -4929,7 +4994,7 @@ class RuntimeHelperTests(unittest.TestCase):
             node_image_mode="local_build",
             node_integrated_image=None,
             node_split_image=None,
-            service_node=True,
+            bds_enabled=True,
             dashboard_enabled=True,
             monitoring_enabled=True,
             dashboard_host="0.0.0.0",
@@ -4954,10 +5019,11 @@ class RuntimeHelperTests(unittest.TestCase):
         self,
     ) -> None:
         profile = {
-            "dashboard_enabled": True,
-            "dashboard_host": "0.0.0.0",
-            "dashboard_port": 18080,
-            "monitoring_enabled": False,
+            "services": _services_payload(
+                dashboard_enabled=True,
+                dashboard_host="0.0.0.0",
+                dashboard_port=18080,
+            ),
         }
 
         endpoints = _fallback_node_endpoints(
@@ -5077,7 +5143,12 @@ class ConfigRepoTests(unittest.TestCase):
                         "name": "validator-1",
                         "network": "mainnet",
                         "moniker": "validator-1",
-                        "dashboard_port": True,
+                        "services": {
+                            "dashboard": {
+                                "enabled": True,
+                                "port": True,
+                            }
+                        },
                     }
                 ),
                 encoding="utf-8",
@@ -5085,9 +5156,148 @@ class ConfigRepoTests(unittest.TestCase):
 
             with self.assertRaisesRegex(
                 ValueError,
-                "dashboard_port must be an integer",
+                "port must be an integer",
             ):
                 read_node_profile(profile_path)
+
+    def test_read_node_profile_populates_declarative_defaults(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            profile_path = Path(tmp_dir) / "profile.json"
+            profile_path.write_text(
+                json.dumps(
+                    {
+                        "schema_version": 1,
+                        "name": "validator-1",
+                        "network": "mainnet",
+                        "moniker": "validator-1",
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            profile = read_node_profile(profile_path)
+
+        self.assertEqual(profile["p2p"]["seeds"], [])
+        self.assertEqual(profile["p2p"]["persistent_peers"], [])
+        self.assertIsNone(profile["genesis"])
+        self.assertFalse(profile["services"]["bds"]["enabled"])
+        self.assertEqual(profile["services"]["bds"]["queue_max_size"], 128)
+        self.assertTrue(profile["services"]["bds"]["catchup_enabled"])
+        self.assertFalse(profile["services"]["dashboard"]["enabled"])
+        self.assertFalse(profile["services"]["monitoring"]["enabled"])
+        self.assertFalse(profile["services"]["intentkit"]["enabled"])
+        self.assertFalse(profile["services"]["dex_automation"]["enabled"])
+        self.assertFalse(profile["services"]["shielded_relayer"]["enabled"])
+        self.assertEqual(profile["parallel_execution_workers"], 4)
+        self.assertEqual(
+            profile["advanced"]["metrics"]["host"],
+            "127.0.0.1",
+        )
+        self.assertEqual(
+            profile["advanced"]["parallel_execution"]["max_speculative_waves"],
+            4,
+        )
+
+    def test_read_node_profile_rejects_parallel_enabled_with_zero_workers(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            profile_path = Path(tmp_dir) / "profile.json"
+            profile_path.write_text(
+                json.dumps(
+                    _profile_payload(
+                        parallel_execution_enabled=True,
+                        parallel_execution_workers=0,
+                    )
+                ),
+                encoding="utf-8",
+            )
+
+            with self.assertRaisesRegex(
+                ValueError,
+                (
+                    "parallel_execution_workers must be greater than zero "
+                    "when parallel_execution_enabled is true"
+                ),
+            ):
+                read_node_profile(profile_path)
+
+    def test_read_configs_reject_unknown_schema_fields(self) -> None:
+        cases = [
+            (
+                "manifest.json",
+                _manifest_payload(mode="join"),
+                read_network_manifest,
+                "network manifest has unknown field\\(s\\): mode",
+            ),
+            (
+                "manifest.json",
+                _manifest_payload(
+                    genesis={
+                        "kind": "bundle",
+                        "bundle": "devnet",
+                        "preset": "devnet",
+                    }
+                ),
+                read_network_manifest,
+                "genesis has unknown field\\(s\\): preset",
+            ),
+            (
+                "manifest.json",
+                {
+                    **_manifest_payload(),
+                    "p2p": {
+                        "seeds": [],
+                        "persistent_peers": [],
+                        "seed_nodes": [],
+                    },
+                },
+                read_network_manifest,
+                "p2p has unknown field\\(s\\): seed_nodes",
+            ),
+            (
+                "profile.json",
+                _profile_payload(service_node=True),
+                read_node_profile,
+                "node profile has unknown field\\(s\\): service_node",
+            ),
+            (
+                "profile.json",
+                _profile_payload(
+                    services={"bds": {"enabled": True, "worker_count": 8}}
+                ),
+                read_node_profile,
+                "services.bds has unknown field\\(s\\): worker_count",
+            ),
+            (
+                "profile.json",
+                _profile_payload(
+                    advanced={"metrics": {"enabled": True, "interval": 5}}
+                ),
+                read_node_profile,
+                "advanced.metrics has unknown field\\(s\\): interval",
+            ),
+            (
+                "template.json",
+                {
+                    "schema_version": 1,
+                    "name": "single-node-dev",
+                    "display_name": "Single Node Dev",
+                    "description": "Local dev",
+                    "service_node": True,
+                },
+                read_network_template,
+                "network template has unknown field\\(s\\): service_node",
+            ),
+        ]
+        for filename, payload, reader, pattern in cases:
+            with self.subTest(filename=filename, pattern=pattern):
+                with tempfile.TemporaryDirectory() as tmp_dir:
+                    path = Path(tmp_dir) / filename
+                    path.write_text(json.dumps(payload), encoding="utf-8")
+
+                    with self.assertRaisesRegex(ValueError, pattern):
+                        reader(path)
 
     def test_read_network_template_requires_explicit_schema_version(
         self,

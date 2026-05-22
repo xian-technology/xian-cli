@@ -76,7 +76,7 @@ def _build_preset_genesis_payload(
     *,
     base_dir: Path,
     chain_id: str,
-    genesis_preset: str,
+    genesis_bundle: str,
     genesis_time: str | None,
     configs_dir: Path | None,
 ) -> dict:
@@ -84,7 +84,7 @@ def _build_preset_genesis_payload(
     resolved_configs_dir = resolve_configs_dir(base_dir, explicit=configs_dir)
     return genesis_builder.build_bundle_network_genesis(
         chain_id=chain_id,
-        network=genesis_preset,
+        network=genesis_bundle,
         contracts_dir=resolved_configs_dir / "contracts",
         genesis_time=genesis_time,
     )
@@ -98,8 +98,12 @@ def _resolve_effective_genesis_payload(
     manifest_path: Path,
     configs_dir: Path | None,
 ) -> tuple[dict, str]:
-    genesis_source = profile.get("genesis_url") or network.get("genesis_source")
-    if genesis_source:
+    genesis = profile.get("genesis") or network.get("genesis")
+    if not isinstance(genesis, dict):
+        raise ValueError("network manifest must define genesis")
+
+    if genesis.get("kind") == "source":
+        genesis_source = genesis["source"]
         return (
             _load_genesis_payload(
                 genesis_source,
@@ -109,23 +113,20 @@ def _resolve_effective_genesis_payload(
             genesis_source,
         )
 
-    genesis_preset = network.get("genesis_preset")
-    if genesis_preset:
+    if genesis.get("kind") == "bundle":
+        genesis_bundle = genesis["bundle"]
         return (
             _build_preset_genesis_payload(
                 base_dir=base_dir,
                 chain_id=network["chain_id"],
-                genesis_preset=genesis_preset,
-                genesis_time=network.get("genesis_time"),
+                genesis_bundle=genesis_bundle,
+                genesis_time=genesis.get("genesis_time"),
                 configs_dir=configs_dir,
             ),
-            f"preset:{genesis_preset}",
+            f"bundle:{genesis_bundle}",
         )
 
-    raise ValueError(
-        "no genesis source configured; set genesis_source or genesis_preset "
-        "in the network manifest"
-    )
+    raise ValueError("genesis.kind must be source or bundle")
 
 
 def _extract_priv_validator_key(payload: dict) -> dict:
@@ -209,14 +210,14 @@ def _build_creation_genesis(
     chain_id: str,
     founder_private_key: str,
     validators: list[dict[str, object]],
-    genesis_preset: str,
+    genesis_bundle: str,
 ) -> dict:
     genesis_builder = get_genesis_builder_module()
     return genesis_builder.build_local_network_genesis(
         chain_id=chain_id,
         founder_private_key=founder_private_key,
         validators=_build_creation_validator_entries(validators=validators),
-        network=genesis_preset,
+        network=genesis_bundle,
     )
 
 
