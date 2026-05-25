@@ -18,7 +18,6 @@ SUPPORTED_OPERATOR_PROFILES = {
     "local_development",
     "indexed_development",
     "shared_network",
-    "embedded_backend",
 }
 SUPPORTED_MONITORING_PROFILES = {
     "none",
@@ -58,9 +57,9 @@ SUPPORTED_APP_LOG_LEVELS = {
     "CRITICAL",
 }
 SUPPORTED_RECOVERY_ARTIFACT_KINDS = {"snapshot_url"}
-MODULE_SCHEMA = "xian.module.v1"
-SOLUTION_SCHEMA = "xian.solution.v1"
-SUPPORTED_MODULE_INSTALL_KINDS = {
+CONTRACT_PACK_SCHEMA = "xian.contract_pack.v1"
+EXAMPLE_SCHEMA = "xian.example.v1"
+SUPPORTED_CONTRACT_PACK_INSTALL_KINDS = {
     "external",
     "xian-stack.localnet-dex-bootstrap",
 }
@@ -1279,6 +1278,11 @@ def normalize_network_template(payload: dict) -> dict:
 def _normalize_starter_step(payload: dict, *, label: str) -> dict:
     if not isinstance(payload, dict):
         raise ValueError(f"{label} step must be a JSON object")
+    _reject_unknown_fields(
+        payload,
+        allowed={"title", "commands", "notes"},
+        label=f"{label} starter step",
+    )
 
     commands = _require_str_list(payload, "commands")
     if not commands:
@@ -1294,6 +1298,19 @@ def _normalize_starter_step(payload: dict, *, label: str) -> dict:
 def _normalize_starter_flow(payload: dict, *, label: str) -> dict:
     if not isinstance(payload, dict):
         raise ValueError(f"{label} starter flow must be a JSON object")
+    _reject_unknown_fields(
+        payload,
+        allowed={
+            "name",
+            "display_name",
+            "template",
+            "summary",
+            "network_name",
+            "node_name",
+            "steps",
+        },
+        label=f"{label} starter flow",
+    )
 
     steps = payload.get("steps")
     if (
@@ -1316,18 +1333,41 @@ def _normalize_starter_flow(payload: dict, *, label: str) -> dict:
     }
 
 
-def _normalize_module_recipe(payload: dict) -> dict:
+def _normalize_contract_pack_recipe(payload: dict) -> dict:
     if not isinstance(payload, dict):
-        raise ValueError("module recipe must be a JSON object")
+        raise ValueError("contract pack recipe must be a JSON object")
+    _reject_unknown_fields(
+        payload,
+        allowed={"name", "display_name", "summary", "install"},
+        label="contract pack recipe",
+    )
 
     install = payload.get("install")
     if not isinstance(install, dict):
-        raise ValueError("module recipe install must be a JSON object")
+        raise ValueError("contract pack recipe install must be a JSON object")
     install_kind = _require_str(install, "kind")
-    if install_kind not in SUPPORTED_MODULE_INSTALL_KINDS:
+    if install_kind not in SUPPORTED_CONTRACT_PACK_INSTALL_KINDS:
         raise ValueError(
-            "module recipe install.kind must be one of "
-            f"{sorted(SUPPORTED_MODULE_INSTALL_KINDS)}"
+            "contract pack recipe install.kind must be one of "
+            f"{sorted(SUPPORTED_CONTRACT_PACK_INSTALL_KINDS)}"
+        )
+    if install_kind == "external":
+        _reject_unknown_fields(
+            install,
+            allowed={"kind", "repo", "command"},
+            label="contract pack recipe install",
+        )
+    elif install_kind == "xian-stack.localnet-dex-bootstrap":
+        _reject_unknown_fields(
+            install,
+            allowed={
+                "kind",
+                "deploy_helper",
+                "seed_demo_pool",
+                "top_up_liquidity",
+                "emit_test_swap",
+            },
+            label="contract pack recipe install",
         )
 
     return {
@@ -1338,9 +1378,28 @@ def _normalize_module_recipe(payload: dict) -> dict:
     }
 
 
-def normalize_module(payload: dict) -> dict:
+def normalize_contract_pack(payload: dict) -> dict:
     if not isinstance(payload, dict):
-        raise ValueError("module must be a JSON object")
+        raise ValueError("contract pack must be a JSON object")
+    _reject_unknown_fields(
+        payload,
+        allowed={
+            "schema",
+            "schema_version",
+            "name",
+            "display_name",
+            "category",
+            "maturity",
+            "description",
+            "source_owner_repo",
+            "docs_path",
+            "default_recipe",
+            "contract_paths",
+            "contract_bundle_paths",
+            "recipes",
+        },
+        label="contract pack",
+    )
 
     recipes = payload.get("recipes")
     if (
@@ -1348,16 +1407,22 @@ def normalize_module(payload: dict) -> dict:
         or not recipes
         or any(not isinstance(item, dict) for item in recipes)
     ):
-        raise ValueError("module recipes must be a non-empty list of objects")
+        raise ValueError(
+            "contract pack recipes must be a non-empty list of objects"
+        )
 
-    normalized_recipes = [_normalize_module_recipe(item) for item in recipes]
+    normalized_recipes = [
+        _normalize_contract_pack_recipe(item) for item in recipes
+    ]
     recipe_names = {item["name"] for item in normalized_recipes}
     default_recipe = _require_str(payload, "default_recipe")
     if default_recipe not in recipe_names:
-        raise ValueError("module default_recipe must name an existing recipe")
+        raise ValueError(
+            "contract pack default_recipe must name an existing recipe"
+        )
 
     return {
-        "schema": _require_schema(payload, expected=MODULE_SCHEMA),
+        "schema": _require_schema(payload, expected=CONTRACT_PACK_SCHEMA),
         "schema_version": _require_schema_version(payload),
         "name": _require_str(payload, "name"),
         "display_name": _require_str(payload, "display_name"),
@@ -1375,18 +1440,45 @@ def normalize_module(payload: dict) -> dict:
     }
 
 
-def _normalize_solution_module_ref(payload: dict) -> dict:
+def _normalize_example_contract_pack_ref(payload: dict) -> dict:
     if not isinstance(payload, dict):
-        raise ValueError("solution module reference must be a JSON object")
+        raise ValueError(
+            "example contract pack reference must be a JSON object"
+        )
+    _reject_unknown_fields(
+        payload,
+        allowed={"name", "recipe"},
+        label="example contract pack reference",
+    )
     return {
         "name": _require_str(payload, "name"),
         "recipe": _require_optional_str(payload, "recipe"),
     }
 
 
-def normalize_solution(payload: dict) -> dict:
+def normalize_example(payload: dict) -> dict:
     if not isinstance(payload, dict):
-        raise ValueError("solution must be a JSON object")
+        raise ValueError("example must be a JSON object")
+    _reject_unknown_fields(
+        payload,
+        allowed={
+            "schema",
+            "schema_version",
+            "name",
+            "display_name",
+            "description",
+            "use_case",
+            "recommended_local_template",
+            "docs_path",
+            "example_dir",
+            "contract_packs",
+            "services",
+            "contract_paths",
+            "contract_bundle_paths",
+            "starter_flows",
+        },
+        label="example",
+    )
 
     starter_flows = payload.get("starter_flows")
     if (
@@ -1395,17 +1487,17 @@ def normalize_solution(payload: dict) -> dict:
         or any(not isinstance(item, dict) for item in starter_flows)
     ):
         raise ValueError(
-            "solution starter_flows must be a non-empty list of flow objects"
+            "example starter_flows must be a non-empty list of flow objects"
         )
 
-    modules = payload.get("modules", [])
-    if not isinstance(modules, list) or any(
-        not isinstance(item, dict) for item in modules
+    contract_packs = payload.get("contract_packs", [])
+    if not isinstance(contract_packs, list) or any(
+        not isinstance(item, dict) for item in contract_packs
     ):
-        raise ValueError("solution modules must be a list of objects")
+        raise ValueError("example contract_packs must be a list of objects")
 
     return {
-        "schema": _require_schema(payload, expected=SOLUTION_SCHEMA),
+        "schema": _require_schema(payload, expected=EXAMPLE_SCHEMA),
         "schema_version": _require_schema_version(payload),
         "name": _require_str(payload, "name"),
         "display_name": _require_str(payload, "display_name"),
@@ -1414,19 +1506,19 @@ def normalize_solution(payload: dict) -> dict:
         "recommended_local_template": _require_str(
             payload, "recommended_local_template"
         ),
-        "recommended_remote_template": _require_str(
-            payload, "recommended_remote_template"
-        ),
         "docs_path": _require_str(payload, "docs_path"),
         "example_dir": _require_str(payload, "example_dir"),
-        "modules": [_normalize_solution_module_ref(item) for item in modules],
+        "contract_packs": [
+            _normalize_example_contract_pack_ref(item)
+            for item in contract_packs
+        ],
         "services": _require_str_list(payload, "services"),
         "contract_paths": _require_str_list(payload, "contract_paths"),
         "contract_bundle_paths": _require_str_list(
             payload, "contract_bundle_paths"
         ),
         "starter_flows": [
-            _normalize_starter_flow(item, label="solution")
+            _normalize_starter_flow(item, label="example")
             for item in starter_flows
         ],
     }
@@ -1612,7 +1704,7 @@ class NetworkTemplate:
 
 
 @dataclass(slots=True)
-class SolutionPackStarterStep:
+class ExampleStarterStep:
     title: str
     commands: list[str] = field(default_factory=list)
     notes: list[str] = field(default_factory=list)
@@ -1622,32 +1714,32 @@ class SolutionPackStarterStep:
 
 
 @dataclass(slots=True)
-class SolutionPackStarterFlow:
+class ExampleStarterFlow:
     name: str
     display_name: str
     template: str
     summary: str
     network_name: str | None = None
     node_name: str | None = None
-    steps: list[SolutionPackStarterStep] = field(default_factory=list)
+    steps: list[ExampleStarterStep] = field(default_factory=list)
 
     def to_dict(self) -> dict:
         return asdict(self)
 
 
 @dataclass(slots=True)
-class SolutionPack:
+class ExampleCatalogEntry:
     name: str
     display_name: str
     description: str
     use_case: str
     recommended_local_template: str
-    recommended_remote_template: str
     docs_path: str
     example_dir: str
     contract_paths: list[str] = field(default_factory=list)
     contract_bundle_paths: list[str] = field(default_factory=list)
-    starter_flows: list[SolutionPackStarterFlow] = field(default_factory=list)
+    contract_packs: list[dict] = field(default_factory=list)
+    starter_flows: list[ExampleStarterFlow] = field(default_factory=list)
     schema_version: int = SCHEMA_VERSION
 
     def to_dict(self) -> dict:
@@ -1722,12 +1814,12 @@ def read_network_template(path: Path) -> dict:
     return normalize_network_template(read_json(path))
 
 
-def read_module(path: Path) -> dict:
-    return normalize_module(read_json(path))
+def read_contract_pack(path: Path) -> dict:
+    return normalize_contract_pack(read_json(path))
 
 
-def read_solution(path: Path) -> dict:
-    return normalize_solution(read_json(path))
+def read_example(path: Path) -> dict:
+    return normalize_example(read_json(path))
 
 
 def read_recovery_plan(path: Path) -> dict:

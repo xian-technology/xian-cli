@@ -140,37 +140,40 @@ def list_network_template_paths(
     return [templates[name] for name in sorted(templates)]
 
 
-def resolve_module_path(
+def resolve_contract_pack_path(
     *,
     base_dir: Path,
-    module_name: str,
+    pack_name: str,
     configs_dir: Path | None = None,
 ) -> Path:
-    local_module = (
-        base_dir / "modules" / module_name / "module.json"
+    local_pack = (
+        base_dir / "contract-packs" / pack_name / "contract-pack.json"
     ).resolve()
-    if local_module.exists():
-        return local_module
+    if local_pack.exists():
+        return local_pack
 
     resolved_configs_dir = resolve_configs_dir(base_dir, explicit=configs_dir)
-    canonical_module = (
-        resolved_configs_dir / "modules" / module_name / "module.json"
+    canonical_pack = (
+        resolved_configs_dir
+        / "contract-packs"
+        / pack_name
+        / "contract-pack.json"
     ).resolve()
-    if canonical_module.exists():
-        return canonical_module
+    if canonical_pack.exists():
+        return canonical_pack
 
     raise FileNotFoundError(
-        "module not found in local workspace or xian-configs: "
-        f"{local_module} or {canonical_module}"
+        "contract pack not found in local workspace or xian-configs: "
+        f"{local_pack} or {canonical_pack}"
     )
 
 
-def list_module_paths(
+def list_contract_pack_paths(
     *,
     base_dir: Path,
     configs_dir: Path | None = None,
 ) -> list[Path]:
-    modules: dict[str, Path] = {}
+    packs: dict[str, Path] = {}
 
     try:
         resolved_configs_dir = resolve_configs_dir(
@@ -183,50 +186,50 @@ def list_module_paths(
         resolved_configs_dir = None
 
     if resolved_configs_dir is not None:
-        canonical_dir = resolved_configs_dir / "modules"
+        canonical_dir = resolved_configs_dir / "contract-packs"
         if canonical_dir.exists():
-            for path in sorted(canonical_dir.glob("*/module.json")):
-                modules[path.parent.name] = path.resolve()
+            for path in sorted(canonical_dir.glob("*/contract-pack.json")):
+                packs[path.parent.name] = path.resolve()
 
-    local_dir = base_dir / "modules"
+    local_dir = base_dir / "contract-packs"
     if local_dir.exists():
-        for path in sorted(local_dir.glob("*/module.json")):
-            modules[path.parent.name] = path.resolve()
+        for path in sorted(local_dir.glob("*/contract-pack.json")):
+            packs[path.parent.name] = path.resolve()
 
-    return [modules[name] for name in sorted(modules)]
+    return [packs[name] for name in sorted(packs)]
 
 
-def resolve_solution_path(
+def resolve_example_path(
     *,
     base_dir: Path,
-    solution_name: str,
+    example_name: str,
     configs_dir: Path | None = None,
 ) -> Path:
-    local_solution = (
-        base_dir / "solutions" / solution_name / "solution.json"
+    local_example = (
+        base_dir / "examples" / example_name / "example.json"
     ).resolve()
-    if local_solution.exists():
-        return local_solution
+    if local_example.exists():
+        return local_example
 
     resolved_configs_dir = resolve_configs_dir(base_dir, explicit=configs_dir)
-    canonical_solution = (
-        resolved_configs_dir / "solutions" / solution_name / "solution.json"
+    canonical_example = (
+        resolved_configs_dir / "examples" / example_name / "example.json"
     ).resolve()
-    if canonical_solution.exists():
-        return canonical_solution
+    if canonical_example.exists():
+        return canonical_example
 
     raise FileNotFoundError(
-        "solution not found in local workspace or xian-configs: "
-        f"{local_solution} or {canonical_solution}"
+        "example not found in local workspace or xian-configs: "
+        f"{local_example} or {canonical_example}"
     )
 
 
-def list_solution_paths(
+def list_example_paths(
     *,
     base_dir: Path,
     configs_dir: Path | None = None,
 ) -> list[Path]:
-    solutions: dict[str, Path] = {}
+    examples: dict[str, Path] = {}
 
     try:
         resolved_configs_dir = resolve_configs_dir(
@@ -239,14 +242,14 @@ def list_solution_paths(
         resolved_configs_dir = None
 
     if resolved_configs_dir is not None:
-        canonical_dir = resolved_configs_dir / "solutions"
+        canonical_dir = resolved_configs_dir / "examples"
         if canonical_dir.exists():
-            for path in sorted(canonical_dir.glob("*/solution.json")):
-                solutions[path.parent.name] = path.resolve()
+            for path in sorted(canonical_dir.glob("*/example.json")):
+                examples[path.parent.name] = path.resolve()
 
-    local_dir = base_dir / "solutions"
+    local_dir = base_dir / "examples"
     if local_dir.exists():
-        for path in sorted(local_dir.glob("*/solution.json")):
-            solutions[path.parent.name] = path.resolve()
+        for path in sorted(local_dir.glob("*/example.json")):
+            examples[path.parent.name] = path.resolve()
 
-    return [solutions[name] for name in sorted(solutions)]
+    return [examples[name] for name in sorted(examples)]

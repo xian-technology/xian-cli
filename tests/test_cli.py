@@ -27,17 +27,17 @@ import xian_cli.output as cli_output
 from xian_cli.cli import _fallback_node_endpoints, main
 from xian_cli.config_repo import (
     resolve_configs_dir,
-    resolve_module_path,
+    resolve_contract_pack_path,
+    resolve_example_path,
     resolve_network_manifest_path,
     resolve_network_template_path,
-    resolve_solution_path,
 )
 from xian_cli.models import (
-    read_module,
+    read_contract_pack,
+    read_example,
     read_network_manifest,
     read_network_template,
     read_node_profile,
-    read_solution,
 )
 from xian_cli.runtime import (
     default_home_for_backend,
@@ -1648,13 +1648,13 @@ class NetworkManifestTests(unittest.TestCase):
                 ),
                 encoding="utf-8",
             )
-            (templates_dir / "embedded-backend.json").write_text(
+            (templates_dir / "single-node-indexed.json").write_text(
                 json.dumps(
                     {
                         "schema_version": 1,
-                        "name": "embedded-backend",
-                        "display_name": "Embedded Backend",
-                        "description": "App backend defaults",
+                        "name": "single-node-indexed",
+                        "display_name": "Single-Node Indexed",
+                        "description": "Indexed local node defaults",
                         "block_policy_mode": "on_demand",
                         "block_policy_interval": "0s",
                         "transaction_trace_logging": True,
@@ -1669,8 +1669,8 @@ class NetworkManifestTests(unittest.TestCase):
                         "parallel_execution_enabled": True,
                         "parallel_execution_workers": 3,
                         "parallel_execution_min_transactions": 9,
-                        "operator_profile": "embedded_backend",
-                        "monitoring_profile": "bds",
+                        "operator_profile": "indexed_development",
+                        "monitoring_profile": "local_stack",
                         "bootstrap_node_name": "validator-1",
                         "additional_validator_names": [],
                         "services": _template_services(
@@ -1701,7 +1701,7 @@ class NetworkManifestTests(unittest.TestCase):
                         "--network",
                         "canonical",
                         "--template",
-                        "embedded-backend",
+                        "single-node-indexed",
                         "--output",
                         str(output_path),
                     ]
@@ -1722,8 +1722,8 @@ class NetworkManifestTests(unittest.TestCase):
             self.assertTrue(profile["parallel_execution_enabled"])
             self.assertEqual(profile["parallel_execution_workers"], 3)
             self.assertEqual(profile["parallel_execution_min_transactions"], 9)
-            self.assertEqual(profile["operator_profile"], "embedded_backend")
-            self.assertEqual(profile["monitoring_profile"], "bds")
+            self.assertEqual(profile["operator_profile"], "indexed_development")
+            self.assertEqual(profile["monitoring_profile"], "local_stack")
             self.assertTrue(profile["services"]["monitoring"]["enabled"])
             self.assertFalse(profile["services"]["dashboard"]["enabled"])
             self.assertNotIn("tracer_mode", profile)
@@ -2393,7 +2393,7 @@ class AbciBridgeTests(unittest.TestCase):
 
 
 class NodeInitTests(unittest.TestCase):
-    def test_node_init_materializes_home_from_canonical_preset_manifest(
+    def test_node_init_materializes_home_from_canonical_network_manifest(
         self,
     ) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -5320,24 +5320,24 @@ class ConfigRepoTests(unittest.TestCase):
             ):
                 read_network_template(template_path)
 
-    def test_module_list_reads_canonical_modules(self) -> None:
+    def test_contract_pack_list_reads_canonical_packs(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             base_dir = Path(tmp_dir)
             configs_dir = base_dir / "xian-configs"
-            module_dir = configs_dir / "modules" / "dex"
-            module_dir.mkdir(parents=True)
-            (module_dir / "module.json").write_text(
+            pack_dir = configs_dir / "contract-packs" / "dex"
+            pack_dir.mkdir(parents=True)
+            (pack_dir / "contract-pack.json").write_text(
                 json.dumps(
                     {
-                        "schema": "xian.module.v1",
+                        "schema": "xian.contract_pack.v1",
                         "schema_version": 1,
                         "name": "dex",
-                        "display_name": "DEX Module",
+                        "display_name": "DEX Contract Pack",
                         "category": "protocol",
                         "maturity": "candidate",
                         "description": "DEX contracts",
                         "source_owner_repo": "xian-dex",
-                        "docs_path": "/modules/dex",
+                        "docs_path": "/contract-packs/dex",
                         "default_recipe": "core",
                         "contract_paths": [],
                         "contract_bundle_paths": [],
@@ -5366,7 +5366,7 @@ class ConfigRepoTests(unittest.TestCase):
             with redirect_stdout(stdout):
                 exit_code = main(
                     [
-                        "module",
+                        "contract-pack",
                         "list",
                         "--base-dir",
                         str(base_dir),
@@ -5380,16 +5380,18 @@ class ConfigRepoTests(unittest.TestCase):
             self.assertEqual(payload[0]["name"], "dex")
             self.assertEqual(payload[0]["default_recipe"], "core")
 
-    def test_module_validate_checks_contract_bundle_sources(self) -> None:
+    def test_contract_pack_validate_checks_contract_bundle_sources(
+        self,
+    ) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             base_dir = Path(tmp_dir)
             configs_dir = base_dir / "xian-configs"
-            module_dir = configs_dir / "modules" / "dex"
-            source_path = module_dir / "contracts" / "con_demo.s.py"
+            pack_dir = configs_dir / "contract-packs" / "dex"
+            source_path = pack_dir / "contracts" / "con_demo.s.py"
             source_path.parent.mkdir(parents=True)
             source = "value = Variable()\n"
             source_path.write_text(source, encoding="utf-8")
-            bundle_path = module_dir / "contract-bundle.json"
+            bundle_path = pack_dir / "contract-bundle.json"
             bundle_path.write_text(
                 json.dumps(
                     {
@@ -5414,24 +5416,24 @@ class ConfigRepoTests(unittest.TestCase):
                 ),
                 encoding="utf-8",
             )
-            (module_dir / "module.json").write_text(
+            (pack_dir / "contract-pack.json").write_text(
                 json.dumps(
                     {
-                        "schema": "xian.module.v1",
+                        "schema": "xian.contract_pack.v1",
                         "schema_version": 1,
                         "name": "dex",
-                        "display_name": "DEX Module",
+                        "display_name": "DEX Contract Pack",
                         "category": "protocol",
                         "maturity": "candidate",
                         "description": "DEX contracts",
                         "source_owner_repo": "xian-dex",
-                        "docs_path": "/modules/dex",
+                        "docs_path": "/contract-packs/dex",
                         "default_recipe": "core",
                         "contract_paths": [
-                            "modules/dex/contracts/con_demo.s.py"
+                            "contract-packs/dex/contracts/con_demo.s.py"
                         ],
                         "contract_bundle_paths": [
-                            "modules/dex/contract-bundle.json"
+                            "contract-packs/dex/contract-bundle.json"
                         ],
                         "recipes": [
                             {
@@ -5458,7 +5460,7 @@ class ConfigRepoTests(unittest.TestCase):
             with redirect_stdout(stdout):
                 exit_code = main(
                     [
-                        "module",
+                        "contract-pack",
                         "validate",
                         "dex",
                         "--base-dir",
@@ -5473,7 +5475,9 @@ class ConfigRepoTests(unittest.TestCase):
             self.assertTrue(payload["ok"])
             self.assertEqual(payload["contract_bundle_count"], 1)
 
-    def test_module_install_dex_dry_run_uses_module_bundle(self) -> None:
+    def test_contract_pack_install_dex_dry_run_uses_pack_bundle(
+        self,
+    ) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             base_dir = Path(tmp_dir)
             configs_dir = base_dir / "xian-configs"
@@ -5482,12 +5486,12 @@ class ConfigRepoTests(unittest.TestCase):
             (stack_dir / "scripts" / "backend.py").write_text(
                 "# test backend\n", encoding="utf-8"
             )
-            module_dir = configs_dir / "modules" / "dex"
-            source_path = module_dir / "contracts" / "con_demo.s.py"
+            pack_dir = configs_dir / "contract-packs" / "dex"
+            source_path = pack_dir / "contracts" / "con_demo.s.py"
             source_path.parent.mkdir(parents=True)
             source = "value = Variable()\n"
             source_path.write_text(source, encoding="utf-8")
-            (module_dir / "contract-bundle.json").write_text(
+            (pack_dir / "contract-bundle.json").write_text(
                 json.dumps(
                     {
                         "schema": "xian.contract_bundle.v1",
@@ -5509,24 +5513,24 @@ class ConfigRepoTests(unittest.TestCase):
                 ),
                 encoding="utf-8",
             )
-            (module_dir / "module.json").write_text(
+            (pack_dir / "contract-pack.json").write_text(
                 json.dumps(
                     {
-                        "schema": "xian.module.v1",
+                        "schema": "xian.contract_pack.v1",
                         "schema_version": 1,
                         "name": "dex",
-                        "display_name": "DEX Module",
+                        "display_name": "DEX Contract Pack",
                         "category": "protocol",
                         "maturity": "candidate",
                         "description": "DEX contracts",
                         "source_owner_repo": "xian-dex",
-                        "docs_path": "/modules/dex",
+                        "docs_path": "/contract-packs/dex",
                         "default_recipe": "local-demo",
                         "contract_paths": [
-                            "modules/dex/contracts/con_demo.s.py"
+                            "contract-packs/dex/contracts/con_demo.s.py"
                         ],
                         "contract_bundle_paths": [
-                            "modules/dex/contract-bundle.json"
+                            "contract-packs/dex/contract-bundle.json"
                         ],
                         "recipes": [
                             {
@@ -5553,7 +5557,7 @@ class ConfigRepoTests(unittest.TestCase):
             with redirect_stdout(stdout):
                 exit_code = main(
                     [
-                        "module",
+                        "contract-pack",
                         "install",
                         "dex",
                         "--dry-run",
@@ -5569,15 +5573,15 @@ class ConfigRepoTests(unittest.TestCase):
             self.assertEqual(exit_code, 0)
             payload = json.loads(stdout.getvalue())
             self.assertTrue(payload["dry_run"])
-            self.assertEqual(payload["module"], "dex")
+            self.assertEqual(payload["contract_pack"], "dex")
             self.assertEqual(payload["recipe"], "local-demo")
             self.assertIn("--seed-demo-pool", payload["command"])
             self.assertEqual(
                 payload["bundle"],
-                str((module_dir / "contract-bundle.json").resolve()),
+                str((pack_dir / "contract-bundle.json").resolve()),
             )
 
-    def test_module_install_external_dry_run_reports_owner_command(
+    def test_contract_pack_install_external_dry_run_reports_owner_command(
         self,
     ) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -5585,12 +5589,12 @@ class ConfigRepoTests(unittest.TestCase):
             configs_dir = base_dir / "xian-configs"
             owner_repo = base_dir / "xian-stable-protocol"
             owner_repo.mkdir()
-            module_dir = configs_dir / "modules" / "stable-protocol"
-            source_path = module_dir / "contracts" / "stable_token.s.py"
+            pack_dir = configs_dir / "contract-packs" / "stable-protocol"
+            source_path = pack_dir / "contracts" / "stable_token.s.py"
             source_path.parent.mkdir(parents=True)
             source = "balances = Hash(default_value=0)\n"
             source_path.write_text(source, encoding="utf-8")
-            (module_dir / "contract-bundle.json").write_text(
+            (pack_dir / "contract-bundle.json").write_text(
                 json.dumps(
                     {
                         "schema": "xian.contract_bundle.v1",
@@ -5612,24 +5616,24 @@ class ConfigRepoTests(unittest.TestCase):
                 ),
                 encoding="utf-8",
             )
-            (module_dir / "module.json").write_text(
+            (pack_dir / "contract-pack.json").write_text(
                 json.dumps(
                     {
-                        "schema": "xian.module.v1",
+                        "schema": "xian.contract_pack.v1",
                         "schema_version": 1,
                         "name": "stable-protocol",
-                        "display_name": "Stable Protocol Module",
+                        "display_name": "Stable Protocol Contract Pack",
                         "category": "protocol",
                         "maturity": "candidate",
                         "description": "Stable protocol contracts",
                         "source_owner_repo": "xian-stable-protocol",
-                        "docs_path": "/modules/stable-protocol",
+                        "docs_path": "/contract-packs/stable-protocol",
                         "default_recipe": "core",
                         "contract_paths": [
-                            "modules/stable-protocol/contracts/stable_token.s.py"
+                            "contract-packs/stable-protocol/contracts/stable_token.s.py"
                         ],
                         "contract_bundle_paths": [
-                            "modules/stable-protocol/contract-bundle.json"
+                            "contract-packs/stable-protocol/contract-bundle.json"
                         ],
                         "recipes": [
                             {
@@ -5655,7 +5659,7 @@ class ConfigRepoTests(unittest.TestCase):
             with redirect_stdout(stdout):
                 exit_code = main(
                     [
-                        "module",
+                        "contract-pack",
                         "install",
                         "stable-protocol",
                         "--dry-run",
@@ -5671,7 +5675,7 @@ class ConfigRepoTests(unittest.TestCase):
             self.assertEqual(exit_code, 0)
             payload = json.loads(stdout.getvalue())
             self.assertTrue(payload["dry_run"])
-            self.assertEqual(payload["module"], "stable-protocol")
+            self.assertEqual(payload["contract_pack"], "stable-protocol")
             self.assertEqual(payload["recipe"], "core")
             self.assertEqual(payload["repo"], "xian-stable-protocol")
             self.assertEqual(payload["cwd"], str(owner_repo.resolve()))
@@ -5680,44 +5684,46 @@ class ConfigRepoTests(unittest.TestCase):
                 ["uv", "run", "python", "scripts/bootstrap_protocol.py"],
             )
 
-    def test_solution_starter_returns_selected_flow(self) -> None:
+    def test_example_starter_returns_selected_flow(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             base_dir = Path(tmp_dir)
             configs_dir = base_dir / "xian-configs"
-            solution_dir = configs_dir / "solutions" / "dex-demo"
-            solution_dir.mkdir(parents=True)
-            (solution_dir / "solution.json").write_text(
+            example_dir = configs_dir / "examples" / "dex-demo"
+            example_dir.mkdir(parents=True)
+            (example_dir / "example.json").write_text(
                 json.dumps(
                     {
-                        "schema": "xian.solution.v1",
+                        "schema": "xian.example.v1",
                         "schema_version": 1,
                         "name": "dex-demo",
-                        "display_name": "DEX Demo Solution",
+                        "display_name": "DEX Demo Example",
                         "description": "DEX demo",
                         "use_case": "Run a DEX demo network.",
                         "recommended_local_template": "single-node-indexed",
-                        "recommended_remote_template": "consortium-3",
-                        "docs_path": "/modules/dex",
+                        "docs_path": "/contract-packs/dex",
                         "example_dir": "xian-dex",
-                        "modules": [{"name": "dex", "recipe": "local-demo"}],
+                        "contract_packs": [
+                            {"name": "dex", "recipe": "local-demo"}
+                        ],
                         "services": ["dex-automation"],
                         "contract_paths": [],
                         "contract_bundle_paths": [
-                            "modules/dex/contract-bundle.json"
+                            "contract-packs/dex/contract-bundle.json"
                         ],
                         "starter_flows": [
                             {
-                                "name": "remote",
-                                "display_name": "Remote Starter",
-                                "template": "consortium-3",
-                                "summary": "Remote flow",
-                                "network_name": "dex-remote",
+                                "name": "local",
+                                "display_name": "Local Starter",
+                                "template": "single-node-indexed",
+                                "summary": "Local flow",
+                                "network_name": "dex-local",
                                 "node_name": "validator-1",
                                 "steps": [
                                     {
-                                        "title": "Install module",
+                                        "title": "Install contract pack",
                                         "commands": [
-                                            "uv run xian module install dex"
+                                            "uv run xian contract-pack "
+                                            "install dex"
                                         ],
                                         "notes": [],
                                     }
@@ -5733,11 +5739,11 @@ class ConfigRepoTests(unittest.TestCase):
             with redirect_stdout(stdout):
                 exit_code = main(
                     [
-                        "solution",
+                        "example",
                         "starter",
                         "dex-demo",
                         "--flow",
-                        "remote",
+                        "local",
                         "--base-dir",
                         str(base_dir),
                         "--configs-dir",
@@ -5748,8 +5754,8 @@ class ConfigRepoTests(unittest.TestCase):
             self.assertEqual(exit_code, 0)
             payload = json.loads(stdout.getvalue())
             self.assertEqual(payload["name"], "dex-demo")
-            self.assertEqual(payload["modules"][0]["name"], "dex")
-            self.assertEqual(payload["flow"]["template"], "consortium-3")
+            self.assertEqual(payload["contract_packs"][0]["name"], "dex")
+            self.assertEqual(payload["flow"]["template"], "single-node-indexed")
 
     def test_contract_bundle_validate_checks_sources(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -5928,20 +5934,20 @@ class ConfigRepoTests(unittest.TestCase):
             hashlib.sha256(payload["vm_ir_json"].encode()).hexdigest(),
         )
 
-    def test_read_module_requires_explicit_schema_version(self) -> None:
+    def test_read_contract_pack_requires_explicit_schema_version(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
-            module_path = Path(tmp_dir) / "module.json"
-            module_path.write_text(
+            pack_path = Path(tmp_dir) / "contract-pack.json"
+            pack_path.write_text(
                 json.dumps(
                     {
-                        "schema": "xian.module.v1",
+                        "schema": "xian.contract_pack.v1",
                         "name": "dex",
-                        "display_name": "DEX Module",
+                        "display_name": "DEX Contract Pack",
                         "category": "protocol",
                         "maturity": "candidate",
                         "description": "DEX contracts",
                         "source_owner_repo": "xian-dex",
-                        "docs_path": "/modules/dex",
+                        "docs_path": "/contract-packs/dex",
                         "default_recipe": "core",
                         "contract_paths": [],
                         "contract_bundle_paths": [],
@@ -5961,24 +5967,65 @@ class ConfigRepoTests(unittest.TestCase):
             with self.assertRaisesRegex(
                 ValueError, "unsupported schema_version"
             ):
-                read_module(module_path)
+                read_contract_pack(pack_path)
 
-    def test_read_solution_requires_explicit_schema_version(self) -> None:
+    def test_read_contract_pack_rejects_unknown_nested_fields(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
-            solution_path = Path(tmp_dir) / "solution.json"
-            solution_path.write_text(
+            pack_path = Path(tmp_dir) / "contract-pack.json"
+            pack_path.write_text(
                 json.dumps(
                     {
-                        "schema": "xian.solution.v1",
+                        "schema": "xian.contract_pack.v1",
+                        "schema_version": 1,
+                        "name": "dex",
+                        "display_name": "DEX Contract Pack",
+                        "category": "protocol",
+                        "maturity": "candidate",
+                        "description": "DEX contracts",
+                        "source_owner_repo": "xian-dex",
+                        "docs_path": "/contract-packs/dex",
+                        "default_recipe": "core",
+                        "contract_paths": [],
+                        "contract_bundle_paths": [],
+                        "recipes": [
+                            {
+                                "name": "core",
+                                "display_name": "Core",
+                                "summary": "Deploy core contracts",
+                                "install": {
+                                    "kind": "external",
+                                    "repo": "xian-dex",
+                                    "command": "make bootstrap",
+                                    "silent": True,
+                                },
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            with self.assertRaisesRegex(
+                ValueError,
+                "contract pack recipe install has unknown field\\(s\\): silent",
+            ):
+                read_contract_pack(pack_path)
+
+    def test_read_example_requires_explicit_schema_version(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            example_path = Path(tmp_dir) / "example.json"
+            example_path.write_text(
+                json.dumps(
+                    {
+                        "schema": "xian.example.v1",
                         "name": "dex-demo",
-                        "display_name": "DEX Demo Solution",
+                        "display_name": "DEX Demo Example",
                         "description": "DEX demo",
                         "use_case": "Run a DEX demo network.",
                         "recommended_local_template": "single-node-indexed",
-                        "recommended_remote_template": "consortium-3",
-                        "docs_path": "/modules/dex",
+                        "docs_path": "/contract-packs/dex",
                         "example_dir": "xian-dex",
-                        "modules": [],
+                        "contract_packs": [],
                         "services": [],
                         "contract_paths": [],
                         "contract_bundle_paths": [],
@@ -6005,7 +6052,59 @@ class ConfigRepoTests(unittest.TestCase):
             with self.assertRaisesRegex(
                 ValueError, "unsupported schema_version"
             ):
-                read_solution(solution_path)
+                read_example(example_path)
+
+    def test_read_example_rejects_unknown_nested_fields(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            example_path = Path(tmp_dir) / "example.json"
+            example_path.write_text(
+                json.dumps(
+                    {
+                        "schema": "xian.example.v1",
+                        "schema_version": 1,
+                        "name": "dex-demo",
+                        "display_name": "DEX Demo Example",
+                        "description": "DEX demo",
+                        "use_case": "Run a DEX demo network.",
+                        "recommended_local_template": "single-node-indexed",
+                        "docs_path": "/examples/dex-demo",
+                        "example_dir": "xian-dex",
+                        "contract_packs": [
+                            {
+                                "name": "dex",
+                                "recipe": "local-demo",
+                                "template": "single-node-indexed",
+                            }
+                        ],
+                        "services": [],
+                        "contract_paths": [],
+                        "contract_bundle_paths": [],
+                        "starter_flows": [
+                            {
+                                "name": "local",
+                                "display_name": "Local",
+                                "template": "single-node-indexed",
+                                "summary": "Local flow",
+                                "steps": [
+                                    {
+                                        "title": "Start",
+                                        "commands": ["make localnet-up"],
+                                        "notes": [],
+                                    }
+                                ],
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            with self.assertRaisesRegex(
+                ValueError,
+                "example contract pack reference has unknown field\\(s\\): "
+                "template",
+            ):
+                read_example(example_path)
 
     def test_resolve_configs_dir_uses_workspace_fallback(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -6024,39 +6123,41 @@ class ConfigRepoTests(unittest.TestCase):
             ):
                 resolve_configs_dir(Path(tmp_dir), explicit=missing)
 
-    def test_resolve_module_path_prefers_canonical_configs_repo(self):
+    def test_resolve_contract_pack_path_prefers_canonical_configs_repo(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
             base_dir = Path(tmp_dir)
             configs_dir = base_dir / "xian-configs"
-            module_path = configs_dir / "modules" / "dex" / "module.json"
-            module_path.parent.mkdir(parents=True)
-            module_path.write_text("{}", encoding="utf-8")
+            pack_path = (
+                configs_dir / "contract-packs" / "dex" / "contract-pack.json"
+            )
+            pack_path.parent.mkdir(parents=True)
+            pack_path.write_text("{}", encoding="utf-8")
 
-            resolved = resolve_module_path(
+            resolved = resolve_contract_pack_path(
                 base_dir=base_dir,
-                module_name="dex",
+                pack_name="dex",
                 configs_dir=configs_dir,
             )
 
-        self.assertEqual(resolved, module_path.resolve())
+        self.assertEqual(resolved, pack_path.resolve())
 
-    def test_resolve_solution_path_prefers_canonical_configs_repo(self):
+    def test_resolve_example_path_prefers_canonical_configs_repo(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
             base_dir = Path(tmp_dir)
             configs_dir = base_dir / "xian-configs"
-            solution_path = (
-                configs_dir / "solutions" / "dex-demo" / "solution.json"
+            example_path = (
+                configs_dir / "examples" / "dex-demo" / "example.json"
             )
-            solution_path.parent.mkdir(parents=True)
-            solution_path.write_text("{}", encoding="utf-8")
+            example_path.parent.mkdir(parents=True)
+            example_path.write_text("{}", encoding="utf-8")
 
-            resolved = resolve_solution_path(
+            resolved = resolve_example_path(
                 base_dir=base_dir,
-                solution_name="dex-demo",
+                example_name="dex-demo",
                 configs_dir=configs_dir,
             )
 
-        self.assertEqual(resolved, solution_path.resolve())
+        self.assertEqual(resolved, example_path.resolve())
 
     def test_resolve_network_manifest_path_prefers_local_network_dir(self):
         with tempfile.TemporaryDirectory() as tmp_dir:

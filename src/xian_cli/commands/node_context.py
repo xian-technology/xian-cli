@@ -72,7 +72,7 @@ def _load_genesis_payload(
     return read_json(genesis_path)
 
 
-def _build_preset_genesis_payload(
+def _build_bundle_genesis_payload(
     *,
     base_dir: Path,
     chain_id: str,
@@ -116,7 +116,7 @@ def _resolve_effective_genesis_payload(
     if genesis.get("kind") == "bundle":
         genesis_bundle = genesis["bundle"]
         return (
-            _build_preset_genesis_payload(
+            _build_bundle_genesis_payload(
                 base_dir=base_dir,
                 chain_id=network["chain_id"],
                 genesis_bundle=genesis_bundle,
