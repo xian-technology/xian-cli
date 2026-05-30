@@ -120,10 +120,7 @@ def add_node_profile_runtime_args(
     parser.add_argument(
         "--parallel-execution-min-transactions",
         type=int,
-        help=(
-            "minimum transactions in a block before parallel execution is used "
-            f"in {subject}"
-        ),
+        help=(f"minimum transactions in a block before parallel execution is used in {subject}"),
     )
     parser.add_argument(
         "--enable-dashboard",
@@ -211,25 +208,17 @@ def build_parser() -> argparse.ArgumentParser:
     register_client_commands(subparsers)
 
     keys_parser = subparsers.add_parser("keys", help="key management")
-    keys_subparsers = keys_parser.add_subparsers(
-        dest="keys_command", required=True
-    )
+    keys_subparsers = keys_parser.add_subparsers(dest="keys_command", required=True)
 
-    validator_parser = keys_subparsers.add_parser(
-        "validator", help="validator key management"
-    )
-    validator_subparsers = validator_parser.add_subparsers(
-        dest="validator_command", required=True
-    )
+    validator_parser = keys_subparsers.add_parser("validator", help="validator key management")
+    validator_subparsers = validator_parser.add_subparsers(dest="validator_command", required=True)
 
     generate_parser = validator_subparsers.add_parser(
         "generate", help="generate validator key material"
     )
     generate_parser.add_argument(
         "--private-key",
-        help=(
-            "existing 64-character hex private key; omit to generate a new one"
-        ),
+        help=("existing 64-character hex private key; omit to generate a new one"),
     )
     generate_parser.add_argument(
         "--out-dir",
@@ -244,9 +233,7 @@ def build_parser() -> argparse.ArgumentParser:
     generate_parser.set_defaults(handler_name="_handle_keys_validator_generate")
 
     network_parser = subparsers.add_parser("network", help="network manifests")
-    network_subparsers = network_parser.add_subparsers(
-        dest="network_command", required=True
-    )
+    network_subparsers = network_parser.add_subparsers(dest="network_command", required=True)
 
     template_parser = network_subparsers.add_parser(
         "template", help="inspect canonical network templates"
@@ -263,8 +250,7 @@ def build_parser() -> argparse.ArgumentParser:
         type=Path,
         default=Path.cwd(),
         help=(
-            "workspace directory that may contain local ./templates and "
-            "optionally sibling repos"
+            "workspace directory that may contain local ./templates and optionally sibling repos"
         ),
     )
     template_list_parser.add_argument(
@@ -275,21 +261,16 @@ def build_parser() -> argparse.ArgumentParser:
             "or the sibling workspace layout"
         ),
     )
-    template_list_parser.set_defaults(
-        handler_name="_handle_network_template_list"
-    )
+    template_list_parser.set_defaults(handler_name="_handle_network_template_list")
 
-    template_show_parser = template_subparsers.add_parser(
-        "show", help="show one network template"
-    )
+    template_show_parser = template_subparsers.add_parser("show", help="show one network template")
     template_show_parser.add_argument("name", help="template name")
     template_show_parser.add_argument(
         "--base-dir",
         type=Path,
         default=Path.cwd(),
         help=(
-            "workspace directory that may contain local ./templates and "
-            "optionally sibling repos"
+            "workspace directory that may contain local ./templates and optionally sibling repos"
         ),
     )
     template_show_parser.add_argument(
@@ -300,9 +281,7 @@ def build_parser() -> argparse.ArgumentParser:
             "or the sibling workspace layout"
         ),
     )
-    template_show_parser.set_defaults(
-        handler_name="_handle_network_template_show"
-    )
+    template_show_parser.set_defaults(handler_name="_handle_network_template_show")
 
     contract_pack_parser = subparsers.add_parser(
         "contract-pack",
@@ -332,16 +311,12 @@ def build_parser() -> argparse.ArgumentParser:
             "or the sibling workspace layout"
         ),
     )
-    contract_pack_list_parser.set_defaults(
-        handler_name="_handle_contract_pack_list"
-    )
+    contract_pack_list_parser.set_defaults(handler_name="_handle_contract_pack_list")
 
     contract_pack_show_parser = contract_pack_subparsers.add_parser(
         "show", help="show one contract pack"
     )
-    contract_pack_show_parser.add_argument(
-        "name", help="contract pack name"
-    )
+    contract_pack_show_parser.add_argument("name", help="contract pack name")
     contract_pack_show_parser.add_argument(
         "--base-dir",
         type=Path,
@@ -359,16 +334,12 @@ def build_parser() -> argparse.ArgumentParser:
             "or the sibling workspace layout"
         ),
     )
-    contract_pack_show_parser.set_defaults(
-        handler_name="_handle_contract_pack_show"
-    )
+    contract_pack_show_parser.set_defaults(handler_name="_handle_contract_pack_show")
 
     contract_pack_validate_parser = contract_pack_subparsers.add_parser(
         "validate", help="validate one contract pack and its bundles"
     )
-    contract_pack_validate_parser.add_argument(
-        "name", help="contract pack name"
-    )
+    contract_pack_validate_parser.add_argument("name", help="contract pack name")
     contract_pack_validate_parser.add_argument(
         "--base-dir",
         type=Path,
@@ -386,16 +357,12 @@ def build_parser() -> argparse.ArgumentParser:
             "or the sibling workspace layout"
         ),
     )
-    contract_pack_validate_parser.set_defaults(
-        handler_name="_handle_contract_pack_validate"
-    )
+    contract_pack_validate_parser.set_defaults(handler_name="_handle_contract_pack_validate")
 
     contract_pack_install_parser = contract_pack_subparsers.add_parser(
         "install", help="install a contract pack onto a running network"
     )
-    contract_pack_install_parser.add_argument(
-        "name", help="contract pack name"
-    )
+    contract_pack_install_parser.add_argument("name", help="contract pack name")
     contract_pack_install_parser.add_argument(
         "--recipe",
         help="contract pack recipe; defaults to the contract pack default",
@@ -433,10 +400,7 @@ def build_parser() -> argparse.ArgumentParser:
     contract_pack_install_parser.add_argument(
         "--top-up-liquidity",
         action="store_true",
-        help=(
-            "top up the local DEX demo pool when the selected recipe "
-            "supports it"
-        ),
+        help=("top up the local DEX demo pool when the selected recipe supports it"),
     )
     contract_pack_install_parser.add_argument(
         "--emit-test-swap",
@@ -448,29 +412,20 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="print the resolved installer command without executing it",
     )
-    contract_pack_install_parser.set_defaults(
-        handler_name="_handle_contract_pack_install"
-    )
+    contract_pack_install_parser.set_defaults(handler_name="_handle_contract_pack_install")
 
     example_parser = subparsers.add_parser(
         "example",
         help="inspect application and operator examples",
     )
-    example_subparsers = example_parser.add_subparsers(
-        dest="example_command", required=True
-    )
+    example_subparsers = example_parser.add_subparsers(dest="example_command", required=True)
 
-    example_list_parser = example_subparsers.add_parser(
-        "list", help="list available examples"
-    )
+    example_list_parser = example_subparsers.add_parser("list", help="list available examples")
     example_list_parser.add_argument(
         "--base-dir",
         type=Path,
         default=Path.cwd(),
-        help=(
-            "workspace directory that may contain local ./examples and "
-            "optionally sibling repos"
-        ),
+        help=("workspace directory that may contain local ./examples and optionally sibling repos"),
     )
     example_list_parser.add_argument(
         "--configs-dir",
@@ -482,18 +437,13 @@ def build_parser() -> argparse.ArgumentParser:
     )
     example_list_parser.set_defaults(handler_name="_handle_example_list")
 
-    example_show_parser = example_subparsers.add_parser(
-        "show", help="show one example"
-    )
+    example_show_parser = example_subparsers.add_parser("show", help="show one example")
     example_show_parser.add_argument("name", help="example name")
     example_show_parser.add_argument(
         "--base-dir",
         type=Path,
         default=Path.cwd(),
-        help=(
-            "workspace directory that may contain local ./examples and "
-            "optionally sibling repos"
-        ),
+        help=("workspace directory that may contain local ./examples and optionally sibling repos"),
     )
     example_show_parser.add_argument(
         "--configs-dir",
@@ -519,10 +469,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--base-dir",
         type=Path,
         default=Path.cwd(),
-        help=(
-            "workspace directory that may contain local ./examples and "
-            "optionally sibling repos"
-        ),
+        help=("workspace directory that may contain local ./examples and optionally sibling repos"),
     )
     example_starter_parser.add_argument(
         "--configs-dir",
@@ -535,9 +482,7 @@ def build_parser() -> argparse.ArgumentParser:
     example_starter_parser.set_defaults(handler_name="_handle_example_starter")
 
     contract_parser = subparsers.add_parser("contract", help="contract helpers")
-    contract_subparsers = contract_parser.add_subparsers(
-        dest="contract_command", required=True
-    )
+    contract_subparsers = contract_parser.add_subparsers(dest="contract_command", required=True)
 
     contract_build_artifacts_parser = contract_subparsers.add_parser(
         "build-artifacts",
@@ -570,9 +515,7 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="overwrite --output when it already exists",
     )
-    contract_build_artifacts_parser.set_defaults(
-        handler_name="_handle_contract_build_artifacts"
-    )
+    contract_build_artifacts_parser.set_defaults(handler_name="_handle_contract_build_artifacts")
 
     contract_bundle_parser = contract_subparsers.add_parser(
         "bundle", help="inspect and validate contract bundles"
@@ -587,13 +530,9 @@ def build_parser() -> argparse.ArgumentParser:
     contract_bundle_validate_parser.add_argument(
         "path", type=Path, help="path to contract-bundle.json"
     )
-    contract_bundle_validate_parser.set_defaults(
-        handler_name="_handle_contract_bundle_validate"
-    )
+    contract_bundle_validate_parser.set_defaults(handler_name="_handle_contract_bundle_validate")
 
-    create_parser = network_subparsers.add_parser(
-        "create", help="create a new network manifest"
-    )
+    create_parser = network_subparsers.add_parser("create", help="create a new network manifest")
     create_parser.add_argument("name", help="network name")
     create_parser.add_argument(
         "--base-dir",
@@ -604,9 +543,7 @@ def build_parser() -> argparse.ArgumentParser:
             "./keys, and optionally sibling repos"
         ),
     )
-    create_parser.add_argument(
-        "--chain-id", required=True, help="chain identifier"
-    )
+    create_parser.add_argument("--chain-id", required=True, help="chain identifier")
     create_parser.add_argument(
         "--template",
         help=(
@@ -655,8 +592,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--validator-key-ref",
         type=Path,
         help=(
-            "path to validator_key_info.json or priv_validator_key.json for "
-            "the initial validator"
+            "path to validator_key_info.json or priv_validator_key.json for the initial validator"
         ),
     )
     create_parser.add_argument(
@@ -682,10 +618,7 @@ def build_parser() -> argparse.ArgumentParser:
     create_parser.add_argument(
         "--snapshot-signing-key",
         action="append",
-        help=(
-            "trusted Ed25519 public key for signed snapshot manifests; "
-            "may be repeated"
-        ),
+        help=("trusted Ed25519 public key for signed snapshot manifests; may be repeated"),
     )
     create_parser.add_argument(
         "--seed",
@@ -716,10 +649,7 @@ def build_parser() -> argparse.ArgumentParser:
     create_parser.add_argument(
         "--init-node",
         action="store_true",
-        help=(
-            "run node initialization immediately after writing the bootstrap "
-            "node profile"
-        ),
+        help=("run node initialization immediately after writing the bootstrap node profile"),
     )
     create_parser.add_argument(
         "--stack-dir",
@@ -746,17 +676,14 @@ def build_parser() -> argparse.ArgumentParser:
     create_parser.add_argument(
         "--output",
         type=Path,
-        help=(
-            "manifest output path; defaults to ./networks/<name>/manifest.json"
-        ),
+        help=("manifest output path; defaults to ./networks/<name>/manifest.json"),
     )
     create_parser.add_argument("--force", action="store_true")
     create_parser.add_argument(
         "--dry-run",
         action="store_true",
         help=(
-            "validate inputs and print the planned manifest path and profile "
-            "without writing files"
+            "validate inputs and print the planned manifest path and profile without writing files"
         ),
     )
     create_parser.set_defaults(handler_name="_handle_network_create")
@@ -770,8 +697,7 @@ def build_parser() -> argparse.ArgumentParser:
         type=Path,
         default=Path.cwd(),
         help=(
-            "workspace directory that contains ./nodes, ./networks, "
-            "and optionally ./xian-configs"
+            "workspace directory that contains ./nodes, ./networks, and optionally ./xian-configs"
         ),
     )
     join_parser.add_argument(
@@ -781,18 +707,12 @@ def build_parser() -> argparse.ArgumentParser:
     )
     join_parser.add_argument(
         "--template",
-        help=(
-            "canonical or local template name used to prefill node-profile "
-            "runtime defaults"
-        ),
+        help=("canonical or local template name used to prefill node-profile runtime defaults"),
     )
     join_parser.add_argument(
         "--network-manifest",
         type=Path,
-        help=(
-            "explicit network manifest path; overrides local and canonical "
-            "lookup"
-        ),
+        help=("explicit network manifest path; overrides local and canonical lookup"),
     )
     join_parser.add_argument("--moniker", help="node moniker")
     join_parser.add_argument(
@@ -811,17 +731,12 @@ def build_parser() -> argparse.ArgumentParser:
     join_parser.add_argument(
         "--validator-key-dir",
         type=Path,
-        help=(
-            "output directory for generated validator key material; defaults "
-            "to ./keys/<name>"
-        ),
+        help=("output directory for generated validator key material; defaults to ./keys/<name>"),
     )
     join_parser.add_argument(
         "--node-image-mode",
         choices=sorted(SUPPORTED_NODE_IMAGE_MODES),
-        help=(
-            "node image source override; defaults to the network manifest value"
-        ),
+        help=("node image source override; defaults to the network manifest value"),
     )
     join_parser.add_argument(
         "--node-integrated-image",
@@ -840,8 +755,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--seed",
         action="append",
         help=(
-            "optional node-local seed override in "
-            "<node_id>@<host>:26656 format; may be repeated"
+            "optional node-local seed override in <node_id>@<host>:26656 format; may be repeated"
         ),
     )
     join_parser.add_argument(
@@ -859,10 +773,7 @@ def build_parser() -> argparse.ArgumentParser:
     join_parser.add_argument(
         "--snapshot-signing-key",
         action="append",
-        help=(
-            "trusted Ed25519 public key for signed snapshot manifests; "
-            "may be repeated"
-        ),
+        help=("trusted Ed25519 public key for signed snapshot manifests; may be repeated"),
     )
     join_parser.add_argument(
         "--init-node",
@@ -903,10 +814,7 @@ def build_parser() -> argparse.ArgumentParser:
     join_parser.add_argument(
         "--dry-run",
         action="store_true",
-        help=(
-            "validate inputs and print the planned node profile path without "
-            "writing files"
-        ),
+        help=("validate inputs and print the planned node profile path without writing files"),
     )
     join_parser.set_defaults(handler_name="_handle_network_join")
 
@@ -919,18 +827,12 @@ def build_parser() -> argparse.ArgumentParser:
         "--base-dir",
         type=Path,
         default=Path.cwd(),
-        help=(
-            "workspace directory that may contain local ./networks and "
-            "optionally sibling repos"
-        ),
+        help=("workspace directory that may contain local ./networks and optionally sibling repos"),
     )
     operator_bundle_parser.add_argument(
         "--network-manifest",
         type=Path,
-        help=(
-            "explicit network manifest path; overrides local and canonical "
-            "lookup"
-        ),
+        help=("explicit network manifest path; overrides local and canonical lookup"),
     )
     operator_bundle_parser.add_argument(
         "--configs-dir",
@@ -948,8 +850,7 @@ def build_parser() -> argparse.ArgumentParser:
     operator_bundle_parser.add_argument(
         "--bootstrap-seed",
         help=(
-            "bootstrap seed in <node_id>@<host>:26656 format to include in "
-            "the bundle and manifest"
+            "bootstrap seed in <node_id>@<host>:26656 format to include in the bundle and manifest"
         ),
     )
     operator_bundle_parser.add_argument(
@@ -958,14 +859,10 @@ def build_parser() -> argparse.ArgumentParser:
         help="also write a .tar.gz archive next to the output directory",
     )
     operator_bundle_parser.add_argument("--force", action="store_true")
-    operator_bundle_parser.set_defaults(
-        handler_name="_handle_network_package_operator_bundle"
-    )
+    operator_bundle_parser.set_defaults(handler_name="_handle_network_package_operator_bundle")
 
     node_parser = subparsers.add_parser("node", help="node lifecycle")
-    node_subparsers = node_parser.add_subparsers(
-        dest="node_command", required=True
-    )
+    node_subparsers = node_parser.add_subparsers(dest="node_command", required=True)
 
     init_parser = node_subparsers.add_parser(
         "init", help="materialize a node home from manifests and keys"
@@ -986,25 +883,18 @@ def build_parser() -> argparse.ArgumentParser:
         "--network",
         type=Path,
         help=(
-            "explicit network manifest path; defaults to "
-            "./networks/<profile.network>/manifest.json"
+            "explicit network manifest path; defaults to ./networks/<profile.network>/manifest.json"
         ),
     )
     init_parser.add_argument(
         "--validator-key",
         type=Path,
-        help=(
-            "explicit validator key path; "
-            "overrides validator_key_ref in the profile"
-        ),
+        help=("explicit validator key path; overrides validator_key_ref in the profile"),
     )
     init_parser.add_argument(
         "--stack-dir",
         type=Path,
-        help=(
-            "explicit xian-stack checkout path; "
-            "overrides stack_dir in the profile"
-        ),
+        help=("explicit xian-stack checkout path; overrides stack_dir in the profile"),
     )
     init_parser.add_argument(
         "--configs-dir",
@@ -1031,10 +921,7 @@ def build_parser() -> argparse.ArgumentParser:
     init_parser.add_argument(
         "--force",
         action="store_true",
-        help=(
-            "overwrite config, genesis, and priv_validator_key.json "
-            "if they already exist"
-        ),
+        help=("overwrite config, genesis, and priv_validator_key.json if they already exist"),
     )
     init_parser.set_defaults(handler_name="_handle_node_init")
 
@@ -1044,10 +931,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--base-dir",
         type=Path,
         default=Path.cwd(),
-        help=(
-            "workspace directory that contains ./nodes, ./networks, "
-            "and ./xian-stack"
-        ),
+        help=("workspace directory that contains ./nodes, ./networks, and ./xian-stack"),
     )
     start_parser.add_argument(
         "--profile",
@@ -1058,17 +942,13 @@ def build_parser() -> argparse.ArgumentParser:
         "--network",
         type=Path,
         help=(
-            "explicit network manifest path; defaults to "
-            "./networks/<profile.network>/manifest.json"
+            "explicit network manifest path; defaults to ./networks/<profile.network>/manifest.json"
         ),
     )
     start_parser.add_argument(
         "--stack-dir",
         type=Path,
-        help=(
-            "explicit xian-stack checkout path; "
-            "overrides stack_dir in the profile"
-        ),
+        help=("explicit xian-stack checkout path; overrides stack_dir in the profile"),
     )
     start_parser.add_argument(
         "--configs-dir",
@@ -1097,10 +977,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--base-dir",
         type=Path,
         default=Path.cwd(),
-        help=(
-            "workspace directory that contains ./nodes, ./networks, "
-            "and ./xian-stack"
-        ),
+        help=("workspace directory that contains ./nodes, ./networks, and ./xian-stack"),
     )
     stop_parser.add_argument(
         "--profile",
@@ -1111,17 +988,13 @@ def build_parser() -> argparse.ArgumentParser:
         "--network",
         type=Path,
         help=(
-            "explicit network manifest path; defaults to "
-            "./networks/<profile.network>/manifest.json"
+            "explicit network manifest path; defaults to ./networks/<profile.network>/manifest.json"
         ),
     )
     stop_parser.add_argument(
         "--stack-dir",
         type=Path,
-        help=(
-            "explicit xian-stack checkout path; "
-            "overrides stack_dir in the profile"
-        ),
+        help=("explicit xian-stack checkout path; overrides stack_dir in the profile"),
     )
     stop_parser.add_argument(
         "--configs-dir",
@@ -1142,8 +1015,7 @@ def build_parser() -> argparse.ArgumentParser:
         type=Path,
         default=Path.cwd(),
         help=(
-            "workspace directory that contains ./nodes, ./networks, "
-            "and optionally sibling repos"
+            "workspace directory that contains ./nodes, ./networks, and optionally sibling repos"
         ),
     )
     status_parser.add_argument(
@@ -1155,17 +1027,13 @@ def build_parser() -> argparse.ArgumentParser:
         "--network",
         type=Path,
         help=(
-            "explicit network manifest path; defaults to "
-            "./networks/<profile.network>/manifest.json"
+            "explicit network manifest path; defaults to ./networks/<profile.network>/manifest.json"
         ),
     )
     status_parser.add_argument(
         "--stack-dir",
         type=Path,
-        help=(
-            "explicit xian-stack checkout path; "
-            "overrides stack_dir in the profile"
-        ),
+        help=("explicit xian-stack checkout path; overrides stack_dir in the profile"),
     )
     status_parser.add_argument(
         "--configs-dir",
@@ -1194,10 +1062,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     endpoints_parser = node_subparsers.add_parser(
         "endpoints",
-        help=(
-            "print the expected local URLs for RPC, metrics, dashboard, "
-            "and monitoring"
-        ),
+        help=("print the expected local URLs for RPC, metrics, dashboard, and monitoring"),
     )
     endpoints_parser.add_argument("name", help="node profile name")
     endpoints_parser.add_argument(
@@ -1205,8 +1070,7 @@ def build_parser() -> argparse.ArgumentParser:
         type=Path,
         default=Path.cwd(),
         help=(
-            "base directory containing ./nodes, ./networks, ./keys, "
-            "and optionally sibling repos"
+            "base directory containing ./nodes, ./networks, ./keys, and optionally sibling repos"
         ),
     )
     endpoints_parser.add_argument(
@@ -1218,8 +1082,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--network",
         type=Path,
         help=(
-            "explicit network manifest path; defaults to "
-            "./networks/<profile.network>/manifest.json"
+            "explicit network manifest path; defaults to ./networks/<profile.network>/manifest.json"
         ),
     )
     endpoints_parser.add_argument(
@@ -1253,10 +1116,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     health_parser = node_subparsers.add_parser(
         "health",
-        help=(
-            "inspect live runtime health, disk pressure, and state-sync "
-            "readiness"
-        ),
+        help=("inspect live runtime health, disk pressure, and state-sync readiness"),
     )
     health_parser.add_argument("name", help="node profile name")
     health_parser.add_argument(
@@ -1264,8 +1124,7 @@ def build_parser() -> argparse.ArgumentParser:
         type=Path,
         default=Path.cwd(),
         help=(
-            "base directory containing ./nodes, ./networks, ./keys, "
-            "and optionally sibling repos"
+            "base directory containing ./nodes, ./networks, ./keys, and optionally sibling repos"
         ),
     )
     health_parser.add_argument(
@@ -1277,8 +1136,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--network",
         type=Path,
         help=(
-            "explicit network manifest path; defaults to "
-            "./networks/<profile.network>/manifest.json"
+            "explicit network manifest path; defaults to ./networks/<profile.network>/manifest.json"
         ),
     )
     health_parser.add_argument(
@@ -1318,9 +1176,7 @@ def build_parser() -> argparse.ArgumentParser:
         "recovery",
         help="validated rollback/recovery plan tools",
     )
-    recovery_subparsers = recovery_parser.add_subparsers(
-        dest="recovery_command", required=True
-    )
+    recovery_subparsers = recovery_parser.add_subparsers(dest="recovery_command", required=True)
 
     recovery_validate_parser = recovery_subparsers.add_parser(
         "validate",
@@ -1337,8 +1193,7 @@ def build_parser() -> argparse.ArgumentParser:
         type=Path,
         default=Path.cwd(),
         help=(
-            "workspace directory that contains ./nodes, ./networks, "
-            "and optionally ./xian-configs"
+            "workspace directory that contains ./nodes, ./networks, and optionally ./xian-configs"
         ),
     )
     recovery_validate_parser.add_argument(
@@ -1350,17 +1205,13 @@ def build_parser() -> argparse.ArgumentParser:
         "--network",
         type=Path,
         help=(
-            "explicit network manifest path; defaults to "
-            "./networks/<profile.network>/manifest.json"
+            "explicit network manifest path; defaults to ./networks/<profile.network>/manifest.json"
         ),
     )
     recovery_validate_parser.add_argument(
         "--stack-dir",
         type=Path,
-        help=(
-            "explicit xian-stack checkout path; overrides stack_dir in "
-            "the profile"
-        ),
+        help=("explicit xian-stack checkout path; overrides stack_dir in the profile"),
     )
     recovery_validate_parser.add_argument(
         "--configs-dir",
@@ -1380,9 +1231,7 @@ def build_parser() -> argparse.ArgumentParser:
         default="http://127.0.0.1:26657/status",
         help="optional RPC status endpoint used for pre-recovery validation",
     )
-    recovery_validate_parser.set_defaults(
-        handler_name="_handle_recovery_validate"
-    )
+    recovery_validate_parser.set_defaults(handler_name="_handle_recovery_validate")
 
     recovery_apply_parser = recovery_subparsers.add_parser(
         "apply",
@@ -1399,8 +1248,7 @@ def build_parser() -> argparse.ArgumentParser:
         type=Path,
         default=Path.cwd(),
         help=(
-            "workspace directory that contains ./nodes, ./networks, "
-            "and optionally ./xian-configs"
+            "workspace directory that contains ./nodes, ./networks, and optionally ./xian-configs"
         ),
     )
     recovery_apply_parser.add_argument(
@@ -1412,17 +1260,13 @@ def build_parser() -> argparse.ArgumentParser:
         "--network",
         type=Path,
         help=(
-            "explicit network manifest path; defaults to "
-            "./networks/<profile.network>/manifest.json"
+            "explicit network manifest path; defaults to ./networks/<profile.network>/manifest.json"
         ),
     )
     recovery_apply_parser.add_argument(
         "--stack-dir",
         type=Path,
-        help=(
-            "explicit xian-stack checkout path; overrides stack_dir in "
-            "the profile"
-        ),
+        help=("explicit xian-stack checkout path; overrides stack_dir in the profile"),
     )
     recovery_apply_parser.add_argument(
         "--configs-dir",
@@ -1476,10 +1320,7 @@ def build_parser() -> argparse.ArgumentParser:
     recovery_apply_parser.add_argument(
         "--dry-run",
         action="store_true",
-        help=(
-            "validate and print the recovery actions without changing the "
-            "node home"
-        ),
+        help=("validate and print the recovery actions without changing the node home"),
     )
     recovery_apply_parser.add_argument(
         "--yes",
@@ -1489,9 +1330,7 @@ def build_parser() -> argparse.ArgumentParser:
     recovery_apply_parser.set_defaults(handler_name="_handle_recovery_apply")
 
     snapshot_parser = subparsers.add_parser("snapshot", help="snapshot tools")
-    snapshot_subparsers = snapshot_parser.add_subparsers(
-        dest="snapshot_command", required=True
-    )
+    snapshot_subparsers = snapshot_parser.add_subparsers(dest="snapshot_command", required=True)
 
     restore_parser = snapshot_subparsers.add_parser(
         "restore",
@@ -1503,8 +1342,7 @@ def build_parser() -> argparse.ArgumentParser:
         type=Path,
         default=Path.cwd(),
         help=(
-            "workspace directory that contains ./nodes, ./networks, "
-            "and optionally ./xian-configs"
+            "workspace directory that contains ./nodes, ./networks, and optionally ./xian-configs"
         ),
     )
     restore_parser.add_argument(
@@ -1516,17 +1354,13 @@ def build_parser() -> argparse.ArgumentParser:
         "--network",
         type=Path,
         help=(
-            "explicit network manifest path; defaults to "
-            "./networks/<profile.network>/manifest.json"
+            "explicit network manifest path; defaults to ./networks/<profile.network>/manifest.json"
         ),
     )
     restore_parser.add_argument(
         "--stack-dir",
         type=Path,
-        help=(
-            "explicit xian-stack checkout path; "
-            "overrides stack_dir in the profile"
-        ),
+        help=("explicit xian-stack checkout path; overrides stack_dir in the profile"),
     )
     restore_parser.add_argument(
         "--configs-dir",
@@ -1554,18 +1388,14 @@ def build_parser() -> argparse.ArgumentParser:
     doctor_parser.add_argument(
         "name",
         nargs="?",
-        help=(
-            "optional node profile name to inspect in addition to "
-            "workspace checks"
-        ),
+        help=("optional node profile name to inspect in addition to workspace checks"),
     )
     doctor_parser.add_argument(
         "--base-dir",
         type=Path,
         default=Path.cwd(),
         help=(
-            "workspace directory that contains ./nodes, ./networks, "
-            "and optionally sibling repos"
+            "workspace directory that contains ./nodes, ./networks, and optionally sibling repos"
         ),
     )
     doctor_parser.add_argument(
@@ -1577,8 +1407,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--network",
         type=Path,
         help=(
-            "explicit network manifest path; defaults to "
-            "./networks/<profile.network>/manifest.json"
+            "explicit network manifest path; defaults to ./networks/<profile.network>/manifest.json"
         ),
     )
     doctor_parser.add_argument(

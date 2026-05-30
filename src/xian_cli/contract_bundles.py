@@ -33,16 +33,12 @@ def _sha256_file(path: Path) -> str:
 def _resolve_bundle_source_path(bundle_path: Path, source_path: str) -> Path:
     raw_path = Path(source_path)
     if raw_path.is_absolute() or ".." in raw_path.parts:
-        raise ValueError(
-            f"contract path must stay inside bundle: {source_path}"
-        )
+        raise ValueError(f"contract path must stay inside bundle: {source_path}")
     resolved = (bundle_path.parent / raw_path).resolve()
     try:
         resolved.relative_to(bundle_path.parent.resolve())
     except ValueError as exc:
-        raise ValueError(
-            f"contract path escapes bundle directory: {source_path}"
-        ) from exc
+        raise ValueError(f"contract path escapes bundle directory: {source_path}") from exc
     return resolved
 
 
@@ -94,20 +90,15 @@ def validate_contract_bundle(bundle_path: Path) -> dict[str, Any]:
             roles.add(role)
 
         source_path = _require_str(contract, "path")
-        resolved_source_path = _resolve_bundle_source_path(
-            resolved_bundle_path, source_path
-        )
+        resolved_source_path = _resolve_bundle_source_path(resolved_bundle_path, source_path)
         if not resolved_source_path.exists():
-            raise FileNotFoundError(
-                f"bundle contract source not found: {resolved_source_path}"
-            )
+            raise FileNotFoundError(f"bundle contract source not found: {resolved_source_path}")
 
         expected_sha256 = _require_sha256(contract, "sha256")
         actual_sha256 = _sha256_file(resolved_source_path)
         if actual_sha256 != expected_sha256:
             raise ValueError(
-                f"{source_path} sha256 mismatch: expected "
-                f"{expected_sha256}, got {actual_sha256}"
+                f"{source_path} sha256 mismatch: expected {expected_sha256}, got {actual_sha256}"
             )
 
         deploy_order = contract.get("deploy_order", 100)
@@ -115,9 +106,7 @@ def validate_contract_bundle(bundle_path: Path) -> dict[str, Any]:
             raise ValueError(f"{name}.deploy_order must be an integer")
         default_chi = contract.get("default_chi")
         if default_chi is not None and (
-            isinstance(default_chi, bool)
-            or not isinstance(default_chi, int)
-            or default_chi <= 0
+            isinstance(default_chi, bool) or not isinstance(default_chi, int) or default_chi <= 0
         ):
             raise ValueError(f"{name}.default_chi must be a positive integer")
         deploy_default = contract.get("deploy_default", True)
@@ -172,7 +161,6 @@ def read_contract_source_from_bundle(
     actual_sha256 = _sha256_file(source_path)
     if actual_sha256 != expected_sha256:
         raise ValueError(
-            f"{contract['path']} sha256 mismatch: expected "
-            f"{expected_sha256}, got {actual_sha256}"
+            f"{contract['path']} sha256 mismatch: expected {expected_sha256}, got {actual_sha256}"
         )
     return source_path.read_text(encoding="utf-8")

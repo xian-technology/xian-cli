@@ -69,32 +69,21 @@ RUNTIME_COMMAND_KWARG_NAMES = (
 
 def _backend_options(values: Mapping[str, Any]) -> dict[str, Any]:
     return drop_none(
-        {
-            option_key: values.get(argument_name)
-            for argument_name, option_key in BACKEND_OPTION_KEYS
-        }
+        {option_key: values.get(argument_name) for argument_name, option_key in BACKEND_OPTION_KEYS}
     )
 
 
 def _runtime_command_kwargs(values: Mapping[str, Any]) -> dict[str, Any]:
-    return {
-        name: values[name]
-        for name in RUNTIME_COMMAND_KWARG_NAMES
-        if name in values
-    }
+    return {name: values[name] for name in RUNTIME_COMMAND_KWARG_NAMES if name in values}
 
 
 def resolve_stack_dir(base_dir: Path, explicit: Path | None = None) -> Path:
     if explicit is not None:
         resolved = explicit.expanduser().resolve()
         if not resolved.exists():
-            raise FileNotFoundError(
-                f"xian-stack directory does not exist: {resolved}"
-            )
+            raise FileNotFoundError(f"xian-stack directory does not exist: {resolved}")
         if not resolved.is_dir():
-            raise NotADirectoryError(
-                f"xian-stack path is not a directory: {resolved}"
-            )
+            raise NotADirectoryError(f"xian-stack path is not a directory: {resolved}")
         return resolved
 
     candidate = (base_dir / "xian-stack").resolve()
@@ -111,9 +100,7 @@ def resolve_stack_dir(base_dir: Path, explicit: Path | None = None) -> Path:
     )
 
 
-def default_home_for_backend(
-    *, base_dir: Path, stack_dir: Path | None = None
-) -> Path:
+def default_home_for_backend(*, base_dir: Path, stack_dir: Path | None = None) -> Path:
     resolved_stack_dir = resolve_stack_dir(base_dir, explicit=stack_dir)
     return resolved_stack_dir / ".cometbft"
 
@@ -219,15 +206,11 @@ def run_backend_command(
         )
     except subprocess.CalledProcessError as exc:
         detail = exc.stderr.strip() or exc.stdout.strip() or str(exc)
-        raise RuntimeError(
-            f"xian-stack backend command failed ({command}): {detail}"
-        ) from exc
+        raise RuntimeError(f"xian-stack backend command failed ({command}): {detail}") from exc
     try:
         return json.loads(result.stdout)
     except json.JSONDecodeError as exc:
-        raise ValueError(
-            f"xian-stack backend command returned invalid JSON: {command}"
-        ) from exc
+        raise ValueError(f"xian-stack backend command returned invalid JSON: {command}") from exc
 
 
 def start_xian_stack_node(

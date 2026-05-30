@@ -16,25 +16,15 @@ from xian_cli.output import emit_json
 
 
 def _resolve_node_url(args: argparse.Namespace) -> str:
-    node_url = getattr(args, "node_url", None) or os.environ.get(
-        "XIAN_NODE_URL"
-    )
+    node_url = getattr(args, "node_url", None) or os.environ.get("XIAN_NODE_URL")
     if not isinstance(node_url, str) or not node_url.strip():
-        raise ValueError(
-            "node URL is required; pass --node-url or set XIAN_NODE_URL"
-        )
+        raise ValueError("node URL is required; pass --node-url or set XIAN_NODE_URL")
     return node_url.rstrip("/")
 
 
 def _resolve_chain_id(args: argparse.Namespace) -> str | None:
-    chain_id = getattr(args, "chain_id", None) or os.environ.get(
-        "XIAN_CHAIN_ID"
-    )
-    return (
-        chain_id.strip()
-        if isinstance(chain_id, str) and chain_id.strip()
-        else None
-    )
+    chain_id = getattr(args, "chain_id", None) or os.environ.get("XIAN_CHAIN_ID")
+    return chain_id.strip() if isinstance(chain_id, str) and chain_id.strip() else None
 
 
 def _load_private_key_from_args(args: argparse.Namespace) -> str:
@@ -47,16 +37,13 @@ def _load_private_key_from_args(args: argparse.Namespace) -> str:
         for value in (
             direct,
             os.environ.get(env_name) if isinstance(env_name, str) else None,
-            Path(file_path).read_text(encoding="utf-8").strip()
-            if file_path is not None
-            else None,
+            Path(file_path).read_text(encoding="utf-8").strip() if file_path is not None else None,
         )
         if isinstance(value, str) and value.strip()
     ]
     if not values:
         raise ValueError(
-            "private key is required; pass --private-key, "
-            "--private-key-env, or --private-key-file"
+            "private key is required; pass --private-key, --private-key-env, or --private-key-file"
         )
     if len(values) > 1:
         raise ValueError(
@@ -93,11 +80,7 @@ def _parse_json_object(raw: str, *, flag_name: str) -> dict[str, Any]:
 
 
 def _parse_json_object_from_path(path: str, *, label: str) -> dict[str, Any]:
-    raw = (
-        sys.stdin.read()
-        if path == "-"
-        else Path(path).read_text(encoding="utf-8")
-    )
+    raw = sys.stdin.read() if path == "-" else Path(path).read_text(encoding="utf-8")
     return _parse_json_object(raw, flag_name=label)
 
 
@@ -135,9 +118,7 @@ def handle_wallet_generate(args: argparse.Namespace) -> int:
 def handle_query_nonce(args: argparse.Namespace) -> int:
     payload = {
         "address": args.address,
-        "next_nonce": asyncio.run(
-            tx_api.get_nonce_async(_resolve_node_url(args), args.address)
-        ),
+        "next_nonce": asyncio.run(tx_api.get_nonce_async(_resolve_node_url(args), args.address)),
     }
     emit_json(payload)
     return 0
@@ -226,15 +207,9 @@ def handle_tx_submit_artifacts(args: argparse.Namespace) -> int:
     artifact_name = artifacts.get("module_name")
     name = args.name or artifact_name
     if not isinstance(name, str) or not name.strip():
-        raise ValueError(
-            "--name is required when artifact module_name is missing"
-        )
+        raise ValueError("--name is required when artifact module_name is missing")
     name = name.strip()
-    if (
-        isinstance(artifact_name, str)
-        and artifact_name.strip()
-        and artifact_name.strip() != name
-    ):
+    if isinstance(artifact_name, str) and artifact_name.strip() and artifact_name.strip() != name:
         raise ValueError("contract name does not match artifact module_name")
 
     wallet = _build_wallet(args)

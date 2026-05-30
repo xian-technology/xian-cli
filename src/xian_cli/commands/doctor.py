@@ -75,9 +75,7 @@ def _doctor_rpc_check(status: dict[str, object]) -> dict[str, object]:
 def _doctor_statesync_check(status: dict[str, object]) -> dict[str, object]:
     readiness = _collect_statesync_readiness(Path(str(status["home"])))
     if readiness["state"] == "incomplete":
-        raise RuntimeError(
-            "statesync is enabled but trust settings are incomplete"
-        )
+        raise RuntimeError("statesync is enabled but trust settings are incomplete")
     return readiness
 
 
@@ -99,9 +97,7 @@ def _doctor_service_check(
     if not isinstance(backend_status, dict):
         raise RuntimeError("backend status is unavailable")
     if not backend_status.get(reachable_key):
-        raise RuntimeError(
-            str(backend_status.get(error_key, f"{service_name} is unreachable"))
-        )
+        raise RuntimeError(str(backend_status.get(error_key, f"{service_name} is unreachable")))
     return {
         "service": service_name,
         "reachable": True,
@@ -124,9 +120,7 @@ def _handle_doctor(args: argparse.Namespace) -> int:
     checks = [
         _run_check(
             "configs_dir",
-            lambda: str(
-                resolve_configs_dir(base_dir, explicit=args.configs_dir)
-            ),
+            lambda: str(resolve_configs_dir(base_dir, explicit=args.configs_dir)),
         ),
         _run_check(
             "stack_dir",

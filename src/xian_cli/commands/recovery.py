@@ -63,14 +63,11 @@ def _validate_recovery_context(
     config_path = home / "config" / "config.toml"
     if not config_path.exists():
         raise FileNotFoundError(
-            f"{config_path} does not exist; "
-            f"run `xian node init {profile['name']}` first"
+            f"{config_path} does not exist; run `xian node init {profile['name']}` first"
         )
 
     if network["chain_id"] != plan["chain_id"]:
-        raise ValueError(
-            "recovery plan chain_id does not match the node network manifest"
-        )
+        raise ValueError("recovery plan chain_id does not match the node network manifest")
 
     rpc_status = None
     rpc_checked = False
@@ -78,30 +75,19 @@ def _validate_recovery_context(
         rpc_status = _resolve_recovery_rpc_status(rpc_url=rpc_url)
         rpc_checked = rpc_status is not None
         if rpc_status is not None:
-            network_id = (
-                rpc_status.get("result", {}).get("node_info", {}).get("network")
-            )
+            network_id = rpc_status.get("result", {}).get("node_info", {}).get("network")
             if network_id and network_id != plan["chain_id"]:
-                raise ValueError(
-                    "live RPC chain_id does not match the recovery plan"
-                )
+                raise ValueError("live RPC chain_id does not match the recovery plan")
             latest_height = (
-                rpc_status.get("result", {})
-                .get("sync_info", {})
-                .get("latest_block_height")
+                rpc_status.get("result", {}).get("sync_info", {}).get("latest_block_height")
             )
             if latest_height is not None:
                 try:
                     latest_height_int = int(latest_height)
-                except (TypeError, ValueError):
+                except TypeError, ValueError:
                     latest_height_int = None
-                if (
-                    latest_height_int is not None
-                    and latest_height_int < plan["target_height"]
-                ):
-                    raise ValueError(
-                        "live RPC height is below the recovery target height"
-                    )
+                if latest_height_int is not None and latest_height_int < plan["target_height"]:
+                    raise ValueError("live RPC height is below the recovery target height")
 
     return {
         "home": str(home),
@@ -179,9 +165,7 @@ def _handle_recovery_validate(args: argparse.Namespace) -> int:
 
 def _handle_recovery_apply(args: argparse.Namespace) -> int:
     if not args.yes:
-        raise ValueError(
-            "recovery apply is destructive; pass --yes after reviewing the plan"
-        )
+        raise ValueError("recovery apply is destructive; pass --yes after reviewing the plan")
 
     base_dir = args.base_dir.resolve()
     plan_path = args.plan.resolve()
@@ -229,8 +213,7 @@ def _handle_recovery_apply(args: argparse.Namespace) -> int:
     if not args.skip_stop:
         if stack_dir is None:
             raise ValueError(
-                "recovery apply requires a resolved xian-stack directory "
-                "unless --skip-stop is used"
+                "recovery apply requires a resolved xian-stack directory unless --skip-stop is used"
             )
         stop_result = stop_xian_stack_node(
             stack_dir=stack_dir,
@@ -262,9 +245,7 @@ def _handle_recovery_apply(args: argparse.Namespace) -> int:
     start_result = None
     if args.start_node:
         if stack_dir is None:
-            raise ValueError(
-                "--start-node requires a resolved xian-stack directory"
-            )
+            raise ValueError("--start-node requires a resolved xian-stack directory")
         start_result = start_xian_stack_node(
             stack_dir=stack_dir,
             cometbft_home=home,
@@ -278,9 +259,7 @@ def _handle_recovery_apply(args: argparse.Namespace) -> int:
             "dry_run": False,
             "stopped_node": stop_result is not None,
             "stop_result": stop_result,
-            "backup_archive": (
-                None if backup_archive is None else str(backup_archive)
-            ),
+            "backup_archive": (None if backup_archive is None else str(backup_archive)),
             "snapshot_restore": {
                 "artifact_kind": plan["artifact"]["kind"],
                 "artifact_uri": plan["artifact"]["uri"],

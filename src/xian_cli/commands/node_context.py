@@ -54,9 +54,7 @@ def _resolve_stack_dir_from_profile(
     return stack_dir
 
 
-def _load_genesis_payload(
-    genesis_source: str, *, base_dir: Path, manifest_path: Path
-) -> dict:
+def _load_genesis_payload(genesis_source: str, *, base_dir: Path, manifest_path: Path) -> dict:
     parsed = urlparse(genesis_source)
     if parsed.scheme in {"http", "https"}:
         return fetch_json(genesis_source)
@@ -149,18 +147,12 @@ def _extract_validator_private_key_hex(payload: dict) -> str:
 
     priv_validator_key = _extract_priv_validator_key(payload)
     try:
-        raw_private_key = base64.b64decode(
-            priv_validator_key["priv_key"]["value"].encode("ascii")
-        )
+        raw_private_key = base64.b64decode(priv_validator_key["priv_key"]["value"].encode("ascii"))
     except (KeyError, ValueError) as exc:
-        raise ValueError(
-            "validator key file does not contain a usable private key"
-        ) from exc
+        raise ValueError("validator key file does not contain a usable private key") from exc
 
     if len(raw_private_key) < 32:
-        raise ValueError(
-            "validator key file does not contain a usable private key"
-        )
+        raise ValueError("validator key file does not contain a usable private key")
     return raw_private_key[:32].hex()
 
 
@@ -171,18 +163,12 @@ def _extract_validator_public_key_hex(payload: dict) -> str:
 
     priv_validator_key = _extract_priv_validator_key(payload)
     try:
-        raw_public_key = base64.b64decode(
-            priv_validator_key["pub_key"]["value"].encode("ascii")
-        )
+        raw_public_key = base64.b64decode(priv_validator_key["pub_key"]["value"].encode("ascii"))
     except (KeyError, ValueError) as exc:
-        raise ValueError(
-            "validator key file does not contain a usable public key"
-        ) from exc
+        raise ValueError("validator key file does not contain a usable public key") from exc
 
     if len(raw_public_key) != 32:
-        raise ValueError(
-            "validator key file does not contain a usable public key"
-        )
+        raise ValueError("validator key file does not contain a usable public key")
     return raw_public_key.hex()
 
 
@@ -197,9 +183,7 @@ def _build_creation_validator_entries(
             ),
             "name": validator["name"],
             "power": validator["power"],
-            "priv_validator_key": _extract_priv_validator_key(
-                validator["validator_key_payload"]
-            ),
+            "priv_validator_key": _extract_priv_validator_key(validator["validator_key_payload"]),
         }
         for validator in validators
     ]
@@ -252,11 +236,7 @@ def _resolve_effective_snapshot_url(
     network: dict,
     explicit_snapshot_url: str | None = None,
 ) -> str | None:
-    return (
-        explicit_snapshot_url
-        or profile.get("snapshot_url")
-        or network.get("snapshot_url")
-    )
+    return explicit_snapshot_url or profile.get("snapshot_url") or network.get("snapshot_url")
 
 
 def _resolve_effective_snapshot_signing_keys(
@@ -293,8 +273,7 @@ def _restore_snapshot(
     config_path = home / "config" / "config.toml"
     if not config_path.exists():
         raise FileNotFoundError(
-            f"{config_path} does not exist; "
-            f"run `xian node init {profile['name']}` first"
+            f"{config_path} does not exist; run `xian node init {profile['name']}` first"
         )
 
     snapshot_url = _resolve_effective_snapshot_url(
@@ -343,10 +322,7 @@ def _load_profile_and_network(
     profile = read_node_profile(profile_path)
     network_name = profile.get("network")
     if not network_name:
-        raise ValueError(
-            "node profile is missing network; "
-            "recreate it with xian network join"
-        )
+        raise ValueError("node profile is missing network; recreate it with xian network join")
 
     network_path = resolve_network_manifest_path(
         base_dir=base_dir,

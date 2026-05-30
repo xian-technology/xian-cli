@@ -15,9 +15,7 @@ def _require_existing_dir(path: Path, *, label: str) -> Path:
     return resolved
 
 
-def resolve_configs_dir(
-    base_dir: Path, *, explicit: Path | None = None
-) -> Path:
+def resolve_configs_dir(base_dir: Path, *, explicit: Path | None = None) -> Path:
     if explicit is not None:
         return _require_existing_dir(
             explicit,
@@ -60,14 +58,10 @@ def resolve_network_manifest_path(
         if not manifest_path.is_absolute():
             manifest_path = (base_dir / manifest_path).resolve()
         if not manifest_path.exists():
-            raise FileNotFoundError(
-                f"network manifest not found: {manifest_path}"
-            )
+            raise FileNotFoundError(f"network manifest not found: {manifest_path}")
         return manifest_path
 
-    local_manifest_dir = (
-        base_dir / "networks" / network_name / "manifest.json"
-    ).resolve()
+    local_manifest_dir = (base_dir / "networks" / network_name / "manifest.json").resolve()
     if local_manifest_dir.exists():
         return local_manifest_dir
 
@@ -90,16 +84,12 @@ def resolve_network_template_path(
     template_name: str,
     configs_dir: Path | None = None,
 ) -> Path:
-    local_template = (
-        base_dir / "templates" / f"{template_name}.json"
-    ).resolve()
+    local_template = (base_dir / "templates" / f"{template_name}.json").resolve()
     if local_template.exists():
         return local_template
 
     resolved_configs_dir = resolve_configs_dir(base_dir, explicit=configs_dir)
-    canonical_template = (
-        resolved_configs_dir / "templates" / f"{template_name}.json"
-    ).resolve()
+    canonical_template = (resolved_configs_dir / "templates" / f"{template_name}.json").resolve()
     if canonical_template.exists():
         return canonical_template
 
@@ -146,18 +136,13 @@ def resolve_contract_pack_path(
     pack_name: str,
     configs_dir: Path | None = None,
 ) -> Path:
-    local_pack = (
-        base_dir / "contract-packs" / pack_name / "contract-pack.json"
-    ).resolve()
+    local_pack = (base_dir / "contract-packs" / pack_name / "contract-pack.json").resolve()
     if local_pack.exists():
         return local_pack
 
     resolved_configs_dir = resolve_configs_dir(base_dir, explicit=configs_dir)
     canonical_pack = (
-        resolved_configs_dir
-        / "contract-packs"
-        / pack_name
-        / "contract-pack.json"
+        resolved_configs_dir / "contract-packs" / pack_name / "contract-pack.json"
     ).resolve()
     if canonical_pack.exists():
         return canonical_pack
@@ -205,9 +190,7 @@ def resolve_example_path(
     example_name: str,
     configs_dir: Path | None = None,
 ) -> Path:
-    local_example = (
-        base_dir / "examples" / example_name / "example.json"
-    ).resolve()
+    local_example = (base_dir / "examples" / example_name / "example.json").resolve()
     if local_example.exists():
         return local_example
 

@@ -47,9 +47,7 @@ class GoldenSetupPlanTests(unittest.TestCase):
             cometbft_config = tomllib.loads(
                 (home / "config" / "config.toml").read_text(encoding="utf-8")
             )
-            xian_config = tomllib.loads(
-                (home / "config" / "xian.toml").read_text(encoding="utf-8")
-            )
+            xian_config = tomllib.loads((home / "config" / "xian.toml").read_text(encoding="utf-8"))
 
             self.assertEqual(manifest["chain_id"], "xian-golden-1")
             self.assertEqual(profile["network"], "golden-local")

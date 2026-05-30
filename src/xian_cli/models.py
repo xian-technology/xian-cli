@@ -235,9 +235,7 @@ def _require_positive_int_no_default(payload: dict, key: str) -> int:
 
 def _require_str_list(payload: dict, key: str) -> list[str]:
     value = payload.get(key, [])
-    if not isinstance(value, list) or any(
-        not isinstance(item, str) or not item for item in value
-    ):
+    if not isinstance(value, list) or any(not isinstance(item, str) or not item for item in value):
         raise ValueError(f"{key} must be a list of non-empty strings")
     return value
 
@@ -275,10 +273,7 @@ def _merge_defaults(defaults: dict, value: dict | None) -> dict:
     if value is None:
         return merged
     for key, nested in value.items():
-        if (
-            isinstance(nested, dict)
-            and isinstance(merged.get(key), dict)
-        ):
+        if isinstance(nested, dict) and isinstance(merged.get(key), dict):
             merged[key] = _merge_defaults(merged[key], nested)
         else:
             merged[key] = nested
@@ -305,9 +300,7 @@ def _normalize_node_release_manifest(
         if not isinstance(component_name, str) or not component_name:
             raise ValueError(f"{key}.components keys must be non-empty strings")
         if not isinstance(component, dict):
-            raise ValueError(
-                f"{key}.components.{component_name} must be an object"
-            )
+            raise ValueError(f"{key}.components.{component_name} must be an object")
         components[component_name] = {
             "repository": _require_str(component, "repository"),
             "ref": _require_str(component, "ref"),
@@ -321,19 +314,11 @@ def _normalize_node_release_manifest(
         "go_image": _require_str(build_raw, "go_image"),
         "cometbft_version": _require_str(build_raw, "cometbft_version"),
         "cometbft_source_url": _require_str(build_raw, "cometbft_source_url"),
-        "cometbft_source_sha256": _require_sha256(
-            build_raw, "cometbft_source_sha256"
-        ),
+        "cometbft_source_sha256": _require_sha256(build_raw, "cometbft_source_sha256"),
         "s6_overlay_version": _require_str(build_raw, "s6_overlay_version"),
-        "s6_overlay_noarch_sha256": _require_sha256(
-            build_raw, "s6_overlay_noarch_sha256"
-        ),
-        "s6_overlay_x86_64_sha256": _require_sha256(
-            build_raw, "s6_overlay_x86_64_sha256"
-        ),
-        "s6_overlay_aarch64_sha256": _require_sha256(
-            build_raw, "s6_overlay_aarch64_sha256"
-        ),
+        "s6_overlay_noarch_sha256": _require_sha256(build_raw, "s6_overlay_noarch_sha256"),
+        "s6_overlay_x86_64_sha256": _require_sha256(build_raw, "s6_overlay_x86_64_sha256"),
+        "s6_overlay_aarch64_sha256": _require_sha256(build_raw, "s6_overlay_aarch64_sha256"),
     }
 
     images_raw = value.get("images")
@@ -362,14 +347,9 @@ def _normalize_shielded_relayer_entry(
         raise ValueError(f"{key} must be an object")
     submission_kinds = _require_str_list(payload, "submission_kinds")
     if submission_kinds:
-        invalid_kinds = sorted(
-            set(submission_kinds) - SUPPORTED_SHIELDED_RELAYER_SUBMISSION_KINDS
-        )
+        invalid_kinds = sorted(set(submission_kinds) - SUPPORTED_SHIELDED_RELAYER_SUBMISSION_KINDS)
         if invalid_kinds:
-            raise ValueError(
-                f"{key}.submission_kinds contains unsupported values: "
-                f"{invalid_kinds}"
-            )
+            raise ValueError(f"{key}.submission_kinds contains unsupported values: {invalid_kinds}")
     return {
         "id": _require_optional_str(payload, "id") or default_id,
         "base_url": _require_str(payload, "base_url"),
@@ -382,9 +362,7 @@ def _normalize_shielded_relayer_entry(
         or "none",
         "public_info": _require_bool(payload, "public_info", default=True),
         "public_quote": _require_bool(payload, "public_quote", default=False),
-        "public_job_lookup": _require_bool(
-            payload, "public_job_lookup", default=False
-        ),
+        "public_job_lookup": _require_bool(payload, "public_job_lookup", default=False),
         "priority": _require_non_negative_int(payload, "priority", default=100),
         "submission_kinds": (
             submission_kinds
@@ -414,9 +392,7 @@ def _normalize_shielded_relayers_manifest(
     for relayer in relayers:
         relayer_id = relayer["id"]
         if relayer_id in seen_ids:
-            raise ValueError(
-                f"shielded_relayers contains duplicate id: {relayer_id}"
-            )
+            raise ValueError(f"shielded_relayers contains duplicate id: {relayer_id}")
         seen_ids.add(relayer_id)
     sorted_relayers = sorted(
         relayers,
@@ -471,9 +447,7 @@ def _normalize_shielded_history_policy(
         "feed_version": _require_positive_int_no_default(value, "feed_version"),
         "compatibility_commitment": compatibility_commitment,
         "retention_class": retention_class,
-        "bds_snapshot_support": _require_bool(
-            value, "bds_snapshot_support", default=False
-        ),
+        "bds_snapshot_support": _require_bool(value, "bds_snapshot_support", default=False),
         "operator_notice": _require_str(value, "operator_notice"),
     }
 
@@ -499,9 +473,7 @@ def _normalize_privacy_submission_policy(
         "shared_relayer_auth_required": _require_bool(
             value, "shared_relayer_auth_required", default=False
         ),
-        "hidden_sender_submission_mode": _require_str(
-            value, "hidden_sender_submission_mode"
-        ),
+        "hidden_sender_submission_mode": _require_str(value, "hidden_sender_submission_mode"),
         "operator_notice": _require_str(value, "operator_notice"),
     }
 
@@ -509,10 +481,7 @@ def _normalize_privacy_submission_policy(
 def _require_schema_version(payload: dict) -> int:
     schema_version = payload.get("schema_version")
     if schema_version != SCHEMA_VERSION:
-        raise ValueError(
-            f"unsupported schema_version: {schema_version}; "
-            f"expected {SCHEMA_VERSION}"
-        )
+        raise ValueError(f"unsupported schema_version: {schema_version}; expected {SCHEMA_VERSION}")
     return schema_version
 
 
@@ -551,9 +520,7 @@ def _reject_unknown_object_fields(
 def _require_node_image_mode(payload: dict, key: str) -> str:
     value = payload.get(key, "local_build")
     if not isinstance(value, str) or value not in SUPPORTED_NODE_IMAGE_MODES:
-        raise ValueError(
-            f"{key} must be one of {sorted(SUPPORTED_NODE_IMAGE_MODES)}"
-        )
+        raise ValueError(f"{key} must be one of {sorted(SUPPORTED_NODE_IMAGE_MODES)}")
     return value
 
 
@@ -562,9 +529,7 @@ def _require_optional_node_image_mode(payload: dict, key: str) -> str | None:
     if value is None:
         return None
     if not isinstance(value, str) or value not in SUPPORTED_NODE_IMAGE_MODES:
-        raise ValueError(
-            f"{key} must be one of {sorted(SUPPORTED_NODE_IMAGE_MODES)}"
-        )
+        raise ValueError(f"{key} must be one of {sorted(SUPPORTED_NODE_IMAGE_MODES)}")
     return value
 
 
@@ -574,17 +539,13 @@ def _validate_node_image_config(
     integrated_image: str | None,
     split_image: str | None,
 ) -> tuple[str | None, str | None, str | None]:
-    if mode != "registry" and (
-        integrated_image is not None or split_image is not None
-    ):
+    if mode != "registry" and (integrated_image is not None or split_image is not None):
         raise ValueError(
-            "node_integrated_image and node_split_image require "
-            "node_image_mode=registry"
+            "node_integrated_image and node_split_image require node_image_mode=registry"
         )
     if mode == "registry" and (integrated_image is None or split_image is None):
         raise ValueError(
-            "registry node image mode requires both "
-            "node_integrated_image and node_split_image"
+            "registry node image mode requires both node_integrated_image and node_split_image"
         )
     return mode, integrated_image, split_image
 
@@ -592,9 +553,7 @@ def _validate_node_image_config(
 def _require_block_policy_mode(payload: dict, key: str) -> str:
     value = payload.get(key, "on_demand")
     if not isinstance(value, str) or value not in SUPPORTED_BLOCK_POLICY_MODES:
-        raise ValueError(
-            f"{key} must be one of {sorted(SUPPORTED_BLOCK_POLICY_MODES)}"
-        )
+        raise ValueError(f"{key} must be one of {sorted(SUPPORTED_BLOCK_POLICY_MODES)}")
     return value
 
 
@@ -611,9 +570,7 @@ def _require_app_log_level(payload: dict, key: str) -> str:
         raise ValueError(f"{key} must be a string")
     normalized = value.upper()
     if normalized not in SUPPORTED_APP_LOG_LEVELS:
-        raise ValueError(
-            f"{key} must be one of {sorted(SUPPORTED_APP_LOG_LEVELS)}"
-        )
+        raise ValueError(f"{key} must be one of {sorted(SUPPORTED_APP_LOG_LEVELS)}")
     return normalized
 
 
@@ -621,9 +578,7 @@ def _normalize_genesis(payload: dict, key: str = "genesis") -> dict:
     value = _require_object(payload, key)
     kind = _require_str(value, "kind")
     if kind not in SUPPORTED_GENESIS_KINDS:
-        raise ValueError(
-            f"{key}.kind must be one of {sorted(SUPPORTED_GENESIS_KINDS)}"
-        )
+        raise ValueError(f"{key}.kind must be one of {sorted(SUPPORTED_GENESIS_KINDS)}")
     if kind == "source":
         _reject_unknown_fields(
             value,
@@ -632,9 +587,7 @@ def _normalize_genesis(payload: dict, key: str = "genesis") -> dict:
         )
         source = _require_str(value, "source")
         if "bundle" in value or "genesis_time" in value:
-            raise ValueError(
-                f"{key}.source genesis must not include bundle or genesis_time"
-            )
+            raise ValueError(f"{key}.source genesis must not include bundle or genesis_time")
         return {"kind": "source", "source": source}
 
     _reject_unknown_fields(
@@ -683,19 +636,13 @@ def _normalize_bds_service(payload: dict, key: str) -> dict:
         label=key,
     )
     value = _merge_defaults(DEFAULT_SERVICES["bds"], payload)
-    pool_min_size = _require_non_negative_int(
-        value, "pool_min_size", default=1
-    )
+    pool_min_size = _require_non_negative_int(value, "pool_min_size", default=1)
     pool_max_size = _require_positive_int(value, "pool_max_size", default=10)
     if pool_min_size > pool_max_size:
         raise ValueError(f"{key}.pool_min_size must be <= pool_max_size")
-    catchup_poll_seconds = _require_float(
-        value, "catchup_poll_seconds", default=1.0
-    )
+    catchup_poll_seconds = _require_float(value, "catchup_poll_seconds", default=1.0)
     if catchup_poll_seconds <= 0:
-        raise ValueError(
-            f"{key}.catchup_poll_seconds must be greater than zero"
-        )
+        raise ValueError(f"{key}.catchup_poll_seconds must be greater than zero")
     return {
         "enabled": _require_bool(value, "enabled", default=False),
         "dsn": _require_optional_str(value, "dsn") or "",
@@ -706,25 +653,15 @@ def _normalize_bds_service(payload: dict, key: str) -> dict:
         "password": _require_optional_str(value, "password") or "",
         "pool_min_size": pool_min_size,
         "pool_max_size": pool_max_size,
-        "statement_timeout_ms": _require_non_negative_int(
-            value, "statement_timeout_ms", default=0
-        ),
-        "acquire_timeout_ms": _require_non_negative_int(
-            value, "acquire_timeout_ms", default=10000
-        ),
+        "statement_timeout_ms": _require_non_negative_int(value, "statement_timeout_ms", default=0),
+        "acquire_timeout_ms": _require_non_negative_int(value, "acquire_timeout_ms", default=10000),
         "application_name": _require_str(value, "application_name"),
-        "queue_max_size": _require_positive_int(
-            value, "queue_max_size", default=128
-        ),
-        "catchup_enabled": _require_bool(
-            value, "catchup_enabled", default=True
-        ),
+        "queue_max_size": _require_positive_int(value, "queue_max_size", default=128),
+        "catchup_enabled": _require_bool(value, "catchup_enabled", default=True),
         "catchup_poll_seconds": catchup_poll_seconds,
         "rpc_url": _require_optional_str(value, "rpc_url"),
         "spool_dir": _require_optional_str(value, "spool_dir") or "",
-        "spool_warn_entries": _require_non_negative_int(
-            value, "spool_warn_entries", default=256
-        ),
+        "spool_warn_entries": _require_non_negative_int(value, "spool_warn_entries", default=256),
         "spool_warn_bytes": _require_non_negative_int(
             value, "spool_warn_bytes", default=536_870_912
         ),
@@ -755,19 +692,13 @@ def _normalize_services(
     raw = _merge_defaults(DEFAULT_SERVICES, services_input)
     if not isinstance(raw, dict):
         raise ValueError("services must be an object")
-    dashboard = _merge_defaults(
-        DEFAULT_SERVICES["dashboard"], raw.get("dashboard")
-    )
+    dashboard = _merge_defaults(DEFAULT_SERVICES["dashboard"], raw.get("dashboard"))
     intentkit_defaults = deepcopy(DEFAULT_SERVICES["intentkit"])
     if intentkit_network_id_default is not None:
         intentkit_defaults["network_id"] = intentkit_network_id_default
     intentkit = _merge_defaults(intentkit_defaults, raw.get("intentkit"))
-    dex = _merge_defaults(
-        DEFAULT_SERVICES["dex_automation"], raw.get("dex_automation")
-    )
-    relayer = _merge_defaults(
-        DEFAULT_SERVICES["shielded_relayer"], raw.get("shielded_relayer")
-    )
+    dex = _merge_defaults(DEFAULT_SERVICES["dex_automation"], raw.get("dex_automation"))
+    relayer = _merge_defaults(DEFAULT_SERVICES["shielded_relayer"], raw.get("shielded_relayer"))
     return {
         "bds": _normalize_bds_service(raw.get("bds") or {}, "services.bds"),
         "dashboard": {
@@ -776,9 +707,7 @@ def _normalize_services(
             "port": _require_port(dashboard, "port", default=8080),
         },
         "monitoring": {
-            "enabled": _require_bool(
-                raw.get("monitoring") or {}, "enabled", default=False
-            ),
+            "enabled": _require_bool(raw.get("monitoring") or {}, "enabled", default=False),
         },
         "intentkit": {
             "enabled": _require_bool(intentkit, "enabled", default=False),
@@ -823,15 +752,9 @@ def _normalize_advanced_runtime(payload: dict) -> dict:
     raw = _merge_defaults(DEFAULT_ADVANCED_RUNTIME, advanced_input)
     if not isinstance(raw, dict):
         raise ValueError("advanced must be an object")
-    cometbft = _merge_defaults(
-        DEFAULT_ADVANCED_RUNTIME["cometbft"], raw.get("cometbft")
-    )
-    statesync = _merge_defaults(
-        DEFAULT_ADVANCED_RUNTIME["statesync"], raw.get("statesync")
-    )
-    metrics = _merge_defaults(
-        DEFAULT_ADVANCED_RUNTIME["metrics"], raw.get("metrics")
-    )
+    cometbft = _merge_defaults(DEFAULT_ADVANCED_RUNTIME["cometbft"], raw.get("cometbft"))
+    statesync = _merge_defaults(DEFAULT_ADVANCED_RUNTIME["statesync"], raw.get("statesync"))
+    metrics = _merge_defaults(DEFAULT_ADVANCED_RUNTIME["metrics"], raw.get("metrics"))
     pending_nonce = _merge_defaults(
         DEFAULT_ADVANCED_RUNTIME["pending_nonce"], raw.get("pending_nonce")
     )
@@ -839,18 +762,12 @@ def _normalize_advanced_runtime(payload: dict) -> dict:
         DEFAULT_ADVANCED_RUNTIME["parallel_execution"],
         raw.get("parallel_execution"),
     )
-    metrics_refresh = _require_float(
-        metrics, "bds_refresh_seconds", default=5.0
-    )
+    metrics_refresh = _require_float(metrics, "bds_refresh_seconds", default=5.0)
     if metrics_refresh <= 0:
-        raise ValueError(
-            "advanced.metrics.bds_refresh_seconds must be greater than zero"
-        )
+        raise ValueError("advanced.metrics.bds_refresh_seconds must be greater than zero")
     statesync_enabled = _require_bool(statesync, "enabled", default=False)
     statesync_servers = _require_str_list(statesync, "rpc_servers")
-    statesync_trust_height = _require_non_negative_int(
-        statesync, "trust_height", default=0
-    )
+    statesync_trust_height = _require_non_negative_int(statesync, "trust_height", default=0)
     statesync_trust_hash = _require_optional_str(statesync, "trust_hash") or ""
     statesync_trust_period = _require_str(statesync, "trust_period")
     if statesync_enabled:
@@ -865,26 +782,17 @@ def _normalize_advanced_runtime(payload: dict) -> dict:
                 "when state sync is enabled"
             )
         if not statesync_trust_hash:
-            raise ValueError(
-                "advanced.statesync.trust_hash is required when state sync "
-                "is enabled"
-            )
+            raise ValueError("advanced.statesync.trust_hash is required when state sync is enabled")
     min_wave_acceptance_ratio = _require_float(
         parallel_execution, "min_wave_acceptance_ratio", default=0.25
     )
     if not 0.0 <= min_wave_acceptance_ratio <= 1.0:
         raise ValueError(
-            "advanced.parallel_execution.min_wave_acceptance_ratio must be "
-            "between 0.0 and 1.0"
+            "advanced.parallel_execution.min_wave_acceptance_ratio must be between 0.0 and 1.0"
         )
-    pending_nonce_ttl = _require_float(
-        pending_nonce, "reservation_ttl_seconds", default=60.0
-    )
+    pending_nonce_ttl = _require_float(pending_nonce, "reservation_ttl_seconds", default=60.0)
     if pending_nonce_ttl < 0:
-        raise ValueError(
-            "advanced.pending_nonce.reservation_ttl_seconds must be "
-            "non-negative"
-        )
+        raise ValueError("advanced.pending_nonce.reservation_ttl_seconds must be non-negative")
     return {
         "cometbft": {
             "allow_cors": _require_bool(cometbft, "allow_cors", default=True),
@@ -906,9 +814,7 @@ def _normalize_advanced_runtime(payload: dict) -> dict:
         },
         "pending_nonce": {
             "reservation_ttl_seconds": pending_nonce_ttl,
-            "max_per_sender": _require_positive_int(
-                pending_nonce, "max_per_sender", default=128
-            ),
+            "max_per_sender": _require_positive_int(pending_nonce, "max_per_sender", default=128),
         },
         "parallel_execution": {
             "max_speculative_waves": _require_non_negative_int(
@@ -918,9 +824,7 @@ def _normalize_advanced_runtime(payload: dict) -> dict:
             "low_acceptance_min_wave_size": _require_positive_int(
                 parallel_execution, "low_acceptance_min_wave_size", default=8
             ),
-            "warm_workers": _require_bool(
-                parallel_execution, "warm_workers", default=True
-            ),
+            "warm_workers": _require_bool(parallel_execution, "warm_workers", default=True),
             "access_estimates_enabled": _require_bool(
                 parallel_execution, "access_estimates_enabled", default=True
             ),
@@ -928,9 +832,7 @@ def _normalize_advanced_runtime(payload: dict) -> dict:
     }
 
 
-def _validate_parallel_enabled_workers(
-    *, enabled: bool, workers: int
-) -> None:
+def _validate_parallel_enabled_workers(*, enabled: bool, workers: int) -> None:
     if enabled and workers <= 0:
         raise ValueError(
             "parallel_execution_workers must be greater than zero when "
@@ -967,14 +869,10 @@ def normalize_network_manifest(payload: dict) -> dict:
     )
     shielded_relayers = _normalize_shielded_relayers_manifest(payload)
 
-    node_image_mode, node_integrated_image, node_split_image = (
-        _validate_node_image_config(
-            mode=_require_node_image_mode(payload, "node_image_mode"),
-            integrated_image=_require_optional_str(
-                payload, "node_integrated_image"
-            ),
-            split_image=_require_optional_str(payload, "node_split_image"),
-        )
+    node_image_mode, node_integrated_image, node_split_image = _validate_node_image_config(
+        mode=_require_node_image_mode(payload, "node_image_mode"),
+        integrated_image=_require_optional_str(payload, "node_integrated_image"),
+        split_image=_require_optional_str(payload, "node_split_image"),
     )
 
     return {
@@ -984,16 +882,10 @@ def normalize_network_manifest(payload: dict) -> dict:
         "genesis": _normalize_genesis(payload),
         "genesis_build": _require_optional_object(payload, "genesis_build"),
         "snapshot_url": _require_optional_str(payload, "snapshot_url"),
-        "snapshot_signing_keys": _require_str_list(
-            payload, "snapshot_signing_keys"
-        ),
+        "snapshot_signing_keys": _require_str_list(payload, "snapshot_signing_keys"),
         "p2p": _normalize_p2p(payload),
-        "block_policy_mode": _require_block_policy_mode(
-            payload, "block_policy_mode"
-        ),
-        "block_policy_interval": _require_block_policy_interval(
-            payload, "block_policy_interval"
-        ),
+        "block_policy_mode": _require_block_policy_mode(payload, "block_policy_mode"),
+        "block_policy_interval": _require_block_policy_interval(payload, "block_policy_interval"),
         "node_image_mode": node_image_mode,
         "node_integrated_image": node_integrated_image,
         "node_split_image": node_split_image,
@@ -1059,18 +951,12 @@ def normalize_node_profile(payload: dict) -> dict:
         label="node profile",
     )
 
-    node_image_mode, node_integrated_image, node_split_image = (
-        _validate_node_image_config(
-            mode=_require_optional_node_image_mode(payload, "node_image_mode"),
-            integrated_image=_require_optional_str(
-                payload, "node_integrated_image"
-            ),
-            split_image=_require_optional_str(payload, "node_split_image"),
-        )
+    node_image_mode, node_integrated_image, node_split_image = _validate_node_image_config(
+        mode=_require_optional_node_image_mode(payload, "node_image_mode"),
+        integrated_image=_require_optional_str(payload, "node_integrated_image"),
+        split_image=_require_optional_str(payload, "node_split_image"),
     )
-    parallel_execution_enabled = _require_bool(
-        payload, "parallel_execution_enabled", default=False
-    )
+    parallel_execution_enabled = _require_bool(payload, "parallel_execution_enabled", default=False)
     parallel_execution_workers = _require_non_negative_int(
         payload, "parallel_execution_workers", default=4
     )
@@ -1099,22 +985,12 @@ def normalize_node_profile(payload: dict) -> dict:
         "p2p": _normalize_p2p(payload),
         "genesis": _normalize_optional_genesis(payload),
         "snapshot_url": _require_optional_str(payload, "snapshot_url"),
-        "snapshot_signing_keys": _require_str_list(
-            payload, "snapshot_signing_keys"
-        ),
+        "snapshot_signing_keys": _require_str_list(payload, "snapshot_signing_keys"),
         "home": _require_optional_str(payload, "home"),
-        "pruning_enabled": _require_bool(
-            payload, "pruning_enabled", default=False
-        ),
-        "blocks_to_keep": _require_positive_int(
-            payload, "blocks_to_keep", default=100000
-        ),
-        "block_policy_mode": _require_block_policy_mode(
-            payload, "block_policy_mode"
-        ),
-        "block_policy_interval": _require_block_policy_interval(
-            payload, "block_policy_interval"
-        ),
+        "pruning_enabled": _require_bool(payload, "pruning_enabled", default=False),
+        "blocks_to_keep": _require_positive_int(payload, "blocks_to_keep", default=100000),
+        "block_policy_mode": _require_block_policy_mode(payload, "block_policy_mode"),
+        "block_policy_interval": _require_block_policy_interval(payload, "block_policy_interval"),
         "transaction_trace_logging": _require_bool(
             payload, "transaction_trace_logging", default=False
         ),
@@ -1126,9 +1002,7 @@ def normalize_node_profile(payload: dict) -> dict:
         "app_log_retention_days": _require_positive_int(
             payload, "app_log_retention_days", default=7
         ),
-        "simulation_enabled": _require_bool(
-            payload, "simulation_enabled", default=True
-        ),
+        "simulation_enabled": _require_bool(payload, "simulation_enabled", default=True),
         "simulation_max_concurrency": _require_positive_int(
             payload, "simulation_max_concurrency", default=2
         ),
@@ -1198,9 +1072,7 @@ def normalize_network_template(payload: dict) -> dict:
         },
         label="network template",
     )
-    parallel_execution_enabled = _require_bool(
-        payload, "parallel_execution_enabled", default=False
-    )
+    parallel_execution_enabled = _require_bool(payload, "parallel_execution_enabled", default=False)
     parallel_execution_workers = _require_non_negative_int(
         payload, "parallel_execution_workers", default=4
     )
@@ -1214,12 +1086,8 @@ def normalize_network_template(payload: dict) -> dict:
         "name": _require_str(payload, "name"),
         "display_name": _require_str(payload, "display_name"),
         "description": _require_str(payload, "description"),
-        "block_policy_mode": _require_block_policy_mode(
-            payload, "block_policy_mode"
-        ),
-        "block_policy_interval": _require_block_policy_interval(
-            payload, "block_policy_interval"
-        ),
+        "block_policy_mode": _require_block_policy_mode(payload, "block_policy_mode"),
+        "block_policy_interval": _require_block_policy_interval(payload, "block_policy_interval"),
         "transaction_trace_logging": _require_bool(
             payload, "transaction_trace_logging", default=False
         ),
@@ -1231,9 +1099,7 @@ def normalize_network_template(payload: dict) -> dict:
         "app_log_retention_days": _require_positive_int(
             payload, "app_log_retention_days", default=7
         ),
-        "simulation_enabled": _require_bool(
-            payload, "simulation_enabled", default=True
-        ),
+        "simulation_enabled": _require_bool(payload, "simulation_enabled", default=True),
         "simulation_max_concurrency": _require_positive_int(
             payload, "simulation_max_concurrency", default=2
         ),
@@ -1258,20 +1124,12 @@ def normalize_network_template(payload: dict) -> dict:
             "monitoring_profile",
             supported=SUPPORTED_MONITORING_PROFILES,
         ),
-        "bootstrap_node_name": _require_optional_str(
-            payload, "bootstrap_node_name"
-        ),
-        "additional_validator_names": _require_str_list(
-            payload, "additional_validator_names"
-        ),
+        "bootstrap_node_name": _require_optional_str(payload, "bootstrap_node_name"),
+        "additional_validator_names": _require_str_list(payload, "additional_validator_names"),
         "services": _normalize_services(payload),
         "advanced": _normalize_advanced_runtime(payload),
-        "pruning_enabled": _require_bool(
-            payload, "pruning_enabled", default=False
-        ),
-        "blocks_to_keep": _require_positive_int(
-            payload, "blocks_to_keep", default=100000
-        ),
+        "pruning_enabled": _require_bool(payload, "pruning_enabled", default=False),
+        "blocks_to_keep": _require_positive_int(payload, "blocks_to_keep", default=100000),
     }
 
 
@@ -1318,9 +1176,7 @@ def _normalize_starter_flow(payload: dict, *, label: str) -> dict:
         or not steps
         or any(not isinstance(item, dict) for item in steps)
     ):
-        raise ValueError(
-            f"{label} starter flow steps must be a non-empty list of objects"
-        )
+        raise ValueError(f"{label} starter flow steps must be a non-empty list of objects")
 
     return {
         "name": _require_str(payload, "name"),
@@ -1407,19 +1263,13 @@ def normalize_contract_pack(payload: dict) -> dict:
         or not recipes
         or any(not isinstance(item, dict) for item in recipes)
     ):
-        raise ValueError(
-            "contract pack recipes must be a non-empty list of objects"
-        )
+        raise ValueError("contract pack recipes must be a non-empty list of objects")
 
-    normalized_recipes = [
-        _normalize_contract_pack_recipe(item) for item in recipes
-    ]
+    normalized_recipes = [_normalize_contract_pack_recipe(item) for item in recipes]
     recipe_names = {item["name"] for item in normalized_recipes}
     default_recipe = _require_str(payload, "default_recipe")
     if default_recipe not in recipe_names:
-        raise ValueError(
-            "contract pack default_recipe must name an existing recipe"
-        )
+        raise ValueError("contract pack default_recipe must name an existing recipe")
 
     return {
         "schema": _require_schema(payload, expected=CONTRACT_PACK_SCHEMA),
@@ -1433,18 +1283,14 @@ def normalize_contract_pack(payload: dict) -> dict:
         "docs_path": _require_str(payload, "docs_path"),
         "default_recipe": default_recipe,
         "contract_paths": _require_str_list(payload, "contract_paths"),
-        "contract_bundle_paths": _require_str_list(
-            payload, "contract_bundle_paths"
-        ),
+        "contract_bundle_paths": _require_str_list(payload, "contract_bundle_paths"),
         "recipes": normalized_recipes,
     }
 
 
 def _normalize_example_contract_pack_ref(payload: dict) -> dict:
     if not isinstance(payload, dict):
-        raise ValueError(
-            "example contract pack reference must be a JSON object"
-        )
+        raise ValueError("example contract pack reference must be a JSON object")
     _reject_unknown_fields(
         payload,
         allowed={"name", "recipe"},
@@ -1486,9 +1332,7 @@ def normalize_example(payload: dict) -> dict:
         or not starter_flows
         or any(not isinstance(item, dict) for item in starter_flows)
     ):
-        raise ValueError(
-            "example starter_flows must be a non-empty list of flow objects"
-        )
+        raise ValueError("example starter_flows must be a non-empty list of flow objects")
 
     contract_packs = payload.get("contract_packs", [])
     if not isinstance(contract_packs, list) or any(
@@ -1503,24 +1347,14 @@ def normalize_example(payload: dict) -> dict:
         "display_name": _require_str(payload, "display_name"),
         "description": _require_str(payload, "description"),
         "use_case": _require_str(payload, "use_case"),
-        "recommended_local_template": _require_str(
-            payload, "recommended_local_template"
-        ),
+        "recommended_local_template": _require_str(payload, "recommended_local_template"),
         "docs_path": _require_str(payload, "docs_path"),
         "example_dir": _require_str(payload, "example_dir"),
-        "contract_packs": [
-            _normalize_example_contract_pack_ref(item)
-            for item in contract_packs
-        ],
+        "contract_packs": [_normalize_example_contract_pack_ref(item) for item in contract_packs],
         "services": _require_str_list(payload, "services"),
         "contract_paths": _require_str_list(payload, "contract_paths"),
-        "contract_bundle_paths": _require_str_list(
-            payload, "contract_bundle_paths"
-        ),
-        "starter_flows": [
-            _normalize_starter_flow(item, label="example")
-            for item in starter_flows
-        ],
+        "contract_bundle_paths": _require_str_list(payload, "contract_bundle_paths"),
+        "starter_flows": [_normalize_starter_flow(item, label="example") for item in starter_flows],
     }
 
 
@@ -1534,8 +1368,7 @@ def normalize_recovery_plan(payload: dict) -> dict:
     artifact_kind = _require_str(artifact, "kind")
     if artifact_kind not in SUPPORTED_RECOVERY_ARTIFACT_KINDS:
         raise ValueError(
-            "artifact.kind must be one of "
-            f"{sorted(SUPPORTED_RECOVERY_ARTIFACT_KINDS)}"
+            f"artifact.kind must be one of {sorted(SUPPORTED_RECOVERY_ARTIFACT_KINDS)}"
         )
 
     runtime = payload.get("runtime", {})
@@ -1543,20 +1376,14 @@ def normalize_recovery_plan(payload: dict) -> dict:
         raise ValueError("runtime must be a JSON object when provided")
 
     follow_up_state_patch = payload.get("follow_up_state_patch")
-    if follow_up_state_patch is not None and not isinstance(
-        follow_up_state_patch, dict
-    ):
-        raise ValueError(
-            "follow_up_state_patch must be a JSON object when provided"
-        )
+    if follow_up_state_patch is not None and not isinstance(follow_up_state_patch, dict):
+        raise ValueError("follow_up_state_patch must be a JSON object when provided")
 
     normalized = {
         "schema_version": _require_schema_version(payload),
         "name": _require_str(payload, "name"),
         "chain_id": _require_str(payload, "chain_id"),
-        "target_height": _require_positive_int_no_default(
-            payload, "target_height"
-        ),
+        "target_height": _require_positive_int_no_default(payload, "target_height"),
         "trusted_block_hash": _require_str(payload, "trusted_block_hash"),
         "trusted_app_hash": _require_str(payload, "trusted_app_hash"),
         "reason": _require_str(payload, "reason"),
@@ -1566,12 +1393,8 @@ def normalize_recovery_plan(payload: dict) -> dict:
             "sha256": _require_optional_str(artifact, "sha256"),
         },
         "runtime": {
-            "xian_abci_version": _require_optional_str(
-                runtime, "xian_abci_version"
-            ),
-            "cometbft_version": _require_optional_str(
-                runtime, "cometbft_version"
-            ),
+            "xian_abci_version": _require_optional_str(runtime, "xian_abci_version"),
+            "cometbft_version": _require_optional_str(runtime, "cometbft_version"),
         },
         "follow_up_state_patch": None,
     }
@@ -1581,8 +1404,7 @@ def normalize_recovery_plan(payload: dict) -> dict:
         )
         if activation_height <= normalized["target_height"]:
             raise ValueError(
-                "follow_up_state_patch.activation_height must be greater than "
-                "target_height"
+                "follow_up_state_patch.activation_height must be greater than target_height"
             )
         normalized["follow_up_state_patch"] = {
             "patch_id": _require_str(follow_up_state_patch, "patch_id"),
@@ -1659,9 +1481,7 @@ class NodeProfile:
     operator_profile: str | None = None
     monitoring_profile: str | None = None
     services: dict = field(default_factory=lambda: deepcopy(DEFAULT_SERVICES))
-    advanced: dict = field(
-        default_factory=lambda: deepcopy(DEFAULT_ADVANCED_RUNTIME)
-    )
+    advanced: dict = field(default_factory=lambda: deepcopy(DEFAULT_ADVANCED_RUNTIME))
     schema_version: int = SCHEMA_VERSION
 
     def to_dict(self) -> dict:
@@ -1692,9 +1512,7 @@ class NetworkTemplate:
     bootstrap_node_name: str | None = None
     additional_validator_names: list[str] = field(default_factory=list)
     services: dict = field(default_factory=lambda: deepcopy(DEFAULT_SERVICES))
-    advanced: dict = field(
-        default_factory=lambda: deepcopy(DEFAULT_ADVANCED_RUNTIME)
-    )
+    advanced: dict = field(default_factory=lambda: deepcopy(DEFAULT_ADVANCED_RUNTIME))
     pruning_enabled: bool = False
     blocks_to_keep: int = 100000
     schema_version: int = SCHEMA_VERSION
@@ -1749,23 +1567,17 @@ class ExampleCatalogEntry:
 def _normalize_json_value(value, *, preserve_runtime_types: bool = False):
     if isinstance(value, dict):
         return {
-            str(key): _normalize_json_value(
-                nested, preserve_runtime_types=preserve_runtime_types
-            )
+            str(key): _normalize_json_value(nested, preserve_runtime_types=preserve_runtime_types)
             for key, nested in value.items()
         }
     if isinstance(value, list):
         return [
-            _normalize_json_value(
-                item, preserve_runtime_types=preserve_runtime_types
-            )
+            _normalize_json_value(item, preserve_runtime_types=preserve_runtime_types)
             for item in value
         ]
     if isinstance(value, tuple):
         return [
-            _normalize_json_value(
-                item, preserve_runtime_types=preserve_runtime_types
-            )
+            _normalize_json_value(item, preserve_runtime_types=preserve_runtime_types)
             for item in value
         ]
     if isinstance(value, (ContractingDecimal, decimal.Decimal, Datetime)):
@@ -1789,12 +1601,8 @@ def write_json(
 ) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     if path.exists() and not force:
-        raise FileExistsError(
-            f"{path} already exists; pass --force to overwrite"
-        )
-    normalized = _normalize_json_value(
-        payload, preserve_runtime_types=preserve_runtime_types
-    )
+        raise FileExistsError(f"{path} already exists; pass --force to overwrite")
+    normalized = _normalize_json_value(payload, preserve_runtime_types=preserve_runtime_types)
     path.write_text(json.dumps(normalized, indent=2) + "\n", encoding="utf-8")
 
 

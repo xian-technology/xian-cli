@@ -85,9 +85,7 @@ def register_client_commands(subparsers: argparse._SubParsersAction) -> None:
         required=True,
     )
 
-    wallet_parser = client_subparsers.add_parser(
-        "wallet", help="wallet helpers"
-    )
+    wallet_parser = client_subparsers.add_parser("wallet", help="wallet helpers")
     wallet_subparsers = wallet_parser.add_subparsers(
         dest="client_wallet_command",
         required=True,
@@ -107,9 +105,7 @@ def register_client_commands(subparsers: argparse._SubParsersAction) -> None:
     )
     wallet_generate_parser.set_defaults(handler=handlers.handle_wallet_generate)
 
-    query_parser = client_subparsers.add_parser(
-        "query", help="readonly queries"
-    )
+    query_parser = client_subparsers.add_parser("query", help="readonly queries")
     query_subparsers = query_parser.add_subparsers(
         dest="client_query_command",
         required=True,
@@ -120,9 +116,7 @@ def register_client_commands(subparsers: argparse._SubParsersAction) -> None:
         help="get the next nonce for an address",
     )
     _add_connection_args(query_nonce_parser)
-    query_nonce_parser.add_argument(
-        "address", help="account public key/address"
-    )
+    query_nonce_parser.add_argument("address", help="account public key/address")
     query_nonce_parser.set_defaults(handler=handlers.handle_query_nonce)
 
     query_balance_parser = query_subparsers.add_parser(
@@ -130,9 +124,7 @@ def register_client_commands(subparsers: argparse._SubParsersAction) -> None:
         help="get a token balance for an address",
     )
     _add_connection_args(query_balance_parser)
-    query_balance_parser.add_argument(
-        "address", help="account public key/address"
-    )
+    query_balance_parser.add_argument("address", help="account public key/address")
     query_balance_parser.add_argument(
         "--contract",
         default="currency",
@@ -145,9 +137,7 @@ def register_client_commands(subparsers: argparse._SubParsersAction) -> None:
         help="get a transaction receipt by hash",
     )
     _add_connection_args(query_tx_parser)
-    query_tx_parser.add_argument(
-        "tx_hash", help="uppercase or lowercase tx hash"
-    )
+    query_tx_parser.add_argument("tx_hash", help="uppercase or lowercase tx hash")
     query_tx_parser.set_defaults(handler=handlers.handle_query_tx)
 
     query_block_parser = query_subparsers.add_parser(
@@ -233,9 +223,7 @@ def register_client_commands(subparsers: argparse._SubParsersAction) -> None:
         default="{}",
         help="JSON object of constructor arguments",
     )
-    tx_submit_artifacts_parser.set_defaults(
-        handler=handlers.handle_tx_submit_artifacts
-    )
+    tx_submit_artifacts_parser.set_defaults(handler=handlers.handle_tx_submit_artifacts)
 
     tx_transfer_parser = tx_subparsers.add_parser(
         "transfer",

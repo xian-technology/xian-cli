@@ -54,10 +54,7 @@ def _collect_creation_validator_names(
     )
     for validator_name in validator_inputs or []:
         if validator_name in validator_names:
-            raise ValueError(
-                "duplicate validator name in network creation: "
-                f"{validator_name}"
-            )
+            raise ValueError(f"duplicate validator name in network creation: {validator_name}")
         validator_names.append(validator_name)
 
     return bootstrap_name, validator_names
@@ -79,8 +76,7 @@ def _collect_creation_validators(
     if not args.generate_validator_key:
         if len(validator_names) > 1:
             raise ValueError(
-                "multi-validator network creation currently requires "
-                "--generate-validator-key"
+                "multi-validator network creation currently requires --generate-validator-key"
             )
         if args.validator_key_ref is None:
             return validators
@@ -90,9 +86,7 @@ def _collect_creation_validators(
         validator_key_payload: dict | None = None
 
         if args.generate_validator_key:
-            key_dir = (
-                args.validator_key_dir or base_dir / "keys" / validator_name
-            )
+            key_dir = args.validator_key_dir or base_dir / "keys" / validator_name
             if args.validator_key_dir is not None and len(validator_names) > 1:
                 key_dir = key_dir / validator_name
             if not key_dir.is_absolute():
@@ -123,8 +117,7 @@ def _collect_creation_validators(
                 "name": validator_name,
                 "moniker": (
                     args.moniker
-                    if validator_name == bootstrap_name
-                    and args.moniker is not None
+                    if validator_name == bootstrap_name and args.moniker is not None
                     else validator_name
                 ),
                 "validator_key_ref": validator_key_ref,
@@ -152,14 +145,9 @@ def _handle_network_create(args: argparse.Namespace) -> int:
     network_dir = target.parent
 
     if args.generate_validator_key and args.validator_key_ref is not None:
-        raise ValueError(
-            "pass either --validator-key-ref or --generate-validator-key, "
-            "not both"
-        )
+        raise ValueError("pass either --validator-key-ref or --generate-validator-key, not both")
     if args.validator_key_dir is not None and not args.generate_validator_key:
-        raise ValueError(
-            "--validator-key-dir requires --generate-validator-key"
-        )
+        raise ValueError("--validator-key-dir requires --generate-validator-key")
     if args.init_node and args.bootstrap_node is None:
         if template is None or template.get("bootstrap_node_name") is None:
             raise ValueError("--init-node requires --bootstrap-node")
@@ -206,8 +194,7 @@ def _handle_network_create(args: argparse.Namespace) -> int:
     generated_genesis_path: Path | None = None
     if genesis is None:
         if not validators or any(
-            validator["validator_key_payload"] is None
-            for validator in validators
+            validator["validator_key_payload"] is None for validator in validators
         ):
             if bootstrap_name is not None or validator_names:
                 raise ValueError(
@@ -216,11 +203,8 @@ def _handle_network_create(args: argparse.Namespace) -> int:
                     "--generate-validator-key or --validator-key-ref"
                 )
         else:
-            founder_private_key = (
-                args.founder_private_key
-                or _extract_validator_private_key_hex(
-                    validators[0]["validator_key_payload"]
-                )
+            founder_private_key = args.founder_private_key or _extract_validator_private_key_hex(
+                validators[0]["validator_key_payload"]
             )
             generated_genesis_path = network_dir / "genesis.json"
             genesis = _build_creation_genesis(
@@ -247,24 +231,20 @@ def _handle_network_create(args: argparse.Namespace) -> int:
             "--bootstrap-node requires either --genesis-source or local "
             "genesis generation via validator key material"
         )
-    if validators and any(
-        validator["validator_key_ref"] is None for validator in validators
-    ):
+    if validators and any(validator["validator_key_ref"] is None for validator in validators):
         raise ValueError(
             "initial validator profiles require validator key material; "
             "pass --generate-validator-key"
         )
 
-    node_image_mode, node_integrated_image, node_split_image = (
-        _resolve_node_image_settings(
-            node_image_mode=_pick_template_value(
-                args.node_image_mode,
-                None,
-                "local_build",
-            ),
-            node_integrated_image=args.node_integrated_image,
-            node_split_image=args.node_split_image,
-        )
+    node_image_mode, node_integrated_image, node_split_image = _resolve_node_image_settings(
+        node_image_mode=_pick_template_value(
+            args.node_image_mode,
+            None,
+            "local_build",
+        ),
+        node_integrated_image=args.node_integrated_image,
+        node_split_image=args.node_split_image,
     )
 
     manifest = NetworkManifest(
@@ -309,9 +289,7 @@ def _handle_network_create(args: argparse.Namespace) -> int:
         }
         profile_path = _resolve_output_path(
             base_dir=base_dir,
-            explicit_output=(
-                args.node_output if validator["is_bootstrap"] else None
-            ),
+            explicit_output=(args.node_output if validator["is_bootstrap"] else None),
             default_path=base_dir / "nodes" / f"{validator['name']}.json",
         )
         profile = NodeProfile(
@@ -330,19 +308,11 @@ def _handle_network_create(args: argparse.Namespace) -> int:
             ),
             p2p={"seeds": [], "persistent_peers": []},
             genesis=None,
-            snapshot_url=(
-                args.snapshot_url if validator["is_bootstrap"] else None
-            ),
+            snapshot_url=(args.snapshot_url if validator["is_bootstrap"] else None),
             snapshot_signing_keys=(
-                list(args.snapshot_signing_key or [])
-                if validator["is_bootstrap"]
-                else []
+                list(args.snapshot_signing_key or []) if validator["is_bootstrap"] else []
             ),
-            home=(
-                str(args.home)
-                if validator["is_bootstrap"] and args.home is not None
-                else None
-            ),
+            home=(str(args.home) if validator["is_bootstrap"] and args.home is not None else None),
             block_policy_mode=manifest.block_policy_mode,
             block_policy_interval=manifest.block_policy_interval,
             **build_profile_runtime_fields(
@@ -363,17 +333,10 @@ def _handle_network_create(args: argparse.Namespace) -> int:
 
     if bootstrap_name is not None:
         bootstrap_validator = next(
-            (
-                validator
-                for validator in validators
-                if validator["name"] == bootstrap_name
-            ),
+            (validator for validator in validators if validator["name"] == bootstrap_name),
             None,
         )
-        if (
-            bootstrap_validator is None
-            or bootstrap_validator["validator_key_ref"] is None
-        ):
+        if bootstrap_validator is None or bootstrap_validator["validator_key_ref"] is None:
             raise ValueError(
                 "--bootstrap-node requires validator key material; "
                 "pass --generate-validator-key or --validator-key-ref"
@@ -416,14 +379,9 @@ def _handle_network_join(args: argparse.Namespace) -> int:
     )
     network = read_network_manifest(network_path)
     if args.generate_validator_key and args.validator_key_ref is not None:
-        raise ValueError(
-            "pass either --validator-key-ref or --generate-validator-key, "
-            "not both"
-        )
+        raise ValueError("pass either --validator-key-ref or --generate-validator-key, not both")
     if args.validator_key_dir is not None and not args.generate_validator_key:
-        raise ValueError(
-            "--validator-key-dir requires --generate-validator-key"
-        )
+        raise ValueError("--validator-key-dir requires --generate-validator-key")
     if args.restore_snapshot and not args.init_node:
         raise ValueError("--restore-snapshot requires --init-node")
 
@@ -451,24 +409,20 @@ def _handle_network_join(args: argparse.Namespace) -> int:
         None,
         network.get("node_image_mode") or "local_build",
     )
-    node_image_mode, node_integrated_image, node_split_image = (
-        _resolve_node_image_settings(
-            node_image_mode=requested_node_image_mode,
-            node_integrated_image=_pick_template_value(
-                args.node_integrated_image,
-                None,
-                network.get("node_integrated_image")
-                if requested_node_image_mode == "registry"
-                else None,
-            ),
-            node_split_image=_pick_template_value(
-                args.node_split_image,
-                None,
-                network.get("node_split_image")
-                if requested_node_image_mode == "registry"
-                else None,
-            ),
-        )
+    node_image_mode, node_integrated_image, node_split_image = _resolve_node_image_settings(
+        node_image_mode=requested_node_image_mode,
+        node_integrated_image=_pick_template_value(
+            args.node_integrated_image,
+            None,
+            network.get("node_integrated_image")
+            if requested_node_image_mode == "registry"
+            else None,
+        ),
+        node_split_image=_pick_template_value(
+            args.node_split_image,
+            None,
+            network.get("node_split_image") if requested_node_image_mode == "registry" else None,
+        ),
     )
 
     validator_key_ref: str | None = None
@@ -509,9 +463,7 @@ def _handle_network_join(args: argparse.Namespace) -> int:
         stack_dir=str(args.stack_dir) if args.stack_dir is not None else None,
         p2p={"seeds": args.seed or [], "persistent_peers": []},
         genesis=(
-            {"kind": "source", "source": args.genesis_source}
-            if args.genesis_source
-            else None
+            {"kind": "source", "source": args.genesis_source} if args.genesis_source else None
         ),
         snapshot_url=args.snapshot_url,
         snapshot_signing_keys=args.snapshot_signing_key or [],
@@ -530,9 +482,7 @@ def _handle_network_join(args: argparse.Namespace) -> int:
             args=args,
             template=template,
             runtime_services=True,
-            intentkit_network_id_default=_default_intentkit_network_id(
-                network.get("name")
-            ),
+            intentkit_network_id_default=_default_intentkit_network_id(network.get("name")),
         ),
     )
     target = args.output or base_dir / "nodes" / f"{args.name}.json"
@@ -582,9 +532,7 @@ def _write_text_file(
 ) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     if path.exists() and not force:
-        raise FileExistsError(
-            f"{path} already exists; pass --force to overwrite"
-        )
+        raise FileExistsError(f"{path} already exists; pass --force to overwrite")
     path.write_text(content, encoding="utf-8")
     if executable:
         path.chmod(path.stat().st_mode | 0o755)
@@ -614,9 +562,7 @@ def _copy_optional_network_asset(
     target_path = bundle_dir / _safe_bundle_relative_path(ref)
     target_path.parent.mkdir(parents=True, exist_ok=True)
     if target_path.exists() and not force:
-        raise FileExistsError(
-            f"{target_path} already exists; pass --force to overwrite"
-        )
+        raise FileExistsError(f"{target_path} already exists; pass --force to overwrite")
     shutil.copyfile(source_path, target_path)
 
 
@@ -689,8 +635,7 @@ def _operator_bundle_readme(
     includes_privacy_catalog: bool,
 ) -> str:
     privacy_note = (
-        "- `privacy/` - copied privacy artifact catalog referenced by the "
-        "manifest\n"
+        "- `privacy/` - copied privacy artifact catalog referenced by the manifest\n"
         if includes_privacy_catalog
         else ""
     )
@@ -787,9 +732,7 @@ def _handle_network_package_operator_bundle(args: argparse.Namespace) -> int:
         configs_dir=args.configs_dir,
     )
     network = read_network_manifest(manifest_path)
-    output_dir = args.output or (
-        base_dir / "dist" / f"{network['name']}-operator-bundle"
-    )
+    output_dir = args.output or (base_dir / "dist" / f"{network['name']}-operator-bundle")
     if not output_dir.is_absolute():
         output_dir = (base_dir / output_dir).resolve()
     if output_dir.exists() and not output_dir.is_dir():
@@ -838,11 +781,7 @@ def _handle_network_package_operator_bundle(args: argparse.Namespace) -> int:
     if bootstrap_seed is None:
         p2p = bundled_manifest.get("p2p") or {}
         p2p_seeds = p2p.get("seeds") if isinstance(p2p, dict) else []
-        bootstrap_seed = (
-            p2p_seeds[0]
-            if p2p_seeds
-            else "REPLACE_WITH_<node_id>@<public-host>:26656"
-        )
+        bootstrap_seed = p2p_seeds[0] if p2p_seeds else "REPLACE_WITH_<node_id>@<public-host>:26656"
     _write_text_file(
         output_dir / "bootstrap-seed.txt",
         f"{bootstrap_seed}\n",
@@ -904,9 +843,7 @@ def _handle_network_package_operator_bundle(args: argparse.Namespace) -> int:
     if args.archive:
         candidate = output_dir.with_suffix(output_dir.suffix + ".tar.gz")
         if candidate.exists() and not args.force:
-            raise FileExistsError(
-                f"{candidate} already exists; pass --force to overwrite"
-            )
+            raise FileExistsError(f"{candidate} already exists; pass --force to overwrite")
         archive_path = shutil.make_archive(
             str(output_dir),
             "gztar",

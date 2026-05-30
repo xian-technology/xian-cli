@@ -106,22 +106,12 @@ def _effective_node_image_config(
     profile: dict[str, object],
     network: dict[str, object] | None = None,
 ) -> tuple[str, str | None, str | None]:
-    network_mode = (
-        None
-        if network is None
-        else network.get("node_image_mode") or "local_build"
-    )
+    network_mode = None if network is None else network.get("node_image_mode") or "local_build"
     return _resolve_node_image_settings(
-        node_image_mode=str(
-            profile.get("node_image_mode") or network_mode or "local_build"
-        ),
+        node_image_mode=str(profile.get("node_image_mode") or network_mode or "local_build"),
         node_integrated_image=(
             profile.get("node_integrated_image")
-            or (
-                None
-                if network is None
-                else network.get("node_integrated_image")
-            )
+            or (None if network is None else network.get("node_integrated_image"))
         ),
         node_split_image=(
             profile.get("node_split_image")
@@ -140,9 +130,7 @@ def _effective_node_release_manifest(
     profile_manifest = profile.get("node_release_manifest")
     if isinstance(profile_manifest, dict):
         return profile_manifest
-    network_manifest = (
-        None if network is None else network.get("node_release_manifest")
-    )
+    network_manifest = None if network is None else network.get("node_release_manifest")
     return network_manifest if isinstance(network_manifest, dict) else None
 
 
@@ -150,32 +138,18 @@ def _stack_runtime_profile_kwargs(
     profile: dict[str, object],
     network: dict[str, object] | None = None,
 ) -> dict[str, object]:
-    node_image_mode, node_integrated_image, node_split_image = (
-        _effective_node_image_config(profile, network)
+    node_image_mode, node_integrated_image, node_split_image = _effective_node_image_config(
+        profile, network
     )
     services = profile.get("services")
     if not isinstance(services, dict):
         services = {}
     bds = services.get("bds") if isinstance(services.get("bds"), dict) else {}
-    dashboard = (
-        services.get("dashboard")
-        if isinstance(services.get("dashboard"), dict)
-        else {}
-    )
-    monitoring = (
-        services.get("monitoring")
-        if isinstance(services.get("monitoring"), dict)
-        else {}
-    )
-    intentkit = (
-        services.get("intentkit")
-        if isinstance(services.get("intentkit"), dict)
-        else {}
-    )
+    dashboard = services.get("dashboard") if isinstance(services.get("dashboard"), dict) else {}
+    monitoring = services.get("monitoring") if isinstance(services.get("monitoring"), dict) else {}
+    intentkit = services.get("intentkit") if isinstance(services.get("intentkit"), dict) else {}
     dex_automation = (
-        services.get("dex_automation")
-        if isinstance(services.get("dex_automation"), dict)
-        else {}
+        services.get("dex_automation") if isinstance(services.get("dex_automation"), dict) else {}
     )
     shielded_relayer = (
         services.get("shielded_relayer")
@@ -193,8 +167,7 @@ def _stack_runtime_profile_kwargs(
         "dashboard_port": int(dashboard.get("port", 8080)),
         "intentkit_enabled": bool(intentkit.get("enabled")),
         "intentkit_network_id": str(
-            intentkit.get("network_id")
-            or _default_intentkit_network_id(profile.get("network"))
+            intentkit.get("network_id") or _default_intentkit_network_id(profile.get("network"))
         ),
         "intentkit_host": str(intentkit.get("host", "127.0.0.1")),
         "intentkit_port": int(intentkit.get("port", 38000)),
@@ -203,12 +176,8 @@ def _stack_runtime_profile_kwargs(
         "dex_automation_host": str(dex_automation.get("host", "127.0.0.1")),
         "dex_automation_port": int(dex_automation.get("port", 38280)),
         "dex_automation_config": dex_automation.get("config"),
-        "shielded_relayer_enabled": bool(
-            shielded_relayer.get("enabled")
-        ),
-        "shielded_relayer_host": str(
-            shielded_relayer.get("host", "127.0.0.1")
-        ),
+        "shielded_relayer_enabled": bool(shielded_relayer.get("enabled")),
+        "shielded_relayer_host": str(shielded_relayer.get("host", "127.0.0.1")),
         "shielded_relayer_port": int(shielded_relayer.get("port", 38180)),
     }
 
@@ -220,9 +189,7 @@ def _network_shielded_relayer_endpoints(
     if isinstance(network, dict):
         list_value = network.get("shielded_relayers")
         if isinstance(list_value, list):
-            relayers_raw = [
-                item for item in list_value if isinstance(item, dict)
-            ]
+            relayers_raw = [item for item in list_value if isinstance(item, dict)]
     if not relayers_raw:
         return {}
     relayers = sorted(
@@ -274,15 +241,9 @@ def _resolve_node_image_settings(
     node_split_image: str | None,
 ) -> tuple[str, str | None, str | None]:
     if node_image_mode not in SUPPORTED_NODE_IMAGE_MODES:
+        raise ValueError(f"node_image_mode must be one of {sorted(SUPPORTED_NODE_IMAGE_MODES)}")
+    if node_image_mode == "registry" and (not node_integrated_image or not node_split_image):
         raise ValueError(
-            "node_image_mode must be one of "
-            f"{sorted(SUPPORTED_NODE_IMAGE_MODES)}"
-        )
-    if node_image_mode == "registry" and (
-        not node_integrated_image or not node_split_image
-    ):
-        raise ValueError(
-            "registry node image mode requires both "
-            "--node-integrated-image and --node-split-image"
+            "registry node image mode requires both --node-integrated-image and --node-split-image"
         )
     return node_image_mode, node_integrated_image, node_split_image

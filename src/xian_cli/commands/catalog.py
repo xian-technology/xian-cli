@@ -111,8 +111,7 @@ def _validate_contract_pack_assets(pack_path: Path, pack: dict) -> dict:
     ]
     if missing_contracts:
         raise FileNotFoundError(
-            f"contract pack {pack['name']} references missing contracts: "
-            f"{missing_contracts}"
+            f"contract pack {pack['name']} references missing contracts: {missing_contracts}"
         )
 
     validated_bundles = []
@@ -123,9 +122,7 @@ def _validate_contract_pack_assets(pack_path: Path, pack: dict) -> dict:
             collection_name="contract-packs",
         )
         if not bundle_path.exists():
-            raise FileNotFoundError(
-                f"contract pack bundle not found: {bundle_ref}"
-            )
+            raise FileNotFoundError(f"contract pack bundle not found: {bundle_ref}")
         validated_bundles.append(validate_contract_bundle(bundle_path))
 
     return {
@@ -158,10 +155,7 @@ def _contract_pack_recipe(pack: dict, recipe_name: str | None) -> dict:
         if recipe["name"] == selected_recipe:
             return recipe
     available = sorted(recipe["name"] for recipe in pack["recipes"])
-    raise ValueError(
-        "contract pack recipe "
-        f"'{selected_recipe}' not found; available: {available}"
-    )
+    raise ValueError(f"contract pack recipe '{selected_recipe}' not found; available: {available}")
 
 
 def _bool_backend_arg(name: str, value: bool) -> str:
@@ -199,8 +193,7 @@ def _resolve_external_repo_dir(
             return resolved
 
     raise FileNotFoundError(
-        f"unable to resolve {repo_name}; pass --repo-dir or set "
-        f"{_env_var_for_repo(repo_name)}"
+        f"unable to resolve {repo_name}; pass --repo-dir or set {_env_var_for_repo(repo_name)}"
     )
 
 
@@ -327,9 +320,7 @@ def _handle_contract_pack_install(args: argparse.Namespace) -> int:
             "command"
         )
     if pack["name"] != "dex":
-        raise ValueError(
-            "only the dex contract pack has a stack installer today"
-        )
+        raise ValueError("only the dex contract pack has a stack installer today")
 
     if not pack["contract_bundle_paths"]:
         raise ValueError("dex contract pack must define a contract bundle")
@@ -423,9 +414,7 @@ def _handle_example_list(args: argparse.Namespace) -> int:
             "name": example["name"],
             "display_name": example["display_name"],
             "description": example["description"],
-            "recommended_local_template": example[
-                "recommended_local_template"
-            ],
+            "recommended_local_template": example["recommended_local_template"],
             "docs_path": example["docs_path"],
             "example_dir": example["example_dir"],
             "contract_packs": example["contract_packs"],
@@ -456,18 +445,12 @@ def _handle_example_starter(args: argparse.Namespace) -> int:
         configs_dir=args.configs_dir,
     )
     flow = next(
-        (
-            item
-            for item in example["starter_flows"]
-            if item["name"] == args.flow
-        ),
+        (item for item in example["starter_flows"] if item["name"] == args.flow),
         None,
     )
     if flow is None:
         available = sorted(item["name"] for item in example["starter_flows"])
-        raise ValueError(
-            f"example flow '{args.flow}' not found; available: {available}"
-        )
+        raise ValueError(f"example flow '{args.flow}' not found; available: {available}")
 
     starter = {
         "name": example["name"],
@@ -497,9 +480,7 @@ def _handle_contract_build_artifacts(args: argparse.Namespace) -> int:
     if str(source_path) == "-":
         source = sys.stdin.read()
         if not args.name:
-            raise ValueError(
-                "--name is required when reading source from stdin"
-            )
+            raise ValueError("--name is required when reading source from stdin")
         module_name = args.name
     else:
         source_path = source_path.resolve()
@@ -509,9 +490,7 @@ def _handle_contract_build_artifacts(args: argparse.Namespace) -> int:
     try:
         from contracting.artifacts import build_contract_artifacts
     except ImportError as exc:  # pragma: no cover - packaging guard
-        raise RuntimeError(
-            "xian contract build-artifacts requires xian-tech-contracting"
-        ) from exc
+        raise RuntimeError("xian contract build-artifacts requires xian-tech-contracting") from exc
 
     artifacts = build_contract_artifacts(
         module_name=module_name,
@@ -542,9 +521,7 @@ def _handle_keys_validator_generate(args: argparse.Namespace) -> int:
         )
         payload = read_json(metadata_path)
     else:
-        payload = get_node_setup_module().generate_validator_material(
-            args.private_key
-        )
+        payload = get_node_setup_module().generate_validator_material(args.private_key)
 
     json.dump(payload, sys.stdout, indent=2)
     sys.stdout.write("\n")
