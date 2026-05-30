@@ -9,7 +9,7 @@ description = "Operator CLI for Xian networks and nodes"
 readme = "README.md"
 license = "Apache-2.0"
 authors = [{ name = "Xian Core Team" }]
-requires-python = ">=3.14"
+requires-python = ">=3.14,<3.15"
 dependencies = [
     "pynacl>=1.6.2,<2",
     "xian-tech-abci>=0.8.13,<0.9",
