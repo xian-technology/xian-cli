@@ -1,4 +1,5 @@
 .pytest_cache/
+.artifacts/
 .venv/
 __pycache__/
 build/

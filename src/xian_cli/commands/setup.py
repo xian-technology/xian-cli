@@ -37,7 +37,7 @@ RUNTIME_ARG_DEFAULTS = {
     "parallel_execution_min_transactions": None,
     "enable_dashboard": None,
     "enable_monitoring": None,
-    "dashboard_host": None,
+    "dashboard_host": "127.0.0.1",
     "dashboard_port": None,
     "enable_intentkit": None,
     "intentkit_network_id": None,

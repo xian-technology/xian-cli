@@ -333,6 +333,7 @@ class SetupNodeCommandTests(unittest.TestCase):
                 (base_dir / "nodes" / "validator-1.json").read_text(encoding="utf-8")
             )
             self.assertTrue(profile["services"]["bds"]["enabled"])
+            self.assertEqual(profile["services"]["dashboard"]["host"], "127.0.0.1")
             self.assertEqual(profile["operator_profile"], "indexed_development")
             self.assertEqual(payload["next_steps"][0][:4], ["xian", "node", "start", "validator-1"])
 
@@ -377,6 +378,7 @@ class SetupNodeCommandTests(unittest.TestCase):
                 (base_dir / "nodes" / "validator-1.json").read_text(encoding="utf-8")
             )
             self.assertFalse(profile["services"]["bds"]["enabled"])
+            self.assertEqual(profile["services"]["dashboard"]["host"], "127.0.0.1")
             self.assertEqual(profile["operator_profile"], "local_development")
 
 
