@@ -861,6 +861,169 @@ def build_parser() -> argparse.ArgumentParser:
     operator_bundle_parser.add_argument("--force", action="store_true")
     operator_bundle_parser.set_defaults(handler_name="_handle_network_package_operator_bundle")
 
+    setup_parser = subparsers.add_parser("setup", help="guided setup workflows")
+    setup_subparsers = setup_parser.add_subparsers(dest="setup_command", required=True)
+
+    setup_node_parser = setup_subparsers.add_parser(
+        "node",
+        help="guided node setup wizard",
+    )
+    setup_node_parser.add_argument(
+        "--mode",
+        choices=["join", "local"],
+        help="setup path; join an existing network or create a fresh local network",
+    )
+    setup_node_parser.add_argument(
+        "--name",
+        help="local node profile name; defaults to validator-1",
+    )
+    setup_node_parser.add_argument(
+        "--network",
+        help="target network name; defaults to testnet for joins and local-dev locally",
+    )
+    setup_node_parser.add_argument(
+        "--chain-id",
+        help="chain identifier for --mode local; defaults from the network name",
+    )
+    setup_node_parser.add_argument(
+        "--preset",
+        choices=["basic", "indexed"],
+        help="runtime preset; basic uses single-node-dev, indexed uses single-node-indexed",
+    )
+    setup_node_parser.add_argument(
+        "--template",
+        help="explicit canonical or local template name; overrides --preset",
+    )
+    setup_node_parser.add_argument(
+        "--key-mode",
+        choices=["generate", "existing"],
+        help="generate new validator key material or use --validator-key-ref",
+    )
+    setup_node_parser.add_argument(
+        "--validator-key-ref",
+        type=Path,
+        help="existing validator_key_info.json or priv_validator_key.json",
+    )
+    setup_node_parser.add_argument(
+        "--validator-key-dir",
+        type=Path,
+        help="output directory for generated validator key material",
+    )
+    setup_node_parser.add_argument(
+        "--network-manifest",
+        type=Path,
+        help="explicit network manifest path for --mode join",
+    )
+    setup_node_parser.add_argument(
+        "--genesis-source",
+        help="local genesis file or URL override",
+    )
+    setup_node_parser.add_argument(
+        "--genesis-bundle",
+        default="local",
+        help="genesis contract bundle used for --mode local; defaults to local",
+    )
+    setup_node_parser.add_argument(
+        "--bootstrap-mode",
+        choices=["genesis", "snapshot"],
+        help="join bootstrap mode; snapshot restores the effective snapshot after init",
+    )
+    setup_node_parser.add_argument(
+        "--restore-snapshot",
+        action="store_true",
+        help="restore the effective snapshot after initializing a joined node",
+    )
+    setup_node_parser.add_argument(
+        "--snapshot-url",
+        help="node-local snapshot URL override",
+    )
+    setup_node_parser.add_argument(
+        "--snapshot-signing-key",
+        action="append",
+        help="trusted Ed25519 public key for signed snapshot manifests; may be repeated",
+    )
+    setup_node_parser.add_argument(
+        "--seed",
+        action="append",
+        help="node-local seed in <node_id>@<host>:26656 format; may be repeated",
+    )
+    setup_node_parser.add_argument(
+        "--moniker",
+        help="node moniker; defaults to the node name",
+    )
+    setup_node_parser.add_argument(
+        "--node-image-mode",
+        choices=sorted(SUPPORTED_NODE_IMAGE_MODES),
+        help="node image source override; defaults to the existing lifecycle command behavior",
+    )
+    setup_node_parser.add_argument(
+        "--node-integrated-image",
+        help="explicit integrated node image override for registry mode",
+    )
+    setup_node_parser.add_argument(
+        "--node-split-image",
+        help="explicit split-runtime node image override for registry mode",
+    )
+    setup_node_parser.add_argument(
+        "--base-dir",
+        type=Path,
+        default=Path.cwd(),
+        help="workspace directory that contains ./nodes, ./networks, and optionally sibling repos",
+    )
+    setup_node_parser.add_argument(
+        "--configs-dir",
+        type=Path,
+        help=(
+            "explicit xian-configs checkout path; defaults to XIAN_CONFIGS_DIR "
+            "or the sibling workspace layout"
+        ),
+    )
+    setup_node_parser.add_argument(
+        "--stack-dir",
+        type=Path,
+        help="path to the xian-stack checkout for the xian-stack backend",
+    )
+    setup_node_parser.add_argument(
+        "--home",
+        type=Path,
+        help="explicit CometBFT home path",
+    )
+    setup_node_parser.add_argument(
+        "--start",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="start the node after setup; interactive mode asks when omitted",
+    )
+    setup_node_parser.add_argument(
+        "--rpc-url",
+        default="http://127.0.0.1:26657/status",
+        help="RPC status endpoint used by the post-start health check",
+    )
+    setup_node_parser.add_argument(
+        "--rpc-timeout-seconds",
+        type=float,
+        default=DEFAULT_RPC_TIMEOUT_SECONDS,
+        help="time to wait for the local RPC status endpoint when starting",
+    )
+    setup_node_parser.add_argument(
+        "--skip-disk-check",
+        action="store_true",
+        help="skip the host-disk and data-volume health probe",
+    )
+    setup_node_parser.add_argument("--force", action="store_true")
+    setup_node_parser.add_argument(
+        "--plan",
+        "--dry-run",
+        action="store_true",
+        help="print the setup plan without writing files or starting the node",
+    )
+    setup_node_parser.add_argument(
+        "--yes",
+        action="store_true",
+        help="apply the setup without interactive confirmation",
+    )
+    setup_node_parser.set_defaults(handler_name="_handle_setup_node")
+
     node_parser = subparsers.add_parser("node", help="node lifecycle")
     node_subparsers = node_parser.add_subparsers(dest="node_command", required=True)
 

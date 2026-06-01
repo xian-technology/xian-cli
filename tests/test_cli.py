@@ -222,6 +222,164 @@ class ValidatorKeyTests(unittest.TestCase):
             )
 
 
+class SetupNodeCommandTests(unittest.TestCase):
+    def test_setup_node_plan_join_prints_lifecycle_commands(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            base_dir = Path(tmp_dir)
+            stdout = io.StringIO()
+
+            with redirect_stdout(stdout):
+                exit_code = main(
+                    [
+                        "setup",
+                        "node",
+                        "--mode",
+                        "join",
+                        "--network",
+                        "testnet",
+                        "--name",
+                        "validator-1",
+                        "--preset",
+                        "indexed",
+                        "--key-mode",
+                        "generate",
+                        "--start",
+                        "--base-dir",
+                        str(base_dir),
+                        "--plan",
+                    ]
+                )
+
+            self.assertEqual(exit_code, 0)
+            payload = json.loads(stdout.getvalue())
+            self.assertTrue(payload["dry_run"])
+            self.assertEqual(payload["mode"], "join")
+            self.assertEqual(payload["template"], "single-node-indexed")
+            self.assertEqual(
+                payload["writes"][0],
+                str(base_dir.resolve() / "nodes/validator-1.json"),
+            )
+            self.assertEqual(payload["steps"][0]["name"], "join-network")
+            self.assertEqual(
+                payload["steps"][0]["command"][:4],
+                ["xian", "network", "join", "validator-1"],
+            )
+            self.assertIn("--generate-validator-key", payload["steps"][0]["command"])
+            self.assertIn("--init-node", payload["steps"][0]["command"])
+            self.assertEqual(payload["steps"][1]["name"], "start-node")
+            self.assertEqual(payload["steps"][2]["name"], "health-check")
+
+    def test_setup_node_join_initializes_node_without_starting(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            base_dir = Path(tmp_dir)
+            network_dir = base_dir / "networks" / "testnet"
+            network_dir.mkdir(parents=True)
+            (network_dir / "manifest.json").write_text(
+                json.dumps(
+                    _manifest_payload(
+                        name="testnet",
+                        chain_id="xian-testnet-12",
+                        genesis={"kind": "source", "source": str(TEST_FIXTURE_GENESIS)},
+                    )
+                ),
+                encoding="utf-8",
+            )
+            home = base_dir / ".cometbft"
+            stdout = io.StringIO()
+
+            with redirect_stdout(stdout):
+                exit_code = main(
+                    [
+                        "setup",
+                        "node",
+                        "--mode",
+                        "join",
+                        "--network",
+                        "testnet",
+                        "--name",
+                        "validator-1",
+                        "--preset",
+                        "indexed",
+                        "--key-mode",
+                        "generate",
+                        "--home",
+                        str(home),
+                        "--base-dir",
+                        str(base_dir),
+                        "--configs-dir",
+                        str(WORKSPACE_ROOT / "xian-configs"),
+                        "--no-start",
+                        "--yes",
+                    ]
+                )
+
+            self.assertEqual(exit_code, 0)
+            payload = json.loads(stdout.getvalue())
+            self.assertEqual(payload["setup"], "node")
+            self.assertFalse(payload["started"])
+            self.assertTrue(payload["network"]["node_initialized"])
+            self.assertEqual(
+                payload["network"]["validator_key_ref"],
+                "keys/validator-1/validator_key_info.json",
+            )
+            self.assertTrue(
+                (base_dir / "keys" / "validator-1" / "validator_key_info.json").exists()
+            )
+            self.assertTrue((base_dir / "nodes" / "validator-1.json").exists())
+            self.assertTrue((home / "config" / "config.toml").exists())
+            self.assertTrue((home / "config" / "xian.toml").exists())
+            self.assertTrue((home / "config" / "genesis.json").exists())
+            profile = json.loads(
+                (base_dir / "nodes" / "validator-1.json").read_text(encoding="utf-8")
+            )
+            self.assertTrue(profile["services"]["bds"]["enabled"])
+            self.assertEqual(profile["operator_profile"], "indexed_development")
+            self.assertEqual(payload["next_steps"][0][:4], ["xian", "node", "start", "validator-1"])
+
+    def test_setup_node_local_initializes_node_without_starting(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            base_dir = Path(tmp_dir)
+            home = base_dir / ".cometbft"
+            stdout = io.StringIO()
+
+            with redirect_stdout(stdout):
+                exit_code = main(
+                    [
+                        "setup",
+                        "node",
+                        "--mode",
+                        "local",
+                        "--network",
+                        "local-dev",
+                        "--name",
+                        "validator-1",
+                        "--base-dir",
+                        str(base_dir),
+                        "--configs-dir",
+                        str(WORKSPACE_ROOT / "xian-configs"),
+                        "--home",
+                        str(home),
+                        "--no-start",
+                        "--yes",
+                    ]
+                )
+
+            self.assertEqual(exit_code, 0)
+            payload = json.loads(stdout.getvalue())
+            self.assertEqual(payload["mode"], "local")
+            self.assertEqual(payload["plan"]["chain_id"], "xian-local-1")
+            self.assertTrue(payload["network"]["node_initialized"])
+            self.assertTrue((base_dir / "networks" / "local-dev" / "manifest.json").exists())
+            self.assertTrue((base_dir / "networks" / "local-dev" / "genesis.json").exists())
+            self.assertTrue((base_dir / "nodes" / "validator-1.json").exists())
+            self.assertTrue((home / "config" / "config.toml").exists())
+            profile = json.loads(
+                (base_dir / "nodes" / "validator-1.json").read_text(encoding="utf-8")
+            )
+            self.assertFalse(profile["services"]["bds"]["enabled"])
+            self.assertEqual(profile["operator_profile"], "local_development")
+
+
 class _FakeContextClient:
     def __init__(self, **responses):
         self.responses = responses

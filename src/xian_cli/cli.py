@@ -5,12 +5,12 @@ import os
 import subprocess
 import sys
 
-from xian_cli.commands import catalog, doctor, network, node, recovery
+from xian_cli.commands import catalog, doctor, network, node, recovery, setup
 from xian_cli.parser import build_parser as _build_parser
 
 _fallback_node_endpoints = node._fallback_node_endpoints
 _collect_node_status = node._collect_node_status
-_HANDLER_MODULES = (catalog, doctor, network, node, recovery)
+_HANDLER_MODULES = (catalog, doctor, network, node, recovery, setup)
 
 
 def build_parser() -> argparse.ArgumentParser:

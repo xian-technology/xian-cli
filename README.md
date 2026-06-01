@@ -56,6 +56,18 @@ Set `XIAN_CLI_VERSION` before either installer to pin a specific release.
 
 ### Common Workflows
 
+Guided node setup:
+
+```bash
+uv run xian setup node
+```
+
+For scripted review without changing files:
+
+```bash
+uv run xian setup node --mode join --network testnet --name validator-1 --plan
+```
+
 Create a local network from a template:
 
 ```bash
@@ -116,6 +128,7 @@ operations to `xian-stack`, and uses `xian-py` for wallet / RPC automation.
 | --- | --- | --- |
 | Create a local network | `xian network template ...`, `xian network create ...` | `xian-configs`, `xian-abci` |
 | Join an existing network | `xian network join ...` | `xian-configs`, `xian-stack` |
+| Guided node setup | `xian setup node` | `xian-cli`, `xian-configs`, `xian-stack` |
 | Package operator handoff | `xian network package-operator-bundle ...` | `xian-cli`, `xian-configs` |
 | Operate a node | `xian node start/status/health/endpoints/stop ...` | `xian-stack` |
 | Diagnose a setup | `xian doctor ...`, `xian snapshot restore ...` | `xian-stack`, `xian-abci` |
@@ -237,6 +250,7 @@ uv run xian client query balance \
 ## Command Groups
 
 - `xian keys ...` — generate validator and account material
+- `xian setup node` — guided wrapper for local node creation or network join
 - `xian network template ...` — inspect reusable network templates
 - `xian network create ...` — create a local / operator-managed network profile
 - `xian network join ...` — join an existing manifest-backed or remote network
