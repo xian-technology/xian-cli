@@ -48,6 +48,9 @@ RUNTIME_ARG_DEFAULTS = {
     "dex_automation_host": None,
     "dex_automation_port": None,
     "dex_automation_config": None,
+    "enable_shielded_relayer": None,
+    "shielded_relayer_host": None,
+    "shielded_relayer_port": None,
 }
 
 RUNTIME_ARG_FLAGS = {
@@ -81,6 +84,9 @@ RUNTIME_ARG_FLAGS = {
     "dex_automation_host": "--dex-automation-host",
     "dex_automation_port": "--dex-automation-port",
     "dex_automation_config": "--dex-automation-config",
+    "enable_shielded_relayer": "--enable-shielded-relayer",
+    "shielded_relayer_host": "--shielded-relayer-host",
+    "shielded_relayer_port": "--shielded-relayer-port",
 }
 
 

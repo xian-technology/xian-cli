@@ -409,6 +409,18 @@ class SetupNodeCommandTests(unittest.TestCase):
                         "xian-localnet",
                         "--intentkit-api-port",
                         "38180",
+                        "--enable-dex-automation",
+                        "--dex-automation-host",
+                        "0.0.0.0",
+                        "--dex-automation-port",
+                        "38281",
+                        "--dex-automation-config",
+                        "/tmp/dex-automation.yaml",
+                        "--enable-shielded-relayer",
+                        "--shielded-relayer-host",
+                        "0.0.0.0",
+                        "--shielded-relayer-port",
+                        "38181",
                         "--no-start",
                         "--yes",
                     ]
@@ -422,6 +434,13 @@ class SetupNodeCommandTests(unittest.TestCase):
                     "enable_intentkit": True,
                     "intentkit_network_id": "xian-localnet",
                     "intentkit_api_port": 38180,
+                    "enable_dex_automation": True,
+                    "dex_automation_host": "0.0.0.0",
+                    "dex_automation_port": 38281,
+                    "dex_automation_config": "/tmp/dex-automation.yaml",
+                    "enable_shielded_relayer": True,
+                    "shielded_relayer_host": "0.0.0.0",
+                    "shielded_relayer_port": 38181,
                 },
             )
             profile = json.loads(
@@ -430,6 +449,13 @@ class SetupNodeCommandTests(unittest.TestCase):
             self.assertTrue(profile["services"]["intentkit"]["enabled"])
             self.assertEqual(profile["services"]["intentkit"]["network_id"], "xian-localnet")
             self.assertEqual(profile["services"]["intentkit"]["api_port"], 38180)
+            self.assertTrue(profile["services"]["dex_automation"]["enabled"])
+            self.assertEqual(profile["services"]["dex_automation"]["host"], "0.0.0.0")
+            self.assertEqual(profile["services"]["dex_automation"]["port"], 38281)
+            self.assertEqual(profile["services"]["dex_automation"]["config"], "/tmp/dex-automation.yaml")
+            self.assertTrue(profile["services"]["shielded_relayer"]["enabled"])
+            self.assertEqual(profile["services"]["shielded_relayer"]["host"], "0.0.0.0")
+            self.assertEqual(profile["services"]["shielded_relayer"]["port"], 38181)
 
 
 class _FakeContextClient:
@@ -4944,6 +4970,9 @@ class RuntimeHelperTests(unittest.TestCase):
                 dex_automation_host="0.0.0.0",
                 dex_automation_port=39123,
                 dex_automation_config="/tmp/dex.yaml",
+                shielded_relayer_enabled=True,
+                shielded_relayer_host="0.0.0.0",
+                shielded_relayer_port=39180,
             )
 
         self.assertTrue(result["ok"])
@@ -4956,6 +4985,9 @@ class RuntimeHelperTests(unittest.TestCase):
         self.assertEqual(request["options"]["dex_automation_host"], "0.0.0.0")
         self.assertEqual(request["options"]["dex_automation_port"], 39123)
         self.assertEqual(request["options"]["dex_automation_config"], "/tmp/dex.yaml")
+        self.assertTrue(request["options"]["shielded_relayer"])
+        self.assertEqual(request["options"]["shielded_relayer_host"], "0.0.0.0")
+        self.assertEqual(request["options"]["shielded_relayer_port"], 39180)
 
     def test_run_backend_command_can_stream_backend_stderr(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:

@@ -84,7 +84,7 @@ def _validate_recovery_context(
             if latest_height is not None:
                 try:
                     latest_height_int = int(latest_height)
-                except TypeError, ValueError:
+                except (TypeError, ValueError):
                     latest_height_int = None
                 if latest_height_int is not None and latest_height_int < plan["target_height"]:
                     raise ValueError("live RPC height is below the recovery target height")

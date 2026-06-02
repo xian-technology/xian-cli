@@ -191,6 +191,22 @@ def add_node_profile_runtime_args(
         type=str,
         help="stack-managed DEX automation config path override",
     )
+    parser.add_argument(
+        "--enable-shielded-relayer",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help=f"start the optional shielded relayer sidecar for {subject}",
+    )
+    parser.add_argument(
+        "--shielded-relayer-host",
+        type=str,
+        help="host interface to bind for the shielded relayer API",
+    )
+    parser.add_argument(
+        "--shielded-relayer-port",
+        type=int,
+        help="host port to publish for the shielded relayer API",
+    )
 
 
 def build_parser() -> argparse.ArgumentParser:
