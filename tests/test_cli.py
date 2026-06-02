@@ -452,7 +452,10 @@ class SetupNodeCommandTests(unittest.TestCase):
             self.assertTrue(profile["services"]["dex_automation"]["enabled"])
             self.assertEqual(profile["services"]["dex_automation"]["host"], "0.0.0.0")
             self.assertEqual(profile["services"]["dex_automation"]["port"], 38281)
-            self.assertEqual(profile["services"]["dex_automation"]["config"], "/tmp/dex-automation.yaml")
+            self.assertEqual(
+                profile["services"]["dex_automation"]["config"],
+                "/tmp/dex-automation.yaml",
+            )
             self.assertTrue(profile["services"]["shielded_relayer"]["enabled"])
             self.assertEqual(profile["services"]["shielded_relayer"]["host"], "0.0.0.0")
             self.assertEqual(profile["services"]["shielded_relayer"]["port"], 38181)
