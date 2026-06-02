@@ -4,6 +4,7 @@ import json
 import os
 import subprocess
 import sys
+import threading
 import time
 from collections.abc import Mapping
 from pathlib import Path
@@ -144,10 +145,64 @@ def _backend_script(stack_dir: Path) -> Path:
     return stack_dir / "scripts" / "backend.py"
 
 
+def _run_backend_command_with_streamed_stderr(
+    cmd: list[str],
+    *,
+    stack_dir: Path,
+    request: BackendRequest,
+    env: Mapping[str, str],
+) -> subprocess.CompletedProcess[str]:
+    process = subprocess.Popen(
+        cmd,
+        cwd=stack_dir,
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        env=dict(env),
+    )
+    stderr_chunks: list[str] = []
+
+    def drain_stderr() -> None:
+        if process.stderr is None:
+            return
+        for line in process.stderr:
+            stderr_chunks.append(line)
+            sys.stderr.write(line)
+            sys.stderr.flush()
+
+    stderr_thread = threading.Thread(target=drain_stderr, daemon=True)
+    stderr_thread.start()
+
+    try:
+        assert process.stdin is not None
+        try:
+            process.stdin.write(json.dumps(request.to_dict()))
+            process.stdin.close()
+        except BrokenPipeError:
+            pass
+
+        stdout = process.stdout.read() if process.stdout is not None else ""
+        returncode = process.wait()
+    finally:
+        stderr_thread.join()
+    stderr = "".join(stderr_chunks)
+
+    if returncode != 0:
+        raise subprocess.CalledProcessError(
+            returncode,
+            cmd,
+            output=stdout,
+            stderr=stderr,
+        )
+    return subprocess.CompletedProcess(cmd, returncode, stdout=stdout, stderr=stderr)
+
+
 def run_backend_command(
     stack_dir: Path,
     command: str,
     *,
+    stream_stderr: bool = False,
     cometbft_home: Path | None = None,
     node_image_mode: str | None = None,
     node_integrated_image: str | None = None,
@@ -186,24 +241,31 @@ def run_backend_command(
     ]
 
     try:
-        result = subprocess.run(
-            cmd,
-            cwd=stack_dir,
-            check=True,
-            capture_output=True,
-            text=True,
-            input=json.dumps(request.to_dict()),
-            env=(
-                {
-                    **os.environ,
-                    **(
-                        {"XIAN_COMETBFT_HOME": str(cometbft_home)}
-                        if cometbft_home is not None
-                        else {}
-                    ),
-                }
+        env = {
+            **os.environ,
+            **(
+                {"XIAN_COMETBFT_HOME": str(cometbft_home)}
+                if cometbft_home is not None
+                else {}
             ),
-        )
+        }
+        if stream_stderr:
+            result = _run_backend_command_with_streamed_stderr(
+                cmd,
+                stack_dir=stack_dir,
+                request=request,
+                env=env,
+            )
+        else:
+            result = subprocess.run(
+                cmd,
+                cwd=stack_dir,
+                check=True,
+                capture_output=True,
+                text=True,
+                input=json.dumps(request.to_dict()),
+                env=env,
+            )
     except subprocess.CalledProcessError as exc:
         detail = exc.stderr.strip() or exc.stdout.strip() or str(exc)
         raise RuntimeError(f"xian-stack backend command failed ({command}): {detail}") from exc
@@ -245,6 +307,7 @@ def start_xian_stack_node(
         stack_dir,
         "start",
         **runtime_options,
+        stream_stderr=True,
         wait_for_health=wait_for_rpc,
         rpc_timeout_seconds=rpc_timeout_seconds,
         rpc_url="http://127.0.0.1:26657/status",

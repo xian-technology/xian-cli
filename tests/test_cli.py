@@ -4602,6 +4602,7 @@ class RuntimeHelperTests(unittest.TestCase):
             shielded_relayer_enabled=False,
             shielded_relayer_host="127.0.0.1",
             shielded_relayer_port=38180,
+            stream_stderr=True,
             wait_for_health=True,
             rpc_timeout_seconds=12.5,
             rpc_url="http://127.0.0.1:26657/status",
@@ -4646,6 +4647,7 @@ class RuntimeHelperTests(unittest.TestCase):
             shielded_relayer_enabled=False,
             shielded_relayer_host="127.0.0.1",
             shielded_relayer_port=38180,
+            stream_stderr=True,
             wait_for_health=False,
             rpc_timeout_seconds=90.0,
             rpc_url="http://127.0.0.1:26657/status",
@@ -4904,6 +4906,36 @@ class RuntimeHelperTests(unittest.TestCase):
         self.assertEqual(request["options"]["dex_automation_host"], "0.0.0.0")
         self.assertEqual(request["options"]["dex_automation_port"], 39123)
         self.assertEqual(request["options"]["dex_automation_config"], "/tmp/dex.yaml")
+
+    def test_run_backend_command_can_stream_backend_stderr(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            stack_dir = Path(tmp_dir)
+            scripts_dir = stack_dir / "scripts"
+            scripts_dir.mkdir()
+            backend_script = scripts_dir / "backend.py"
+            backend_script.write_text(
+                "\n".join(
+                    [
+                        "import json",
+                        "import sys",
+                        "sys.stdin.read()",
+                        "print('compose progress', file=sys.stderr)",
+                        "print(json.dumps({'ok': True}))",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+
+            stderr = io.StringIO()
+            with redirect_stderr(stderr):
+                result = run_backend_command(
+                    stack_dir,
+                    "start",
+                    stream_stderr=True,
+                )
+
+        self.assertTrue(result["ok"])
+        self.assertIn("compose progress", stderr.getvalue())
 
 
 class ConfigRepoTests(unittest.TestCase):
