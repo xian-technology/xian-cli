@@ -56,6 +56,13 @@ SUPPORTED_APP_LOG_LEVELS = {
     "ERROR",
     "CRITICAL",
 }
+SUPPORTED_TX_FEE_MODES = {
+    "paid_metered",
+    "free_metered",
+}
+DEFAULT_TX_FEE_MODE = "paid_metered"
+DEFAULT_FREE_TX_MAX_CHI = 1_000_000
+DEFAULT_FREE_BLOCK_MAX_CHI = 20_000_000
 SUPPORTED_RECOVERY_ARTIFACT_KINDS = {"snapshot_url"}
 CONTRACT_PACK_SCHEMA = "xian.contract_pack.v1"
 EXAMPLE_SCHEMA = "xian.example.v1"
@@ -189,6 +196,20 @@ def _require_optional_choice(
     if not isinstance(value, str) or value not in supported:
         raise ValueError(f"{key} must be one of {sorted(supported)}")
     return value
+
+
+def _require_tx_fee_mode(payload: dict, key: str) -> str:
+    return _require_optional_choice(
+        payload,
+        key,
+        supported=SUPPORTED_TX_FEE_MODES,
+        default=DEFAULT_TX_FEE_MODE,
+    )
+
+
+def _validate_free_fee_caps(*, tx_max_chi: int, block_max_chi: int) -> None:
+    if block_max_chi < tx_max_chi:
+        raise ValueError("free_block_max_chi must be greater than or equal to free_tx_max_chi")
 
 
 def _require_bool(payload: dict, key: str, *, default: bool) -> bool:
@@ -940,6 +961,9 @@ def normalize_node_profile(payload: dict) -> dict:
             "simulation_max_concurrency",
             "simulation_timeout_ms",
             "simulation_max_chi",
+            "tx_fee_mode",
+            "free_tx_max_chi",
+            "free_block_max_chi",
             "parallel_execution_enabled",
             "parallel_execution_workers",
             "parallel_execution_min_transactions",
@@ -963,6 +987,20 @@ def normalize_node_profile(payload: dict) -> dict:
     _validate_parallel_enabled_workers(
         enabled=parallel_execution_enabled,
         workers=parallel_execution_workers,
+    )
+    free_tx_max_chi = _require_positive_int(
+        payload,
+        "free_tx_max_chi",
+        default=DEFAULT_FREE_TX_MAX_CHI,
+    )
+    free_block_max_chi = _require_positive_int(
+        payload,
+        "free_block_max_chi",
+        default=DEFAULT_FREE_BLOCK_MAX_CHI,
+    )
+    _validate_free_fee_caps(
+        tx_max_chi=free_tx_max_chi,
+        block_max_chi=free_block_max_chi,
     )
 
     return {
@@ -1012,6 +1050,9 @@ def normalize_node_profile(payload: dict) -> dict:
         "simulation_max_chi": _require_positive_int(
             payload, "simulation_max_chi", default=1_000_000
         ),
+        "tx_fee_mode": _require_tx_fee_mode(payload, "tx_fee_mode"),
+        "free_tx_max_chi": free_tx_max_chi,
+        "free_block_max_chi": free_block_max_chi,
         "parallel_execution_enabled": parallel_execution_enabled,
         "parallel_execution_workers": parallel_execution_workers,
         "parallel_execution_min_transactions": _require_positive_int(
@@ -1058,6 +1099,9 @@ def normalize_network_template(payload: dict) -> dict:
             "simulation_max_concurrency",
             "simulation_timeout_ms",
             "simulation_max_chi",
+            "tx_fee_mode",
+            "free_tx_max_chi",
+            "free_block_max_chi",
             "parallel_execution_enabled",
             "parallel_execution_workers",
             "parallel_execution_min_transactions",
@@ -1079,6 +1123,20 @@ def normalize_network_template(payload: dict) -> dict:
     _validate_parallel_enabled_workers(
         enabled=parallel_execution_enabled,
         workers=parallel_execution_workers,
+    )
+    free_tx_max_chi = _require_positive_int(
+        payload,
+        "free_tx_max_chi",
+        default=DEFAULT_FREE_TX_MAX_CHI,
+    )
+    free_block_max_chi = _require_positive_int(
+        payload,
+        "free_block_max_chi",
+        default=DEFAULT_FREE_BLOCK_MAX_CHI,
+    )
+    _validate_free_fee_caps(
+        tx_max_chi=free_tx_max_chi,
+        block_max_chi=free_block_max_chi,
     )
 
     return {
@@ -1109,6 +1167,9 @@ def normalize_network_template(payload: dict) -> dict:
         "simulation_max_chi": _require_positive_int(
             payload, "simulation_max_chi", default=1_000_000
         ),
+        "tx_fee_mode": _require_tx_fee_mode(payload, "tx_fee_mode"),
+        "free_tx_max_chi": free_tx_max_chi,
+        "free_block_max_chi": free_block_max_chi,
         "parallel_execution_enabled": parallel_execution_enabled,
         "parallel_execution_workers": parallel_execution_workers,
         "parallel_execution_min_transactions": _require_positive_int(
@@ -1475,6 +1536,9 @@ class NodeProfile:
     simulation_max_concurrency: int = 2
     simulation_timeout_ms: int = 3000
     simulation_max_chi: int = 1_000_000
+    tx_fee_mode: str = DEFAULT_TX_FEE_MODE
+    free_tx_max_chi: int = DEFAULT_FREE_TX_MAX_CHI
+    free_block_max_chi: int = DEFAULT_FREE_BLOCK_MAX_CHI
     parallel_execution_enabled: bool = False
     parallel_execution_workers: int = 4
     parallel_execution_min_transactions: int = 8
@@ -1504,6 +1568,9 @@ class NetworkTemplate:
     simulation_max_concurrency: int = 2
     simulation_timeout_ms: int = 3000
     simulation_max_chi: int = 1_000_000
+    tx_fee_mode: str = DEFAULT_TX_FEE_MODE
+    free_tx_max_chi: int = DEFAULT_FREE_TX_MAX_CHI
+    free_block_max_chi: int = DEFAULT_FREE_BLOCK_MAX_CHI
     parallel_execution_enabled: bool = False
     parallel_execution_workers: int = 4
     parallel_execution_min_transactions: int = 8

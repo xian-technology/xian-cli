@@ -198,6 +198,9 @@ def _initialize_node_from_args(args: argparse.Namespace) -> dict:
                 timeout_ms=int(profile.get("simulation_timeout_ms", 3000)),
                 max_chi=int(profile.get("simulation_max_chi", 1_000_000)),
             ),
+            tx_fee_mode=str(profile.get("tx_fee_mode", "paid_metered")),
+            free_tx_max_chi=int(profile.get("free_tx_max_chi", 1_000_000)),
+            free_block_max_chi=int(profile.get("free_block_max_chi", 20_000_000)),
             parallel_execution=node_setup.ParallelExecutionOptions(
                 enabled=bool(profile.get("parallel_execution_enabled", False)),
                 workers=int(profile.get("parallel_execution_workers", 4)),

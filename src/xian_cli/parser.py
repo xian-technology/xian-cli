@@ -10,6 +10,7 @@ from xian_cli.models import (
     SUPPORTED_BLOCK_POLICY_MODES,
     SUPPORTED_INTENTKIT_NETWORK_IDS,
     SUPPORTED_NODE_IMAGE_MODES,
+    SUPPORTED_TX_FEE_MODES,
 )
 from xian_cli.runtime import DEFAULT_RPC_TIMEOUT_SECONDS
 
@@ -105,6 +106,27 @@ def add_node_profile_runtime_args(
         "--simulation-max-chi",
         type=int,
         help=f"chi budget cap used for readonly simulation in {subject}",
+    )
+    parser.add_argument(
+        "--tx-fee-mode",
+        choices=sorted(SUPPORTED_TX_FEE_MODES),
+        help=(
+            f"transaction fee policy for {subject}: paid_metered charges native-token "
+            "fees, free_metered meters execution without charging transaction fees"
+        ),
+    )
+    parser.add_argument(
+        "--free-tx-max-chi",
+        type=int,
+        help=f"maximum submitted chi budget for one transaction when {subject} uses free_metered",
+    )
+    parser.add_argument(
+        "--free-block-max-chi",
+        type=int,
+        help=(
+            f"maximum total submitted chi budget per proposed block when {subject} "
+            "uses free_metered"
+        ),
     )
     parser.add_argument(
         "--parallel-execution-enabled",

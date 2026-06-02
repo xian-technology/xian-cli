@@ -78,6 +78,10 @@ uv run xian node start local-dev
 uv run xian node status local-dev
 ```
 
+For a metered 0-fee local network, add `--tx-fee-mode free_metered` plus
+explicit `--free-tx-max-chi` and `--free-block-max-chi` caps to `setup node`,
+`network create`, or `network join`.
+
 Join a manifest-backed shared network with a local profile:
 
 ```bash
