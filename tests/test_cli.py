@@ -2345,6 +2345,37 @@ class NetworkManifestTests(unittest.TestCase):
                     ]
                 )
 
+    def test_network_join_rejects_zero_parallel_execution_min_transactions(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            base_dir = Path(tmp_dir)
+            configs_dir = base_dir / "xian-configs"
+            network_dir = configs_dir / "networks" / "canonical"
+            network_dir.mkdir(parents=True)
+            (network_dir / "manifest.json").write_text(
+                json.dumps(_manifest_payload()),
+                encoding="utf-8",
+            )
+
+            with self.assertRaisesRegex(
+                ValueError,
+                "parallel_execution_min_transactions must be a positive integer",
+            ):
+                main(
+                    [
+                        "network",
+                        "join",
+                        "validator-1",
+                        "--base-dir",
+                        str(base_dir),
+                        "--configs-dir",
+                        str(configs_dir),
+                        "--network",
+                        "canonical",
+                        "--parallel-execution-min-transactions",
+                        "0",
+                    ]
+                )
+
     def test_network_join_can_generate_validator_key_material(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             base_dir = Path(tmp_dir)
@@ -2614,6 +2645,35 @@ class NetworkManifestTests(unittest.TestCase):
     def test_network_create_can_generate_multiple_initial_validators(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
             base_dir = Path(tmp_dir)
+            configs_dir = base_dir / "xian-configs"
+            templates_dir = configs_dir / "templates"
+            templates_dir.mkdir(parents=True)
+            (templates_dir / "consortium-2.json").write_text(
+                json.dumps(
+                    {
+                        "schema_version": 1,
+                        "name": "consortium-2",
+                        "display_name": "Consortium 2",
+                        "description": "Two-validator template",
+                        "block_policy_mode": "idle_interval",
+                        "block_policy_interval": "10s",
+                        "operator_profile": "shared_network",
+                        "monitoring_profile": "bds",
+                        "bootstrap_node_name": "validator-1",
+                        "additional_validator_names": ["validator-2"],
+                        "services": _template_services(
+                            bds_enabled=True,
+                            dashboard_enabled=True,
+                            monitoring_enabled=True,
+                            dashboard_host="0.0.0.0",
+                            dashboard_port=18080,
+                        ),
+                        "pruning_enabled": True,
+                        "blocks_to_keep": 12345,
+                    }
+                ),
+                encoding="utf-8",
+            )
             fake_genesis = {
                 "chain_id": "xian-local-1",
                 "validators": [
@@ -2645,13 +2705,13 @@ class NetworkManifestTests(unittest.TestCase):
                             "local-dev",
                             "--base-dir",
                             str(base_dir),
+                            "--configs-dir",
+                            str(configs_dir),
                             "--chain-id",
                             "xian-local-1",
+                            "--template",
+                            "consortium-2",
                             "--generate-validator-key",
-                            "--bootstrap-node",
-                            "validator-1",
-                            "--validator",
-                            "validator-2",
                         ]
                     )
 
@@ -2672,6 +2732,13 @@ class NetworkManifestTests(unittest.TestCase):
                 validator_two_profile["validator_key_ref"],
                 "keys/validator-2/validator_key_info.json",
             )
+            self.assertEqual(validator_two_profile["operator_profile"], "shared_network")
+            self.assertEqual(validator_two_profile["monitoring_profile"], "bds")
+            self.assertTrue(validator_two_profile["pruning_enabled"])
+            self.assertEqual(validator_two_profile["blocks_to_keep"], 12345)
+            self.assertTrue(validator_two_profile["services"]["bds"]["enabled"])
+            self.assertTrue(validator_two_profile["services"]["dashboard"]["enabled"])
+            self.assertTrue(validator_two_profile["services"]["monitoring"]["enabled"])
             genesis_builder.build_local_network_genesis.assert_called_once()
             kwargs = genesis_builder.build_local_network_genesis.call_args.kwargs
             self.assertEqual(len(kwargs["validators"]), 2)

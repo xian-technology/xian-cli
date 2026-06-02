@@ -156,7 +156,7 @@ def build_profile_runtime_fields(
             "enable_pruning",
             "pruning_enabled",
             False,
-            True,
+            False,
             None,
         ),
         (
@@ -164,7 +164,7 @@ def build_profile_runtime_fields(
             "blocks_to_keep",
             "blocks_to_keep",
             100000,
-            True,
+            False,
             None,
         ),
         (
@@ -278,10 +278,10 @@ def build_profile_runtime_fields(
             "parallel_execution_min_transactions",
             8,
             False,
-            validate_non_negative_int,
+            validate_positive_int,
         ),
-        ("operator_profile", None, "operator_profile", None, True, None),
-        ("monitoring_profile", None, "monitoring_profile", None, True, None),
+        ("operator_profile", None, "operator_profile", None, False, None),
+        ("monitoring_profile", None, "monitoring_profile", None, False, None),
     )
 
     fields = {
