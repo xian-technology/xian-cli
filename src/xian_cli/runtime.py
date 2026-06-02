@@ -243,11 +243,7 @@ def run_backend_command(
     try:
         env = {
             **os.environ,
-            **(
-                {"XIAN_COMETBFT_HOME": str(cometbft_home)}
-                if cometbft_home is not None
-                else {}
-            ),
+            **({"XIAN_COMETBFT_HOME": str(cometbft_home)} if cometbft_home is not None else {}),
         }
         if stream_stderr:
             result = _run_backend_command_with_streamed_stderr(
