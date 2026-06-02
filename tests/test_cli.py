@@ -460,6 +460,137 @@ class SetupNodeCommandTests(unittest.TestCase):
             self.assertEqual(profile["services"]["shielded_relayer"]["host"], "0.0.0.0")
             self.assertEqual(profile["services"]["shielded_relayer"]["port"], 38181)
 
+    def test_setup_node_no_start_sidecar_matrix_writes_expected_profile(self) -> None:
+        scenarios = [
+            {
+                "name": "intentkit",
+                "preset": "basic",
+                "flags": [
+                    "--enable-intentkit",
+                    "--intentkit-network-id",
+                    "xian-localnet",
+                    "--intentkit-port",
+                    "39000",
+                    "--intentkit-api-port",
+                    "39080",
+                ],
+                "services": {
+                    "intentkit": {
+                        "enabled": True,
+                        "network_id": "xian-localnet",
+                        "port": 39000,
+                        "api_port": 39080,
+                    },
+                    "dex_automation": {"enabled": False},
+                    "shielded_relayer": {"enabled": False},
+                },
+            },
+            {
+                "name": "dex-automation",
+                "preset": "indexed",
+                "flags": [
+                    "--enable-dex-automation",
+                    "--dex-automation-port",
+                    "39280",
+                    "--dex-automation-config",
+                    "/tmp/xian-dex-automation.yaml",
+                ],
+                "services": {
+                    "bds": {"enabled": True},
+                    "intentkit": {"enabled": False},
+                    "dex_automation": {
+                        "enabled": True,
+                        "port": 39280,
+                        "config": "/tmp/xian-dex-automation.yaml",
+                    },
+                    "shielded_relayer": {"enabled": False},
+                },
+            },
+            {
+                "name": "shielded-relayer",
+                "preset": "basic",
+                "flags": [
+                    "--enable-shielded-relayer",
+                    "--shielded-relayer-port",
+                    "39180",
+                ],
+                "services": {
+                    "intentkit": {"enabled": False},
+                    "dex_automation": {"enabled": False},
+                    "shielded_relayer": {"enabled": True, "port": 39180},
+                },
+            },
+            {
+                "name": "all-sidecars",
+                "preset": "indexed",
+                "flags": [
+                    "--enable-intentkit",
+                    "--intentkit-network-id",
+                    "xian-localnet",
+                    "--enable-dex-automation",
+                    "--dex-automation-port",
+                    "39281",
+                    "--enable-shielded-relayer",
+                    "--shielded-relayer-port",
+                    "39181",
+                ],
+                "services": {
+                    "bds": {"enabled": True},
+                    "intentkit": {"enabled": True, "network_id": "xian-localnet"},
+                    "dex_automation": {"enabled": True, "port": 39281},
+                    "shielded_relayer": {"enabled": True, "port": 39181},
+                },
+            },
+        ]
+
+        for scenario in scenarios:
+            with self.subTest(scenario=scenario["name"]):
+                with tempfile.TemporaryDirectory() as tmp_dir:
+                    base_dir = Path(tmp_dir)
+                    home = base_dir / ".cometbft"
+                    stdout = io.StringIO()
+
+                    with redirect_stdout(stdout):
+                        exit_code = main(
+                            [
+                                "setup",
+                                "node",
+                                "--mode",
+                                "local",
+                                "--network",
+                                f"local-{scenario['name']}",
+                                "--name",
+                                "validator-1",
+                                "--preset",
+                                scenario["preset"],
+                                "--base-dir",
+                                str(base_dir),
+                                "--configs-dir",
+                                str(WORKSPACE_ROOT / "xian-configs"),
+                                "--home",
+                                str(home),
+                                *scenario["flags"],
+                                "--no-start",
+                                "--yes",
+                            ]
+                        )
+
+                    self.assertEqual(exit_code, 0)
+                    payload = json.loads(stdout.getvalue())
+                    self.assertFalse(payload["started"])
+                    self.assertTrue(payload["network"]["node_initialized"])
+                    self.assertIn("start", payload["next_steps"][0])
+                    profile = json.loads(
+                        (base_dir / "nodes" / "validator-1.json").read_text(encoding="utf-8")
+                    )
+                    for service_name, expected in scenario["services"].items():
+                        for field_name, expected_value in expected.items():
+                            self.assertEqual(
+                                expected_value,
+                                profile["services"][service_name][field_name],
+                                f"{scenario['name']} {service_name}.{field_name}",
+                            )
+
 
 class _FakeContextClient:
     def __init__(self, **responses):
