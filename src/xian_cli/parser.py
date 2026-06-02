@@ -964,6 +964,10 @@ def build_parser() -> argparse.ArgumentParser:
         "--node-split-image",
         help="explicit split-runtime node image override for registry mode",
     )
+    add_node_profile_runtime_args(
+        setup_node_parser,
+        subject="the node profile",
+    )
     setup_node_parser.add_argument(
         "--base-dir",
         type=Path,

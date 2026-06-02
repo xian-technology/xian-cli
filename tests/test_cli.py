@@ -381,6 +381,56 @@ class SetupNodeCommandTests(unittest.TestCase):
             self.assertEqual(profile["services"]["dashboard"]["host"], "127.0.0.1")
             self.assertEqual(profile["operator_profile"], "local_development")
 
+    def test_setup_node_forwards_runtime_service_options(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            base_dir = Path(tmp_dir)
+            home = base_dir / ".cometbft"
+            stdout = io.StringIO()
+
+            with redirect_stdout(stdout):
+                exit_code = main(
+                    [
+                        "setup",
+                        "node",
+                        "--mode",
+                        "local",
+                        "--network",
+                        "local-dev",
+                        "--name",
+                        "validator-1",
+                        "--base-dir",
+                        str(base_dir),
+                        "--configs-dir",
+                        str(WORKSPACE_ROOT / "xian-configs"),
+                        "--home",
+                        str(home),
+                        "--enable-intentkit",
+                        "--intentkit-network-id",
+                        "xian-localnet",
+                        "--intentkit-api-port",
+                        "38180",
+                        "--no-start",
+                        "--yes",
+                    ]
+                )
+
+            self.assertEqual(exit_code, 0)
+            payload = json.loads(stdout.getvalue())
+            self.assertEqual(
+                payload["plan"]["runtime_args"],
+                {
+                    "enable_intentkit": True,
+                    "intentkit_network_id": "xian-localnet",
+                    "intentkit_api_port": 38180,
+                },
+            )
+            profile = json.loads(
+                (base_dir / "nodes" / "validator-1.json").read_text(encoding="utf-8")
+            )
+            self.assertTrue(profile["services"]["intentkit"]["enabled"])
+            self.assertEqual(profile["services"]["intentkit"]["network_id"], "xian-localnet")
+            self.assertEqual(profile["services"]["intentkit"]["api_port"], 38180)
+
 
 class _FakeContextClient:
     def __init__(self, **responses):

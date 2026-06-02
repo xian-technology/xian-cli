@@ -50,6 +50,39 @@ RUNTIME_ARG_DEFAULTS = {
     "dex_automation_config": None,
 }
 
+RUNTIME_ARG_FLAGS = {
+    "enable_bds": "--enable-bds",
+    "enable_pruning": "--enable-pruning",
+    "blocks_to_keep": "--blocks-to-keep",
+    "block_policy_mode": "--block-policy-mode",
+    "block_policy_interval": "--block-policy-interval",
+    "transaction_trace_logging": "--transaction-trace-logging",
+    "app_log_level": "--app-log-level",
+    "app_log_json": "--app-log-json",
+    "app_log_rotation_hours": "--app-log-rotation-hours",
+    "app_log_retention_days": "--app-log-retention-days",
+    "simulation_enabled": "--simulation-enabled",
+    "simulation_max_concurrency": "--simulation-max-concurrency",
+    "simulation_timeout_ms": "--simulation-timeout-ms",
+    "simulation_max_chi": "--simulation-max-chi",
+    "parallel_execution_enabled": "--parallel-execution-enabled",
+    "parallel_execution_workers": "--parallel-execution-workers",
+    "parallel_execution_min_transactions": "--parallel-execution-min-transactions",
+    "enable_dashboard": "--enable-dashboard",
+    "enable_monitoring": "--enable-monitoring",
+    "dashboard_host": "--dashboard-host",
+    "dashboard_port": "--dashboard-port",
+    "enable_intentkit": "--enable-intentkit",
+    "intentkit_network_id": "--intentkit-network-id",
+    "intentkit_host": "--intentkit-host",
+    "intentkit_port": "--intentkit-port",
+    "intentkit_api_port": "--intentkit-api-port",
+    "enable_dex_automation": "--enable-dex-automation",
+    "dex_automation_host": "--dex-automation-host",
+    "dex_automation_port": "--dex-automation-port",
+    "dex_automation_config": "--dex-automation-config",
+}
+
 
 @dataclass(frozen=True)
 class SetupNodePlan:
@@ -81,6 +114,7 @@ class SetupNodePlan:
     rpc_url: str
     rpc_timeout_seconds: float
     skip_disk_check: bool
+    runtime_args: dict[str, Any]
 
     @property
     def profile_path(self) -> Path:
@@ -118,6 +152,18 @@ def _add_value_option(command: list[str], flag: str, value: str | float | int | 
 def _add_repeated_option(command: list[str], flag: str, values: list[str]) -> None:
     for value in values:
         command.extend([flag, value])
+
+
+def _add_runtime_options(command: list[str], values: dict[str, Any]) -> None:
+    for key in RUNTIME_ARG_DEFAULTS:
+        if key not in values:
+            continue
+        flag = RUNTIME_ARG_FLAGS[key]
+        value = values[key]
+        if isinstance(value, bool):
+            command.append(flag if value else f"--no-{flag[2:]}")
+        else:
+            command.extend([flag, str(value)])
 
 
 def _default_chain_id(network: str) -> str:
@@ -320,6 +366,11 @@ def _resolve_plan(args: argparse.Namespace) -> SetupNodePlan:
         rpc_url=args.rpc_url,
         rpc_timeout_seconds=args.rpc_timeout_seconds,
         skip_disk_check=bool(args.skip_disk_check),
+        runtime_args={
+            key: value
+            for key in RUNTIME_ARG_DEFAULTS
+            if (value := getattr(args, key, None)) is not None
+        },
     )
 
 
@@ -378,6 +429,7 @@ def _network_command(plan: SetupNodePlan) -> list[str]:
     _add_value_option(command, "--node-image-mode", plan.node_image_mode)
     _add_value_option(command, "--node-integrated-image", plan.node_integrated_image)
     _add_value_option(command, "--node-split-image", plan.node_split_image)
+    _add_runtime_options(command, plan.runtime_args)
     if plan.force:
         command.append("--force")
     return command
@@ -458,6 +510,7 @@ def _plan_payload(plan: SetupNodePlan, *, dry_run: bool = False) -> dict[str, ob
         "home": _path_str(plan.home),
         "network_manifest": _path_str(plan.network_manifest),
         "snapshot_url": plan.snapshot_url,
+        "runtime_args": plan.runtime_args,
         "writes": writes,
         "steps": _plan_steps(plan),
     }
@@ -501,6 +554,7 @@ def _network_args(plan: SetupNodePlan) -> argparse.Namespace:
         "home": plan.home,
         "force": plan.force,
         "dry_run": False,
+        **plan.runtime_args,
     }
     if plan.mode == "local":
         return _namespace(
