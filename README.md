@@ -82,6 +82,18 @@ For a metered 0-fee local network, add `--tx-fee-mode free_metered` plus
 explicit `--free-tx-max-chi` and `--free-block-max-chi` caps to `setup node`,
 `network create`, or `network join`.
 
+Block production defaults come from the selected network template or manifest.
+For on-demand local development, use `--block-policy-mode on_demand`; for
+scheduled empty blocks, pass both a mode and interval:
+
+```bash
+uv run xian setup node --mode local --network local-dev \
+  --block-policy-mode periodic --block-policy-interval 1s
+```
+
+The interval controls empty-block scheduling; observed cadence is still bounded
+by normal CometBFT consensus timing and block execution time.
+
 Join a manifest-backed shared network with a local profile:
 
 ```bash

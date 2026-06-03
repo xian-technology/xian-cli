@@ -9,13 +9,23 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from xian_cli.commands.catalog import _load_template
+from xian_cli.commands.common import _pick_template_value
 from xian_cli.commands.network import _handle_network_create, _handle_network_join
 from xian_cli.commands.node import _handle_node_health, _handle_node_start
+from xian_cli.config_repo import resolve_network_manifest_path
+from xian_cli.models import read_network_manifest
 
 PRESET_TEMPLATES = {
     "basic": "single-node-dev",
     "indexed": "single-node-indexed",
 }
+
+BLOCK_POLICY_CHOICES = [
+    ("on_demand", "wait for transactions; no idle empty blocks"),
+    ("idle_interval", "emit an empty block after the chain has been idle for the interval"),
+    ("periodic", "emit scheduled empty blocks on the interval"),
+]
 
 RUNTIME_ARG_DEFAULTS = {
     "enable_bds": None,
@@ -126,6 +136,9 @@ class SetupNodePlan:
     rpc_url: str
     rpc_timeout_seconds: float
     skip_disk_check: bool
+    block_policy_mode: str
+    block_policy_interval: str
+    block_policy_source: str
     runtime_args: dict[str, Any]
 
     @property
@@ -187,6 +200,165 @@ def _default_chain_id(network: str) -> str:
 
 def _template_for_preset(preset: str) -> str:
     return PRESET_TEMPLATES[preset]
+
+
+def _block_policy_source(
+    *,
+    args: argparse.Namespace,
+    template: dict | None,
+    network: dict | None,
+) -> str:
+    if args.block_policy_mode is not None or args.block_policy_interval is not None:
+        return "arguments"
+    if template is not None and (
+        template.get("block_policy_mode") is not None
+        or template.get("block_policy_interval") is not None
+    ):
+        return "template"
+    if network is not None and (
+        network.get("block_policy_mode") is not None
+        or network.get("block_policy_interval") is not None
+    ):
+        return "network"
+    return "default"
+
+
+def _has_block_policy_defaults(source: dict | None) -> bool:
+    return source is not None and (
+        source.get("block_policy_mode") is not None
+        or source.get("block_policy_interval") is not None
+    )
+
+
+def _describe_block_policy(mode: str, interval: str) -> str:
+    if mode == "on_demand":
+        return "on_demand (blocks are produced when transactions arrive)"
+    if mode == "idle_interval":
+        return f"idle_interval ({interval} idle empty-block interval)"
+    return f"periodic ({interval} scheduled empty-block interval)"
+
+
+def _prompt_interval_default(current_interval: str) -> str:
+    return current_interval if current_interval != "0s" else "1s"
+
+
+def _validate_block_policy_pair(mode: str, interval: str) -> tuple[str, str]:
+    if mode == "on_demand":
+        return mode, "0s"
+    if interval == "0s":
+        raise ValueError(
+            "--block-policy-interval must be non-zero when "
+            "--block-policy-mode is idle_interval or periodic"
+        )
+    return mode, interval
+
+
+def _resolve_block_policy(
+    *,
+    args: argparse.Namespace,
+    base_dir: Path,
+    mode: str,
+    network_name: str,
+    template_name: str,
+    prompt: bool,
+    runtime_args: dict[str, Any],
+) -> tuple[str, str, str]:
+    template = _load_template(
+        base_dir=base_dir,
+        template_name=template_name,
+        configs_dir=args.configs_dir,
+    )
+    network = None
+    if mode == "join" and not _has_block_policy_defaults(template):
+        manifest_path = resolve_network_manifest_path(
+            base_dir=base_dir,
+            network_name=network_name,
+            explicit_manifest=args.network_manifest,
+            configs_dir=args.configs_dir,
+        )
+        network = read_network_manifest(manifest_path)
+
+    default_mode = str(
+        _pick_template_value(
+            args.block_policy_mode,
+            template.get("block_policy_mode") if template is not None else None,
+            network.get("block_policy_mode", "on_demand") if network is not None else "on_demand",
+        )
+    )
+    default_interval = str(
+        _pick_template_value(
+            args.block_policy_interval,
+            template.get("block_policy_interval") if template is not None else None,
+            (
+                network.get("block_policy_interval", "0s")
+                if network is not None
+                else "0s"
+            ),
+        )
+    )
+    source = _block_policy_source(args=args, template=template, network=network)
+
+    if (
+        args.block_policy_interval is not None
+        and args.block_policy_mode is None
+        and default_mode == "on_demand"
+        and args.block_policy_interval != "0s"
+    ):
+        raise ValueError(
+            "--block-policy-interval has no effect with on_demand; pass "
+            "--block-policy-mode idle_interval or --block-policy-mode periodic"
+        )
+    if (
+        args.block_policy_mode == "on_demand"
+        and args.block_policy_interval is not None
+        and args.block_policy_interval != "0s"
+    ):
+        raise ValueError("--block-policy-interval must be 0s with --block-policy-mode on_demand")
+
+    if prompt and args.block_policy_mode is None and args.block_policy_interval is None:
+        print(
+            "Effective block production policy: "
+            f"{_describe_block_policy(default_mode, default_interval)}",
+            file=sys.stderr,
+        )
+        if _prompt_bool("Customize block production policy", default=False):
+            chosen_mode = _prompt_choice(
+                "Block production policy",
+                BLOCK_POLICY_CHOICES,
+                default=default_mode,
+            )
+            if chosen_mode == "on_demand":
+                chosen_interval = "0s"
+            else:
+                chosen_interval = _prompt_text(
+                    "Block interval",
+                    default=_prompt_interval_default(default_interval),
+                )
+            chosen_mode, chosen_interval = _validate_block_policy_pair(
+                chosen_mode,
+                chosen_interval,
+            )
+            runtime_args["block_policy_mode"] = chosen_mode
+            runtime_args["block_policy_interval"] = chosen_interval
+            return chosen_mode, chosen_interval, "wizard"
+
+    if prompt and args.block_policy_mode in {"idle_interval", "periodic"}:
+        if args.block_policy_interval is None and default_interval == "0s":
+            default_interval = _prompt_text("Block interval", default="1s")
+            runtime_args["block_policy_interval"] = default_interval
+            source = "wizard"
+
+    default_mode, default_interval = _validate_block_policy_pair(
+        default_mode,
+        default_interval,
+    )
+    if (
+        default_mode == "on_demand"
+        and (args.block_policy_mode is not None or args.block_policy_interval is not None)
+    ):
+        runtime_args["block_policy_interval"] = "0s"
+
+    return default_mode, default_interval, source
 
 
 def _prompt_line(prompt: str) -> str:
@@ -269,6 +441,7 @@ def _resolve_key_mode(args: argparse.Namespace, *, prompt: bool) -> str:
 def _resolve_plan(args: argparse.Namespace) -> SetupNodePlan:
     _require_confirmation_path(args)
     prompt = _should_prompt(args)
+    base_dir = args.base_dir.resolve()
 
     mode = args.mode
     if mode is None:
@@ -349,6 +522,21 @@ def _resolve_plan(args: argparse.Namespace) -> SetupNodePlan:
     else:
         start = bool(args.start)
 
+    runtime_args = {
+        key: value
+        for key in RUNTIME_ARG_DEFAULTS
+        if (value := getattr(args, key, None)) is not None
+    }
+    block_policy_mode, block_policy_interval, block_policy_source = _resolve_block_policy(
+        args=args,
+        base_dir=base_dir,
+        mode=mode,
+        network_name=network,
+        template_name=template,
+        prompt=prompt,
+        runtime_args=runtime_args,
+    )
+
     return SetupNodePlan(
         mode=mode,
         name=name,
@@ -360,7 +548,7 @@ def _resolve_plan(args: argparse.Namespace) -> SetupNodePlan:
         validator_key_dir=args.validator_key_dir,
         restore_snapshot=restore_snapshot,
         start=start,
-        base_dir=args.base_dir.resolve(),
+        base_dir=base_dir,
         configs_dir=args.configs_dir,
         stack_dir=args.stack_dir,
         home=args.home,
@@ -378,11 +566,10 @@ def _resolve_plan(args: argparse.Namespace) -> SetupNodePlan:
         rpc_url=args.rpc_url,
         rpc_timeout_seconds=args.rpc_timeout_seconds,
         skip_disk_check=bool(args.skip_disk_check),
-        runtime_args={
-            key: value
-            for key in RUNTIME_ARG_DEFAULTS
-            if (value := getattr(args, key, None)) is not None
-        },
+        block_policy_mode=block_policy_mode,
+        block_policy_interval=block_policy_interval,
+        block_policy_source=block_policy_source,
+        runtime_args=runtime_args,
     )
 
 
@@ -522,6 +709,11 @@ def _plan_payload(plan: SetupNodePlan, *, dry_run: bool = False) -> dict[str, ob
         "home": _path_str(plan.home),
         "network_manifest": _path_str(plan.network_manifest),
         "snapshot_url": plan.snapshot_url,
+        "block_policy": {
+            "mode": plan.block_policy_mode,
+            "interval": plan.block_policy_interval,
+            "source": plan.block_policy_source,
+        },
         "runtime_args": plan.runtime_args,
         "writes": writes,
         "steps": _plan_steps(plan),
@@ -531,6 +723,11 @@ def _plan_payload(plan: SetupNodePlan, *, dry_run: bool = False) -> dict[str, ob
 def _format_plan(plan: SetupNodePlan) -> str:
     payload = _plan_payload(plan, dry_run=True)
     lines = ["Setup plan:"]
+    lines.append(
+        "Block policy: "
+        f"{_describe_block_policy(plan.block_policy_mode, plan.block_policy_interval)} "
+        f"({plan.block_policy_source})"
+    )
     for index, step in enumerate(payload["steps"], start=1):
         lines.append(f"{index}. {step['name']}: {' '.join(step['command'])}")
     if payload["writes"]:

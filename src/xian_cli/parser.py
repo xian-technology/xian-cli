@@ -56,7 +56,10 @@ def add_node_profile_runtime_args(
     parser.add_argument(
         "--block-policy-interval",
         type=str,
-        help="idle or periodic block interval, for example 10s",
+        help=(
+            "idle or periodic block interval, for example 1s or 10s; "
+            "actual cadence is still bounded by consensus timing"
+        ),
     )
     parser.add_argument(
         "--transaction-trace-logging",

@@ -276,6 +276,10 @@ class SetupNodeCommandTests(unittest.TestCase):
             self.assertEqual(payload["mode"], "join")
             self.assertEqual(payload["template"], "single-node-indexed")
             self.assertEqual(
+                payload["block_policy"],
+                {"mode": "on_demand", "interval": "0s", "source": "template"},
+            )
+            self.assertEqual(
                 payload["writes"][0],
                 str(base_dir.resolve() / "nodes/validator-1.json"),
             )
@@ -298,6 +302,85 @@ class SetupNodeCommandTests(unittest.TestCase):
             )
             self.assertEqual(payload["steps"][1]["name"], "start-node")
             self.assertEqual(payload["steps"][2]["name"], "health-check")
+
+    def test_setup_node_plan_forwards_block_policy_override(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            base_dir = Path(tmp_dir)
+            stdout = io.StringIO()
+
+            with redirect_stdout(stdout):
+                exit_code = main(
+                    [
+                        "setup",
+                        "node",
+                        "--mode",
+                        "local",
+                        "--network",
+                        "local-dev",
+                        "--name",
+                        "validator-1",
+                        "--chain-id",
+                        "xian-local-1",
+                        "--preset",
+                        "basic",
+                        "--key-mode",
+                        "generate",
+                        "--block-policy-mode",
+                        "periodic",
+                        "--block-policy-interval",
+                        "1s",
+                        "--no-start",
+                        "--base-dir",
+                        str(base_dir),
+                        "--plan",
+                    ]
+                )
+
+            self.assertEqual(exit_code, 0)
+            payload = json.loads(stdout.getvalue())
+            self.assertEqual(
+                payload["block_policy"],
+                {"mode": "periodic", "interval": "1s", "source": "arguments"},
+            )
+            self.assertEqual(
+                payload["runtime_args"],
+                {
+                    "block_policy_mode": "periodic",
+                    "block_policy_interval": "1s",
+                },
+            )
+            self.assertIn("--block-policy-mode", payload["steps"][0]["command"])
+            self.assertIn("periodic", payload["steps"][0]["command"])
+            self.assertIn("--block-policy-interval", payload["steps"][0]["command"])
+            self.assertIn("1s", payload["steps"][0]["command"])
+
+    def test_setup_node_rejects_interval_without_periodic_policy(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            with self.assertRaisesRegex(ValueError, "has no effect"):
+                with redirect_stdout(io.StringIO()):
+                    main(
+                        [
+                            "setup",
+                            "node",
+                            "--mode",
+                            "local",
+                            "--network",
+                            "local-dev",
+                            "--name",
+                            "validator-1",
+                            "--chain-id",
+                            "xian-local-1",
+                            "--preset",
+                            "basic",
+                            "--key-mode",
+                            "generate",
+                            "--block-policy-interval",
+                            "1s",
+                            "--base-dir",
+                            tmp_dir,
+                            "--plan",
+                        ]
+                    )
 
     def test_setup_node_join_initializes_node_without_starting(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -410,6 +493,108 @@ class SetupNodeCommandTests(unittest.TestCase):
             self.assertFalse(profile["services"]["bds"]["enabled"])
             self.assertEqual(profile["services"]["dashboard"]["host"], "127.0.0.1")
             self.assertEqual(profile["operator_profile"], "local_development")
+
+    def test_setup_node_local_periodic_block_policy_writes_cometbft_config(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            base_dir = Path(tmp_dir)
+            home = base_dir / ".cometbft"
+            stdout = io.StringIO()
+
+            with redirect_stdout(stdout):
+                exit_code = main(
+                    [
+                        "setup",
+                        "node",
+                        "--mode",
+                        "local",
+                        "--network",
+                        "local-dev",
+                        "--name",
+                        "validator-1",
+                        "--base-dir",
+                        str(base_dir),
+                        "--configs-dir",
+                        str(WORKSPACE_ROOT / "xian-configs"),
+                        "--home",
+                        str(home),
+                        "--block-policy-mode",
+                        "periodic",
+                        "--block-policy-interval",
+                        "1s",
+                        "--no-start",
+                        "--yes",
+                    ]
+                )
+
+            self.assertEqual(exit_code, 0)
+            payload = json.loads(stdout.getvalue())
+            self.assertEqual(
+                payload["plan"]["block_policy"],
+                {"mode": "periodic", "interval": "1s", "source": "arguments"},
+            )
+            profile = json.loads(
+                (base_dir / "nodes" / "validator-1.json").read_text(encoding="utf-8")
+            )
+            self.assertEqual(profile["block_policy_mode"], "periodic")
+            self.assertEqual(profile["block_policy_interval"], "1s")
+            config = tomllib.loads((home / "config" / "config.toml").read_text())
+            self.assertTrue(config["consensus"]["create_empty_blocks"])
+            self.assertEqual(config["consensus"]["create_empty_blocks_interval"], "1s")
+
+    def test_setup_node_interactive_prompt_can_override_block_policy(self) -> None:
+        class TtyInput(io.StringIO):
+            def isatty(self) -> bool:
+                return True
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            base_dir = Path(tmp_dir)
+            home = base_dir / ".cometbft"
+            stdout = io.StringIO()
+            stderr = io.StringIO()
+
+            with (
+                patch("sys.stdin", TtyInput("y\nperiodic\n1s\ny\n")),
+                redirect_stdout(stdout),
+                redirect_stderr(stderr),
+            ):
+                exit_code = main(
+                    [
+                        "setup",
+                        "node",
+                        "--mode",
+                        "local",
+                        "--network",
+                        "local-dev",
+                        "--name",
+                        "validator-1",
+                        "--chain-id",
+                        "xian-local-1",
+                        "--preset",
+                        "basic",
+                        "--key-mode",
+                        "generate",
+                        "--base-dir",
+                        str(base_dir),
+                        "--configs-dir",
+                        str(WORKSPACE_ROOT / "xian-configs"),
+                        "--home",
+                        str(home),
+                        "--no-start",
+                    ]
+                )
+
+            self.assertEqual(exit_code, 0)
+            self.assertIn("Effective block production policy", stderr.getvalue())
+            payload = json.loads(stdout.getvalue())
+            self.assertEqual(
+                payload["plan"]["block_policy"],
+                {"mode": "periodic", "interval": "1s", "source": "wizard"},
+            )
+            profile = json.loads(
+                (base_dir / "nodes" / "validator-1.json").read_text(encoding="utf-8")
+            )
+            self.assertEqual(profile["block_policy_mode"], "periodic")
+            self.assertEqual(profile["block_policy_interval"], "1s")
 
     def test_setup_node_forwards_runtime_service_options(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
