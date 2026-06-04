@@ -84,15 +84,17 @@ explicit `--free-tx-max-chi` and `--free-block-max-chi` caps to `setup node`,
 
 Block production defaults come from the selected network template or manifest.
 For on-demand local development, use `--block-policy-mode on_demand`; for
-scheduled empty blocks, pass both a mode and interval:
+scheduled empty blocks, pass both a mode and empty-block interval:
 
 ```bash
 uv run xian setup node --mode local --network local-dev \
   --block-policy-mode periodic --block-policy-interval 1s
 ```
 
-The interval controls empty-block scheduling; observed cadence is still bounded
-by normal CometBFT consensus timing and block execution time.
+The interval controls CometBFT empty-block scheduling. It is not an exact
+finalized block-time target: observed cadence is still bounded by normal
+CometBFT consensus timing, especially `timeout_commit`, and block execution
+time.
 
 Join a manifest-backed shared network with a local profile:
 

@@ -24,7 +24,7 @@ PRESET_TEMPLATES = {
 BLOCK_POLICY_CHOICES = [
     ("on_demand", "wait for transactions; no idle empty blocks"),
     ("idle_interval", "emit an empty block after the chain has been idle for the interval"),
-    ("periodic", "emit scheduled empty blocks on the interval"),
+    ("periodic", "emit scheduled empty blocks after the empty-block interval"),
 ]
 
 RUNTIME_ARG_DEFAULTS = {
@@ -331,7 +331,7 @@ def _resolve_block_policy(
                 chosen_interval = "0s"
             else:
                 chosen_interval = _prompt_text(
-                    "Block interval",
+                    "Empty-block interval",
                     default=_prompt_interval_default(default_interval),
                 )
             chosen_mode, chosen_interval = _validate_block_policy_pair(
@@ -344,7 +344,7 @@ def _resolve_block_policy(
 
     if prompt and args.block_policy_mode in {"idle_interval", "periodic"}:
         if args.block_policy_interval is None and default_interval == "0s":
-            default_interval = _prompt_text("Block interval", default="1s")
+            default_interval = _prompt_text("Empty-block interval", default="1s")
             runtime_args["block_policy_interval"] = default_interval
             source = "wizard"
 

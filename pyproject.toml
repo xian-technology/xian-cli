@@ -14,6 +14,7 @@ dependencies = [
     "pynacl>=1.6.2,<2",
     "xian-tech-abci>=0.8.13,<0.9",
     "xian-tech-contracting>=1.0.8,<2",
+    "xian-tech-vm-core>=0.1.0,<0.2",
     "xian-tech-py>=0.4.17,<0.5",
 ]
 keywords = ["blockchain", "cometbft", "cli", "operator", "xian"]
@@ -56,4 +57,5 @@ select = ["E", "F", "I"]
 [tool.uv.sources]
 xian-tech-abci = { path = "../xian-abci", editable = true }
 xian-tech-contracting = { path = "../xian-contracting", editable = true }
+xian-tech-vm-core = { path = "../xian-contracting/packages/xian-vm-core", editable = true }
 xian-tech-py = { path = "../xian-py", editable = true }

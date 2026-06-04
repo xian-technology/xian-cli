@@ -585,6 +585,7 @@ class SetupNodeCommandTests(unittest.TestCase):
 
             self.assertEqual(exit_code, 0)
             self.assertIn("Effective block production policy", stderr.getvalue())
+            self.assertIn("Empty-block interval", stderr.getvalue())
             payload = json.loads(stdout.getvalue())
             self.assertEqual(
                 payload["plan"]["block_policy"],

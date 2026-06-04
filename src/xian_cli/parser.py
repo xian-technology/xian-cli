@@ -57,8 +57,8 @@ def add_node_profile_runtime_args(
         "--block-policy-interval",
         type=str,
         help=(
-            "idle or periodic block interval, for example 1s or 10s; "
-            "actual cadence is still bounded by consensus timing"
+            "idle or periodic empty-block interval, for example 1s or 10s; "
+            "actual finalized-block cadence also depends on consensus timing"
         ),
     )
     parser.add_argument(
