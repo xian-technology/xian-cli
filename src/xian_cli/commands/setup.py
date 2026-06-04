@@ -289,11 +289,7 @@ def _resolve_block_policy(
         _pick_template_value(
             args.block_policy_interval,
             template.get("block_policy_interval") if template is not None else None,
-            (
-                network.get("block_policy_interval", "0s")
-                if network is not None
-                else "0s"
-            ),
+            (network.get("block_policy_interval", "0s") if network is not None else "0s"),
         )
     )
     source = _block_policy_source(args=args, template=template, network=network)
@@ -352,9 +348,8 @@ def _resolve_block_policy(
         default_mode,
         default_interval,
     )
-    if (
-        default_mode == "on_demand"
-        and (args.block_policy_mode is not None or args.block_policy_interval is not None)
+    if default_mode == "on_demand" and (
+        args.block_policy_mode is not None or args.block_policy_interval is not None
     ):
         runtime_args["block_policy_interval"] = "0s"
 
