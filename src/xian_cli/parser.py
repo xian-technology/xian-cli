@@ -426,11 +426,6 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     contract_pack_install_parser.add_argument(
-        "--stack-dir",
-        type=Path,
-        help="explicit xian-stack checkout path for stack-backed installers",
-    )
-    contract_pack_install_parser.add_argument(
         "--repo-dir",
         type=Path,
         help="explicit owning repo checkout path for external installers",
@@ -438,16 +433,6 @@ def build_parser() -> argparse.ArgumentParser:
     contract_pack_install_parser.add_argument("--rpc-url")
     contract_pack_install_parser.add_argument("--chain-id")
     contract_pack_install_parser.add_argument("--deployer-private-key")
-    contract_pack_install_parser.add_argument(
-        "--top-up-liquidity",
-        action="store_true",
-        help=("top up the local DEX demo pool when the selected recipe supports it"),
-    )
-    contract_pack_install_parser.add_argument(
-        "--emit-test-swap",
-        action="store_true",
-        help="emit a small local DEX swap after installation",
-    )
     contract_pack_install_parser.add_argument(
         "--dry-run",
         action="store_true",

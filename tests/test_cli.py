@@ -5767,11 +5767,11 @@ class ConfigRepoTests(unittest.TestCase):
                                 "display_name": "Core",
                                 "summary": "Deploy core contracts",
                                 "install": {
-                                    "kind": ("xian-stack.localnet-dex-bootstrap"),
-                                    "deploy_helper": True,
-                                    "seed_demo_pool": False,
-                                    "top_up_liquidity": False,
-                                    "emit_test_swap": False,
+                                    "kind": "external",
+                                    "repo": "xian-dex",
+                                    "command": (
+                                        "uv run python scripts/bootstrap_dex.py --recipe core"
+                                    ),
                                 },
                             }
                         ],
@@ -5952,11 +5952,11 @@ class ConfigRepoTests(unittest.TestCase):
                                 "display_name": "Core",
                                 "summary": "Deploy core contracts",
                                 "install": {
-                                    "kind": ("xian-stack.localnet-dex-bootstrap"),
-                                    "deploy_helper": True,
-                                    "seed_demo_pool": False,
-                                    "top_up_liquidity": False,
-                                    "emit_test_swap": False,
+                                    "kind": "external",
+                                    "repo": "xian-dex",
+                                    "command": (
+                                        "uv run python scripts/bootstrap_dex.py --recipe core"
+                                    ),
                                 },
                             }
                         ],
@@ -5984,15 +5984,14 @@ class ConfigRepoTests(unittest.TestCase):
             self.assertTrue(payload["ok"])
             self.assertEqual(payload["contract_bundle_count"], 1)
 
-    def test_contract_pack_install_dex_dry_run_uses_pack_bundle(
+    def test_contract_pack_install_dex_dry_run_uses_owner_command(
         self,
     ) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             base_dir = Path(tmp_dir)
             configs_dir = base_dir / "xian-configs"
-            stack_dir = base_dir / "xian-stack"
-            (stack_dir / "scripts").mkdir(parents=True)
-            (stack_dir / "scripts" / "backend.py").write_text("# test backend\n", encoding="utf-8")
+            owner_repo = base_dir / "xian-dex"
+            owner_repo.mkdir()
             pack_dir = configs_dir / "contract-packs" / "dex"
             source_path = pack_dir / "contracts" / "con_demo.s.py"
             source_path.parent.mkdir(parents=True)
@@ -6039,11 +6038,12 @@ class ConfigRepoTests(unittest.TestCase):
                                 "display_name": "Local Demo",
                                 "summary": "Deploy demo contracts",
                                 "install": {
-                                    "kind": ("xian-stack.localnet-dex-bootstrap"),
-                                    "deploy_helper": True,
-                                    "seed_demo_pool": True,
-                                    "top_up_liquidity": False,
-                                    "emit_test_swap": False,
+                                    "kind": "external",
+                                    "repo": "xian-dex",
+                                    "command": (
+                                        "uv run python scripts/bootstrap_dex.py "
+                                        "--recipe local-demo"
+                                    ),
                                 },
                             }
                         ],
@@ -6064,8 +6064,14 @@ class ConfigRepoTests(unittest.TestCase):
                         str(base_dir),
                         "--configs-dir",
                         str(configs_dir),
-                        "--stack-dir",
-                        str(stack_dir),
+                        "--repo-dir",
+                        str(owner_repo),
+                        "--rpc-url",
+                        "http://127.0.0.1:26657",
+                        "--chain-id",
+                        "xian-local-1",
+                        "--deployer-private-key",
+                        "secret",
                     ]
                 )
 
@@ -6074,10 +6080,23 @@ class ConfigRepoTests(unittest.TestCase):
             self.assertTrue(payload["dry_run"])
             self.assertEqual(payload["contract_pack"], "dex")
             self.assertEqual(payload["recipe"], "local-demo")
-            self.assertIn("--seed-demo-pool", payload["command"])
+            self.assertEqual(payload["repo"], "xian-dex")
+            self.assertEqual(payload["cwd"], str(owner_repo.resolve()))
             self.assertEqual(
-                payload["bundle"],
-                str((pack_dir / "contract-bundle.json").resolve()),
+                payload["command"],
+                ["uv", "run", "python", "scripts/bootstrap_dex.py", "--recipe", "local-demo"],
+            )
+            self.assertEqual(
+                payload["env"],
+                {
+                    "XIAN_CONTRACT_PACK_BUNDLE": str(
+                        (pack_dir / "contract-bundle.json").resolve()
+                    ),
+                    "XIAN_DEX_BUNDLE": str((pack_dir / "contract-bundle.json").resolve()),
+                    "XIAN_NODE_URL": "http://127.0.0.1:26657",
+                    "XIAN_CHAIN_ID": "xian-local-1",
+                    "XIAN_WALLET_PRIVATE_KEY": "<redacted>",
+                },
             )
 
     def test_contract_pack_install_external_dry_run_reports_owner_command(
@@ -6140,7 +6159,10 @@ class ConfigRepoTests(unittest.TestCase):
                                 "install": {
                                     "kind": "external",
                                     "repo": "xian-stable-protocol",
-                                    "command": ("uv run python scripts/bootstrap_protocol.py"),
+                                    "command": (
+                                        "uv run --group deploy python "
+                                        "scripts/bootstrap_protocol.py"
+                                    ),
                                 },
                             }
                         ],
@@ -6175,7 +6197,14 @@ class ConfigRepoTests(unittest.TestCase):
             self.assertEqual(payload["cwd"], str(owner_repo.resolve()))
             self.assertEqual(
                 payload["command"],
-                ["uv", "run", "python", "scripts/bootstrap_protocol.py"],
+                [
+                    "uv",
+                    "run",
+                    "--group",
+                    "deploy",
+                    "python",
+                    "scripts/bootstrap_protocol.py",
+                ],
             )
 
     def test_example_starter_returns_selected_flow(self) -> None:

@@ -9,7 +9,7 @@ behind network manifests, node profiles, and backend integration.
 
 - `cli.py`: the top-level command parser and workflow implementation
 - `commands/`: focused command implementations
-  - `catalog.py`: template, contract-pack, example, contract, and key commands
+  - `catalog.py`: template, product, contract-pack, example, contract, and key commands
   - `network.py`: network create/join and operator bundle packaging
   - `node.py`: node init/start/stop/status/endpoints/health and snapshots
   - `node_context.py`: shared profile, genesis, key, home, and snapshot helpers
@@ -19,7 +19,7 @@ behind network manifests, node profiles, and backend integration.
 - `client/`: automation-oriented wallet/query/transaction commands backed by
   `xian-py`, including artifact-backed contract submission
 - `models.py`: typed manifest, profile, and related config models
-- `config_repo.py`: canonical network/template/contract-pack/example resolution
+- `config_repo.py`: canonical network/template/product/contract-pack/example resolution
 - `contract_bundles.py`: hash-pinned contract bundle validation helpers
 - `contract build-artifacts`: command surface for compiler-backed deployment
   artifact generation

@@ -29,7 +29,6 @@ from xian_cli.models import (
     read_product,
     write_json,
 )
-from xian_cli.runtime import resolve_stack_dir
 
 
 def _load_template(
@@ -161,10 +160,6 @@ def _contract_pack_recipe(pack: dict, recipe_name: str | None) -> dict:
     raise ValueError(f"contract pack recipe '{selected_recipe}' not found; available: {available}")
 
 
-def _bool_backend_arg(name: str, value: bool) -> str:
-    return f"--{name}" if value else f"--no-{name}"
-
-
 def _env_var_for_repo(repo_name: str) -> str:
     return repo_name.upper().replace("-", "_") + "_DIR"
 
@@ -200,10 +195,52 @@ def _resolve_external_repo_dir(
     )
 
 
+def _contract_pack_bundle_env_var(pack_name: str) -> str:
+    normalized = pack_name.upper().replace("-", "_")
+    return f"XIAN_{normalized}_BUNDLE"
+
+
+def _external_installer_env(
+    *,
+    args: argparse.Namespace,
+    pack_path: Path,
+    pack: dict,
+) -> tuple[dict[str, str], dict[str, str]]:
+    env = os.environ.copy()
+    displayed: dict[str, str] = {}
+
+    bundle_paths = pack.get("contract_bundle_paths", [])
+    if bundle_paths:
+        bundle_path = _resolve_catalog_ref(
+            pack_path,
+            bundle_paths[0],
+            collection_name="contract-packs",
+        )
+        bundle_value = str(bundle_path)
+        env["XIAN_CONTRACT_PACK_BUNDLE"] = bundle_value
+        displayed["XIAN_CONTRACT_PACK_BUNDLE"] = bundle_value
+        pack_bundle_var = _contract_pack_bundle_env_var(pack["name"])
+        env[pack_bundle_var] = bundle_value
+        displayed[pack_bundle_var] = bundle_value
+
+    if args.rpc_url is not None:
+        env["XIAN_NODE_URL"] = args.rpc_url
+        displayed["XIAN_NODE_URL"] = args.rpc_url
+    if args.chain_id is not None:
+        env["XIAN_CHAIN_ID"] = args.chain_id
+        displayed["XIAN_CHAIN_ID"] = args.chain_id
+    if args.deployer_private_key is not None:
+        env["XIAN_WALLET_PRIVATE_KEY"] = args.deployer_private_key
+        displayed["XIAN_WALLET_PRIVATE_KEY"] = "<redacted>"
+
+    return env, displayed
+
+
 def _handle_external_contract_pack_install(
     *,
     args: argparse.Namespace,
     base_dir: Path,
+    pack_path: Path,
     pack: dict,
     recipe: dict,
     install: dict,
@@ -221,6 +258,11 @@ def _handle_external_contract_pack_install(
         explicit=args.repo_dir,
     )
     command = shlex.split(command_text)
+    env, displayed_env = _external_installer_env(
+        args=args,
+        pack_path=pack_path,
+        pack=pack,
+    )
     payload = {
         "contract_pack": pack["name"],
         "recipe": recipe["name"],
@@ -228,6 +270,8 @@ def _handle_external_contract_pack_install(
         "cwd": str(repo_dir),
         "command": command,
     }
+    if displayed_env:
+        payload["env"] = displayed_env
     if args.dry_run:
         payload["dry_run"] = True
         print(json.dumps(payload, indent=2))
@@ -236,6 +280,7 @@ def _handle_external_contract_pack_install(
     result = subprocess.run(
         command,
         cwd=repo_dir,
+        env=env,
         check=True,
         capture_output=True,
         text=True,
@@ -312,81 +357,15 @@ def _handle_contract_pack_install(args: argparse.Namespace) -> int:
         return _handle_external_contract_pack_install(
             args=args,
             base_dir=base_dir,
+            pack_path=pack_path,
             pack=pack,
             recipe=recipe,
             install=install,
         )
-    if install["kind"] != "xian-stack.localnet-dex-bootstrap":
-        raise ValueError(
-            f"contract pack {pack['name']} recipe {recipe['name']} uses "
-            f"install kind {install['kind']!r}; run the owning repo bootstrap "
-            "command"
-        )
-    if pack["name"] != "dex":
-        raise ValueError("only the dex contract pack has a stack installer today")
-
-    if not pack["contract_bundle_paths"]:
-        raise ValueError("dex contract pack must define a contract bundle")
-    dex_bundle = _resolve_catalog_ref(
-        pack_path,
-        pack["contract_bundle_paths"][0],
-        collection_name="contract-packs",
+    raise ValueError(
+        f"contract pack {pack['name']} recipe {recipe['name']} uses "
+        f"unsupported install kind {install['kind']!r}"
     )
-    stack_dir = resolve_stack_dir(base_dir, explicit=args.stack_dir)
-    command = [
-        sys.executable,
-        str(stack_dir / "scripts" / "backend.py"),
-        "localnet-dex-bootstrap",
-        "--dex-bundle",
-        str(dex_bundle),
-        _bool_backend_arg("deploy-helper", bool(install["deploy_helper"])),
-        _bool_backend_arg(
-            "seed-demo-pool",
-            bool(install["seed_demo_pool"]),
-        ),
-        _bool_backend_arg(
-            "top-up-liquidity",
-            bool(install["top_up_liquidity"]) or args.top_up_liquidity,
-        ),
-        _bool_backend_arg(
-            "emit-test-swap",
-            bool(install["emit_test_swap"]) or args.emit_test_swap,
-        ),
-    ]
-    if args.rpc_url is not None:
-        command.extend(["--rpc-url", args.rpc_url])
-    if args.chain_id is not None:
-        command.extend(["--chain-id", args.chain_id])
-    if args.deployer_private_key is not None:
-        command.extend(["--deployer-private-key", args.deployer_private_key])
-
-    if args.dry_run:
-        print(
-            json.dumps(
-                {
-                    "dry_run": True,
-                    "contract_pack": pack["name"],
-                    "recipe": recipe["name"],
-                    "bundle": str(dex_bundle),
-                    "command": command,
-                },
-                indent=2,
-            )
-        )
-        return 0
-
-    result = subprocess.run(
-        command,
-        cwd=stack_dir,
-        check=True,
-        capture_output=True,
-        text=True,
-    )
-    payload = json.loads(result.stdout)
-    payload["contract_pack"] = pack["name"]
-    payload["recipe"] = recipe["name"]
-    print(json.dumps(payload, indent=2))
-    return 0
 
 
 def _load_example(

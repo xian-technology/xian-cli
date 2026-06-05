@@ -67,10 +67,7 @@ SUPPORTED_RECOVERY_ARTIFACT_KINDS = {"snapshot_url"}
 CONTRACT_PACK_SCHEMA = "xian.contract_pack.v1"
 EXAMPLE_SCHEMA = "xian.example.v1"
 PRODUCT_SCHEMA = "xian.product.v1"
-SUPPORTED_CONTRACT_PACK_INSTALL_KINDS = {
-    "external",
-    "xian-stack.localnet-dex-bootstrap",
-}
+SUPPORTED_CONTRACT_PACK_INSTALL_KINDS = {"external"}
 SUPPORTED_PRODUCT_INSTALL_PHASES = {"post_genesis"}
 
 DEFAULT_P2P = {
@@ -1276,18 +1273,6 @@ def _normalize_contract_pack_recipe(payload: dict) -> dict:
             allowed={"kind", "repo", "command"},
             label="contract pack recipe install",
         )
-    elif install_kind == "xian-stack.localnet-dex-bootstrap":
-        _reject_unknown_fields(
-            install,
-            allowed={
-                "kind",
-                "deploy_helper",
-                "seed_demo_pool",
-                "top_up_liquidity",
-                "emit_test_swap",
-            },
-            label="contract pack recipe install",
-        )
 
     return {
         "name": _require_str(payload, "name"),
@@ -1475,19 +1460,20 @@ def _normalize_product_lifecycle(payload: dict) -> dict:
         )
 
     installer = payload.get("installer")
-    if installer is not None:
-        _reject_unknown_object_fields(
-            installer,
-            allowed={"kind", "contract_pack", "recipe", "repo", "command"},
-            label="product lifecycle installer",
-        )
-        installer = {
-            "kind": _require_str(installer, "kind"),
-            "contract_pack": _require_optional_str(installer, "contract_pack"),
-            "recipe": _require_optional_str(installer, "recipe"),
-            "repo": _require_optional_str(installer, "repo"),
-            "command": _require_optional_str(installer, "command"),
-        }
+    if not isinstance(installer, dict):
+        raise ValueError("product lifecycle installer must be a JSON object")
+    _reject_unknown_object_fields(
+        installer,
+        allowed={"kind", "contract_pack", "recipe", "repo", "command"},
+        label="product lifecycle installer",
+    )
+    installer = {
+        "kind": _require_str(installer, "kind"),
+        "contract_pack": _require_optional_str(installer, "contract_pack"),
+        "recipe": _require_optional_str(installer, "recipe"),
+        "repo": _require_optional_str(installer, "repo"),
+        "command": _require_optional_str(installer, "command"),
+    }
 
     included_in_genesis = _require_bool(payload, "included_in_genesis", default=False)
     if included_in_genesis:

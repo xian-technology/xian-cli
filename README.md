@@ -15,7 +15,7 @@ workspace layout or explicit `--stack-dir` and `--configs-dir` flags.
 ```mermaid
 flowchart LR
   Operator["Operator or automation"] --> CLI["xian CLI"]
-  CLI --> Configs["xian-configs manifests, contract packs, examples"]
+  CLI --> Configs["xian-configs manifests, products, contract packs, examples"]
   CLI --> Stack["xian-stack backend"]
   CLI --> SDK["xian-py client"]
   Configs --> Profiles["Network and node profiles"]
@@ -150,6 +150,7 @@ operations to `xian-stack`, and uses `xian-py` for wallet / RPC automation.
 | Package operator handoff | `xian network package-operator-bundle ...` | `xian-cli`, `xian-configs` |
 | Operate a node | `xian node start/status/health/endpoints/stop ...` | `xian-stack` |
 | Diagnose a setup | `xian doctor ...`, `xian snapshot restore ...` | `xian-stack`, `xian-abci` |
+| Inspect optional products | `xian product list/show ...` | `xian-configs` products |
 | Install reusable contracts | `xian contract-pack list/show/validate/install ...` | `xian-configs` contract packs |
 | Inspect full app starters | `xian example list/show/starter ...` | `xian-configs` examples |
 | Script chain interactions | `xian client query/call/simulate/tx ...` | `xian-py` |
@@ -171,14 +172,16 @@ uv run xian node endpoints local-indexed
 Install and smoke a reusable contract pack:
 
 ```bash
+uv run xian product list
+uv run xian product show dex
 uv run xian contract-pack list
 uv run xian contract-pack show dex
 uv run xian contract-pack validate dex
 uv run xian contract-pack install dex \
+  --repo-dir ../xian-dex \
+  --recipe local-demo \
   --rpc-url http://127.0.0.1:26657 \
-  --deployer-private-key "$XIAN_PRIVATE_KEY" \
-  --top-up-liquidity \
-  --emit-test-swap
+  --deployer-private-key "$XIAN_PRIVATE_KEY"
 ```
 
 Inspect a complete starter flow before creating files or running installers:
@@ -253,7 +256,7 @@ uv run xian client query balance \
 ## Capabilities
 
 - key generation and validator material
-- network template, contract-pack, and example discovery
+- network template, product, contract-pack, and example discovery
 - network creation and network join flows
 - node initialization, start, stop, and status
 - endpoint and health discovery, including optional dashboard, monitoring,
@@ -276,6 +279,7 @@ uv run xian client query balance \
 - `xian node ...` — initialize, start, stop, inspect, and recover a node profile
 - `xian client ...` — wallet, query, call / simulate, and transaction automation
   including artifact-backed contract submission
+- `xian product ...` — inspect optional post-genesis product surfaces
 - `xian contract-pack ...` — inspect, validate, and install reusable contract packs
 - `xian example ...` — discover guided application / operator starter flows
 - `xian contract build-artifacts ...` — build Xian VM deployment artifacts
