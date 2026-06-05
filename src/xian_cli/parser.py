@@ -522,6 +522,47 @@ def build_parser() -> argparse.ArgumentParser:
     )
     example_starter_parser.set_defaults(handler_name="_handle_example_starter")
 
+    product_parser = subparsers.add_parser(
+        "product",
+        help="inspect optional products installable after a chain exists",
+    )
+    product_subparsers = product_parser.add_subparsers(dest="product_command", required=True)
+
+    product_list_parser = product_subparsers.add_parser("list", help="list available products")
+    product_list_parser.add_argument(
+        "--base-dir",
+        type=Path,
+        default=Path.cwd(),
+        help=("workspace directory that may contain local ./products and optionally sibling repos"),
+    )
+    product_list_parser.add_argument(
+        "--configs-dir",
+        type=Path,
+        help=(
+            "explicit xian-configs checkout path; defaults to XIAN_CONFIGS_DIR "
+            "or the sibling workspace layout"
+        ),
+    )
+    product_list_parser.set_defaults(handler_name="_handle_product_list")
+
+    product_show_parser = product_subparsers.add_parser("show", help="show one product")
+    product_show_parser.add_argument("name", help="product name")
+    product_show_parser.add_argument(
+        "--base-dir",
+        type=Path,
+        default=Path.cwd(),
+        help=("workspace directory that may contain local ./products and optionally sibling repos"),
+    )
+    product_show_parser.add_argument(
+        "--configs-dir",
+        type=Path,
+        help=(
+            "explicit xian-configs checkout path; defaults to XIAN_CONFIGS_DIR "
+            "or the sibling workspace layout"
+        ),
+    )
+    product_show_parser.set_defaults(handler_name="_handle_product_show")
+
     contract_parser = subparsers.add_parser("contract", help="contract helpers")
     contract_subparsers = contract_parser.add_subparsers(dest="contract_command", required=True)
 

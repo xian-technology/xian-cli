@@ -236,3 +236,57 @@ def list_example_paths(
             examples[path.parent.name] = path.resolve()
 
     return [examples[name] for name in sorted(examples)]
+
+
+def resolve_product_path(
+    *,
+    base_dir: Path,
+    product_name: str,
+    configs_dir: Path | None = None,
+) -> Path:
+    local_product = (base_dir / "products" / product_name / "product.json").resolve()
+    if local_product.exists():
+        return local_product
+
+    resolved_configs_dir = resolve_configs_dir(base_dir, explicit=configs_dir)
+    canonical_product = (
+        resolved_configs_dir / "products" / product_name / "product.json"
+    ).resolve()
+    if canonical_product.exists():
+        return canonical_product
+
+    raise FileNotFoundError(
+        "product not found in local workspace or xian-configs: "
+        f"{local_product} or {canonical_product}"
+    )
+
+
+def list_product_paths(
+    *,
+    base_dir: Path,
+    configs_dir: Path | None = None,
+) -> list[Path]:
+    products: dict[str, Path] = {}
+
+    try:
+        resolved_configs_dir = resolve_configs_dir(
+            base_dir,
+            explicit=configs_dir,
+        )
+    except FileNotFoundError:
+        if configs_dir is not None or os.environ.get("XIAN_CONFIGS_DIR"):
+            raise
+        resolved_configs_dir = None
+
+    if resolved_configs_dir is not None:
+        canonical_dir = resolved_configs_dir / "products"
+        if canonical_dir.exists():
+            for path in sorted(canonical_dir.glob("*/product.json")):
+                products[path.parent.name] = path.resolve()
+
+    local_dir = base_dir / "products"
+    if local_dir.exists():
+        for path in sorted(local_dir.glob("*/product.json")):
+            products[path.parent.name] = path.resolve()
+
+    return [products[name] for name in sorted(products)]

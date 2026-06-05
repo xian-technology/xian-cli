@@ -66,10 +66,12 @@ DEFAULT_FREE_BLOCK_MAX_CHI = 20_000_000
 SUPPORTED_RECOVERY_ARTIFACT_KINDS = {"snapshot_url"}
 CONTRACT_PACK_SCHEMA = "xian.contract_pack.v1"
 EXAMPLE_SCHEMA = "xian.example.v1"
+PRODUCT_SCHEMA = "xian.product.v1"
 SUPPORTED_CONTRACT_PACK_INSTALL_KINDS = {
     "external",
     "xian-stack.localnet-dex-bootstrap",
 }
+SUPPORTED_PRODUCT_INSTALL_PHASES = {"post_genesis"}
 
 DEFAULT_P2P = {
     "seeds": [],
@@ -1419,6 +1421,161 @@ def normalize_example(payload: dict) -> dict:
     }
 
 
+def _normalize_product_contract_pack_ref(payload: dict) -> dict:
+    if not isinstance(payload, dict):
+        raise ValueError("product contract pack reference must be a JSON object")
+    _reject_unknown_fields(
+        payload,
+        allowed={"name", "recipe", "required"},
+        label="product contract pack reference",
+    )
+    return {
+        "name": _require_str(payload, "name"),
+        "recipe": _require_optional_str(payload, "recipe"),
+        "required": _require_bool(payload, "required", default=True),
+    }
+
+
+def _normalize_product_component(payload: dict, *, label: str) -> dict:
+    if not isinstance(payload, dict):
+        raise ValueError(f"{label} must be a JSON object")
+    _reject_unknown_fields(
+        payload,
+        allowed={"name", "kind", "repo", "path", "description", "optional"},
+        label=label,
+    )
+    return {
+        "name": _require_str(payload, "name"),
+        "kind": _require_str(payload, "kind"),
+        "repo": _require_str(payload, "repo"),
+        "path": _require_optional_str(payload, "path"),
+        "description": _require_optional_str(payload, "description"),
+        "optional": _require_bool(payload, "optional", default=False),
+    }
+
+
+def _normalize_product_lifecycle(payload: dict) -> dict:
+    if not isinstance(payload, dict):
+        raise ValueError("product lifecycle must be a JSON object")
+    _reject_unknown_fields(
+        payload,
+        allowed={
+            "install_phase",
+            "included_in_genesis",
+            "shipped_with_node_image",
+            "installer",
+        },
+        label="product lifecycle",
+    )
+    install_phase = _require_str(payload, "install_phase")
+    if install_phase not in SUPPORTED_PRODUCT_INSTALL_PHASES:
+        raise ValueError(
+            "product lifecycle install_phase must be one of "
+            f"{sorted(SUPPORTED_PRODUCT_INSTALL_PHASES)}"
+        )
+
+    installer = payload.get("installer")
+    if installer is not None:
+        _reject_unknown_object_fields(
+            installer,
+            allowed={"kind", "contract_pack", "recipe", "repo", "command"},
+            label="product lifecycle installer",
+        )
+        installer = {
+            "kind": _require_str(installer, "kind"),
+            "contract_pack": _require_optional_str(installer, "contract_pack"),
+            "recipe": _require_optional_str(installer, "recipe"),
+            "repo": _require_optional_str(installer, "repo"),
+            "command": _require_optional_str(installer, "command"),
+        }
+
+    included_in_genesis = _require_bool(payload, "included_in_genesis", default=False)
+    if included_in_genesis:
+        raise ValueError("product lifecycle included_in_genesis must be false")
+    shipped_with_node_image = _require_bool(
+        payload,
+        "shipped_with_node_image",
+        default=False,
+    )
+    if shipped_with_node_image:
+        raise ValueError("product lifecycle shipped_with_node_image must be false")
+
+    return {
+        "install_phase": install_phase,
+        "included_in_genesis": included_in_genesis,
+        "shipped_with_node_image": shipped_with_node_image,
+        "installer": installer,
+    }
+
+
+def normalize_product(payload: dict) -> dict:
+    if not isinstance(payload, dict):
+        raise ValueError("product must be a JSON object")
+    _reject_unknown_fields(
+        payload,
+        allowed={
+            "schema",
+            "schema_version",
+            "name",
+            "display_name",
+            "category",
+            "maturity",
+            "description",
+            "source_owner_repo",
+            "docs_path",
+            "contract_packs",
+            "examples",
+            "apps",
+            "services",
+            "lifecycle",
+        },
+        label="product",
+    )
+
+    contract_packs = payload.get("contract_packs", [])
+    if not isinstance(contract_packs, list) or any(
+        not isinstance(item, dict) for item in contract_packs
+    ):
+        raise ValueError("product contract_packs must be a list of objects")
+
+    apps = payload.get("apps", [])
+    if not isinstance(apps, list) or any(not isinstance(item, dict) for item in apps):
+        raise ValueError("product apps must be a list of objects")
+
+    services = payload.get("services", [])
+    if not isinstance(services, list) or any(not isinstance(item, dict) for item in services):
+        raise ValueError("product services must be a list of objects")
+
+    lifecycle = payload.get("lifecycle")
+    if not isinstance(lifecycle, dict):
+        raise ValueError("product lifecycle must be a JSON object")
+
+    return {
+        "schema": _require_schema(payload, expected=PRODUCT_SCHEMA),
+        "schema_version": _require_schema_version(payload),
+        "name": _require_str(payload, "name"),
+        "display_name": _require_str(payload, "display_name"),
+        "category": _require_str(payload, "category"),
+        "maturity": _require_str(payload, "maturity"),
+        "description": _require_str(payload, "description"),
+        "source_owner_repo": _require_str(payload, "source_owner_repo"),
+        "docs_path": _require_str(payload, "docs_path"),
+        "contract_packs": [
+            _normalize_product_contract_pack_ref(item) for item in contract_packs
+        ],
+        "examples": _require_str_list(payload, "examples"),
+        "apps": [
+            _normalize_product_component(item, label="product app")
+            for item in apps
+        ],
+        "services": [
+            _normalize_product_component(item, label="product service")
+            for item in services
+        ],
+        "lifecycle": _normalize_product_lifecycle(lifecycle),
+    }
+
+
 def normalize_recovery_plan(payload: dict) -> dict:
     if not isinstance(payload, dict):
         raise ValueError("recovery plan must be a JSON object")
@@ -1695,6 +1852,10 @@ def read_contract_pack(path: Path) -> dict:
 
 def read_example(path: Path) -> dict:
     return normalize_example(read_json(path))
+
+
+def read_product(path: Path) -> dict:
+    return normalize_product(read_json(path))
 
 
 def read_recovery_plan(path: Path) -> dict:

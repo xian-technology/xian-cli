@@ -38,6 +38,7 @@ from xian_cli.models import (
     read_network_manifest,
     read_network_template,
     read_node_profile,
+    read_product,
 )
 from xian_cli.runtime import (
     default_home_for_backend,
@@ -5796,6 +5797,105 @@ class ConfigRepoTests(unittest.TestCase):
             payload = json.loads(stdout.getvalue())
             self.assertEqual(payload[0]["name"], "dex")
             self.assertEqual(payload[0]["default_recipe"], "core")
+
+    def test_product_list_reads_canonical_products(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            base_dir = Path(tmp_dir)
+            configs_dir = base_dir / "xian-configs"
+            product_dir = configs_dir / "products" / "dex"
+            product_dir.mkdir(parents=True)
+            (product_dir / "product.json").write_text(
+                json.dumps(
+                    {
+                        "schema": "xian.product.v1",
+                        "schema_version": 1,
+                        "name": "dex",
+                        "display_name": "Xian DEX",
+                        "category": "on_chain_product",
+                        "maturity": "candidate",
+                        "description": "DEX product",
+                        "source_owner_repo": "xian-dex",
+                        "docs_path": "/products/dex",
+                        "contract_packs": [
+                            {"name": "dex", "recipe": "core", "required": True}
+                        ],
+                        "examples": ["dex-demo"],
+                        "apps": [
+                            {
+                                "name": "snakx",
+                                "kind": "web",
+                                "repo": "xian-dex",
+                                "path": "web",
+                                "description": "DEX web app",
+                            }
+                        ],
+                        "services": [],
+                        "lifecycle": {
+                            "install_phase": "post_genesis",
+                            "included_in_genesis": False,
+                            "shipped_with_node_image": False,
+                            "installer": {
+                                "kind": "contract-pack",
+                                "contract_pack": "dex",
+                                "recipe": "core",
+                                "repo": "xian-dex",
+                            },
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            stdout = io.StringIO()
+            with redirect_stdout(stdout):
+                exit_code = main(
+                    [
+                        "product",
+                        "list",
+                        "--base-dir",
+                        str(base_dir),
+                        "--configs-dir",
+                        str(configs_dir),
+                    ]
+                )
+
+            self.assertEqual(exit_code, 0)
+            payload = json.loads(stdout.getvalue())
+            self.assertEqual(payload[0]["name"], "dex")
+            self.assertEqual(payload[0]["contract_packs"][0]["name"], "dex")
+            self.assertFalse(payload[0]["lifecycle"]["included_in_genesis"])
+
+    def test_read_product_requires_post_genesis_lifecycle(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            product_path = Path(tmp_dir) / "product.json"
+            product_path.write_text(
+                json.dumps(
+                    {
+                        "schema": "xian.product.v1",
+                        "schema_version": 1,
+                        "name": "dex",
+                        "display_name": "Xian DEX",
+                        "category": "on_chain_product",
+                        "maturity": "candidate",
+                        "description": "DEX product",
+                        "source_owner_repo": "xian-dex",
+                        "docs_path": "/products/dex",
+                        "contract_packs": [],
+                        "examples": [],
+                        "apps": [],
+                        "services": [],
+                        "lifecycle": {
+                            "install_phase": "genesis",
+                            "included_in_genesis": True,
+                            "shipped_with_node_image": False,
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            with self.assertRaisesRegex(ValueError, "install_phase"):
+                read_product(product_path)
 
     def test_contract_pack_validate_checks_contract_bundle_sources(
         self,

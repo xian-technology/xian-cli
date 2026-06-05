@@ -14,9 +14,11 @@ from xian_cli.config_repo import (
     list_contract_pack_paths,
     list_example_paths,
     list_network_template_paths,
+    list_product_paths,
     resolve_contract_pack_path,
     resolve_example_path,
     resolve_network_template_path,
+    resolve_product_path,
 )
 from xian_cli.contract_bundles import validate_contract_bundle
 from xian_cli.models import (
@@ -24,6 +26,7 @@ from xian_cli.models import (
     read_example,
     read_json,
     read_network_template,
+    read_product,
     write_json,
 )
 from xian_cli.runtime import resolve_stack_dir
@@ -466,6 +469,60 @@ def _handle_example_starter(args: argparse.Namespace) -> int:
         "flow": flow,
     }
     print(json.dumps(starter, indent=2))
+    return 0
+
+
+def _load_product(
+    *,
+    base_dir: Path,
+    product_name: str,
+    configs_dir: Path | None,
+) -> dict:
+    product_path = resolve_product_path(
+        base_dir=base_dir,
+        product_name=product_name,
+        configs_dir=configs_dir,
+    )
+    return read_product(product_path)
+
+
+def _handle_product_list(args: argparse.Namespace) -> int:
+    base_dir = args.base_dir.resolve()
+    products = [
+        read_product(path)
+        for path in list_product_paths(
+            base_dir=base_dir,
+            configs_dir=args.configs_dir,
+        )
+    ]
+    summaries = [
+        {
+            "name": product["name"],
+            "display_name": product["display_name"],
+            "category": product["category"],
+            "maturity": product["maturity"],
+            "description": product["description"],
+            "source_owner_repo": product["source_owner_repo"],
+            "docs_path": product["docs_path"],
+            "contract_packs": product["contract_packs"],
+            "apps": product["apps"],
+            "services": product["services"],
+            "lifecycle": product["lifecycle"],
+        }
+        for product in products
+    ]
+    print(json.dumps(summaries, indent=2))
+    return 0
+
+
+def _handle_product_show(args: argparse.Namespace) -> int:
+    base_dir = args.base_dir.resolve()
+    product = _load_product(
+        base_dir=base_dir,
+        product_name=args.name,
+        configs_dir=args.configs_dir,
+    )
+    print(json.dumps(product, indent=2))
     return 0
 
 
