@@ -1546,17 +1546,11 @@ def normalize_product(payload: dict) -> dict:
         "description": _require_str(payload, "description"),
         "source_owner_repo": _require_str(payload, "source_owner_repo"),
         "docs_path": _require_str(payload, "docs_path"),
-        "contract_packs": [
-            _normalize_product_contract_pack_ref(item) for item in contract_packs
-        ],
+        "contract_packs": [_normalize_product_contract_pack_ref(item) for item in contract_packs],
         "examples": _require_str_list(payload, "examples"),
-        "apps": [
-            _normalize_product_component(item, label="product app")
-            for item in apps
-        ],
+        "apps": [_normalize_product_component(item, label="product app") for item in apps],
         "services": [
-            _normalize_product_component(item, label="product service")
-            for item in services
+            _normalize_product_component(item, label="product service") for item in services
         ],
         "lifecycle": _normalize_product_lifecycle(lifecycle),
     }

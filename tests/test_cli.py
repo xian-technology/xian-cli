@@ -5816,9 +5816,7 @@ class ConfigRepoTests(unittest.TestCase):
                         "description": "DEX product",
                         "source_owner_repo": "xian-dex",
                         "docs_path": "/products/dex",
-                        "contract_packs": [
-                            {"name": "dex", "recipe": "core", "required": True}
-                        ],
+                        "contract_packs": [{"name": "dex", "recipe": "core", "required": True}],
                         "examples": ["dex-demo"],
                         "apps": [
                             {
@@ -6041,8 +6039,7 @@ class ConfigRepoTests(unittest.TestCase):
                                     "kind": "external",
                                     "repo": "xian-dex",
                                     "command": (
-                                        "uv run python scripts/bootstrap_dex.py "
-                                        "--recipe local-demo"
+                                        "uv run python scripts/bootstrap_dex.py --recipe local-demo"
                                     ),
                                 },
                             }
@@ -6089,9 +6086,7 @@ class ConfigRepoTests(unittest.TestCase):
             self.assertEqual(
                 payload["env"],
                 {
-                    "XIAN_CONTRACT_PACK_BUNDLE": str(
-                        (pack_dir / "contract-bundle.json").resolve()
-                    ),
+                    "XIAN_CONTRACT_PACK_BUNDLE": str((pack_dir / "contract-bundle.json").resolve()),
                     "XIAN_DEX_BUNDLE": str((pack_dir / "contract-bundle.json").resolve()),
                     "XIAN_NODE_URL": "http://127.0.0.1:26657",
                     "XIAN_CHAIN_ID": "xian-local-1",
@@ -6160,8 +6155,7 @@ class ConfigRepoTests(unittest.TestCase):
                                     "kind": "external",
                                     "repo": "xian-stable-protocol",
                                     "command": (
-                                        "uv run --group deploy python "
-                                        "scripts/bootstrap_protocol.py"
+                                        "uv run --group deploy python scripts/bootstrap_protocol.py"
                                     ),
                                 },
                             }
