@@ -15,7 +15,7 @@ workspace layout or explicit `--stack-dir` and `--configs-dir` flags.
 ```mermaid
 flowchart LR
   Operator["Operator or automation"] --> CLI["xian CLI"]
-  CLI --> Configs["xian-configs manifests, products, contract packs, examples"]
+  CLI --> Configs["xian-configs manifests and templates"]
   CLI --> Stack["xian-stack backend"]
   CLI --> SDK["xian-py client"]
   Configs --> Profiles["Network and node profiles"]
@@ -150,9 +150,8 @@ operations to `xian-stack`, and uses `xian-py` for wallet / RPC automation.
 | Package operator handoff | `xian network package-operator-bundle ...` | `xian-cli`, `xian-configs` |
 | Operate a node | `xian node start/status/health/endpoints/stop ...` | `xian-stack` |
 | Diagnose a setup | `xian doctor ...`, `xian snapshot restore ...` | `xian-stack`, `xian-abci` |
-| Inspect optional products | `xian product list/show ...` | `xian-configs` products |
-| Install reusable contracts | `xian contract-pack list/show/validate/install ...` | `xian-configs` contract packs |
-| Inspect full app starters | `xian example list/show/starter ...` | `xian-configs` examples |
+| Validate deployment bundles | `xian contract bundle validate ...` | product or contract repos |
+| Submit deployment artifacts | `xian client tx submit-artifacts ...` | product or contract repos, `xian-py` |
 | Script chain interactions | `xian client query/call/simulate/tx ...` | `xian-py` |
 
 Typical local development loop:
@@ -169,27 +168,13 @@ uv run xian node health local-indexed
 uv run xian node endpoints local-indexed
 ```
 
-Install and smoke a reusable contract pack:
+Product repos own product bootstrap. Use the CLI for generic bundle and
+transaction helpers, then run the product repo's installer:
 
 ```bash
-uv run xian product list
-uv run xian product show dex
-uv run xian contract-pack list
-uv run xian contract-pack show dex
-uv run xian contract-pack validate dex
-uv run xian contract-pack install dex \
-  --repo-dir ../xian-dex \
-  --recipe local-demo \
-  --rpc-url http://127.0.0.1:26657 \
-  --deployer-private-key "$XIAN_PRIVATE_KEY"
-```
-
-Inspect a complete starter flow before creating files or running installers:
-
-```bash
-uv run xian example list
-uv run xian example show dex-demo
-uv run xian example starter dex-demo --flow local
+uv run xian contract bundle validate ../xian-dex/contract-bundle.json
+cd ../xian-dex
+uv run python scripts/bootstrap_dex.py --recipe local-demo
 ```
 
 Validate a hash-pinned contract bundle directly:
@@ -232,9 +217,9 @@ uv run xian client query balance \
 - **Explicit artifacts, not hidden state.** Manifests and node profiles are
   human-readable files. The CLI inspects, generates, and updates them; it
   does not invent state outside them.
-- **Templates accelerate, never lock in.** Templates, contract packs, and examples
-  shorten common setups, but an operator who knows what they are doing should
-  still be able to work directly with manifests, profiles, and node homes.
+- **Templates accelerate, never lock in.** Templates shorten common network
+  setups, but an operator who knows what they are doing should still be able to
+  work directly with manifests, profiles, and node homes.
 - **Diagnostics are first-class.** Health, endpoint discovery, and `doctor`
   paths are core features, not afterthoughts.
 - **JSON-first for automation.** Client commands and inspection commands emit
@@ -256,14 +241,12 @@ uv run xian client query balance \
 ## Capabilities
 
 - key generation and validator material
-- network template, product, contract-pack, and example discovery
+- network template discovery
 - network creation and network join flows
 - node initialization, start, stop, and status
 - endpoint and health discovery, including optional dashboard, monitoring,
   and stack-managed `xian-intentkit` / `xian-dex-automation`
 - snapshot restore and doctor diagnostics
-- contract-pack install / validation flows backed by `xian-configs`
-- example starter flows backed by `xian-configs`
 - Xian VM deployment artifact generation from contract source
 - hash-pinned contract-bundle validation
 - wallet, query, call / simulate, and transaction automation via `xian-py`
@@ -279,9 +262,6 @@ uv run xian client query balance \
 - `xian node ...` — initialize, start, stop, inspect, and recover a node profile
 - `xian client ...` — wallet, query, call / simulate, and transaction automation
   including artifact-backed contract submission
-- `xian product ...` — inspect optional post-genesis product surfaces
-- `xian contract-pack ...` — inspect, validate, and install reusable contract packs
-- `xian example ...` — discover guided application / operator starter flows
 - `xian contract build-artifacts ...` — build Xian VM deployment artifacts
 - `xian contract bundle ...` — validate hash-pinned contract bundles
 - `xian doctor ...` — run broader local diagnostics

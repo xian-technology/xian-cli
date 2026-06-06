@@ -50,4 +50,4 @@ If a native launcher is added later, it should:
 - shell out to the existing `xian` command or consume the same stable JSON
   backend contract
 - avoid re-implementing manifest semantics and operator workflows prematurely
-- remain a distribution layer, not a second source of product logic
+- remain a distribution layer, not a second source of application logic

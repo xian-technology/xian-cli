@@ -6,7 +6,7 @@ Main areas:
 
 - `src/xian_cli/cli.py`: thin parser/dispatcher entrypoint
 - `src/xian_cli/commands/`: focused command implementation modules for
-  catalog/key/contract/product commands, network workflows, node operations, recovery,
+  catalog/key/contract commands, network workflows, node operations, recovery,
   diagnostics, and shared node context
 - `src/xian_cli/models.py`: manifest and profile models
 - `src/xian_cli/runtime.py`: backend/runtime integration
@@ -17,4 +17,4 @@ Dependency direction:
 
 - consumes `xian-abci` bootstrap/config helpers
 - consumes `xian-stack` backend operations
-- consumes `xian-configs` manifests, products, contract packs, and examples
+- consumes `xian-configs` manifests and templates
