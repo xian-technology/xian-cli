@@ -22,9 +22,12 @@ PRESET_TEMPLATES = {
 }
 
 BLOCK_POLICY_CHOICES = [
-    ("on_demand", "wait for transactions; no idle empty blocks"),
-    ("idle_interval", "emit an empty block after the chain has been idle for the interval"),
-    ("periodic", "emit scheduled empty blocks after the empty-block interval"),
+    ("on_demand", "wait for transactions; lowest idle resource use, no heartbeat empty blocks"),
+    (
+        "idle_interval",
+        "produce empty blocks after idle periods; lighter than a fixed schedule",
+    ),
+    ("periodic", "fixed empty-block schedule; useful when tooling expects regular blocks"),
 ]
 
 RUNTIME_ARG_DEFAULTS = {
@@ -317,6 +320,10 @@ def _resolve_block_policy(
             f"{_describe_block_policy(default_mode, default_interval)}",
             file=sys.stderr,
         )
+        _prompt_note(
+            "This controls empty blocks. Keep the default unless your network or tooling needs "
+            "regular block production."
+        )
         if _prompt_bool("Customize block production policy", default=False):
             chosen_mode = _prompt_choice(
                 "Block production policy",
@@ -364,6 +371,10 @@ def _prompt_line(prompt: str) -> str:
 def _prompt_text(label: str, *, default: str) -> str:
     value = _prompt_line(f"{label} [{default}]: ")
     return value or default
+
+
+def _prompt_note(message: str) -> None:
+    print(f"  {message}", file=sys.stderr)
 
 
 def _prompt_choice(label: str, choices: list[tuple[str, str]], *, default: str) -> str:
@@ -417,11 +428,15 @@ def _resolve_key_mode(args: argparse.Namespace, *, prompt: bool) -> str:
     elif args.validator_key_ref is not None:
         key_mode = "existing"
     elif prompt:
+        _prompt_note(
+            "Generate is best for a new local node; existing is for operator-supplied "
+            "validator keys."
+        )
         key_mode = _prompt_choice(
             "Validator key",
             [
-                ("generate", "generate new validator key material"),
-                ("existing", "use an existing validator key file"),
+                ("generate", "create new validator key material for this node"),
+                ("existing", "reuse operator-supplied validator key material"),
             ],
             default="generate",
         )
@@ -440,12 +455,17 @@ def _resolve_plan(args: argparse.Namespace) -> SetupNodePlan:
 
     mode = args.mode
     if mode is None:
+        if prompt:
+            _prompt_note(
+                "Join uses a network manifest. Local creates a private single-node "
+                "development network."
+            )
         mode = (
             _prompt_choice(
                 "Setup path",
                 [
-                    ("join", "join an existing manifest-backed network"),
-                    ("local", "create a fresh local single-node network"),
+                    ("join", "join a manifest-backed network such as testnet"),
+                    ("local", "create a fresh single-node network for local development"),
                 ],
                 default="join",
             )
@@ -476,12 +496,14 @@ def _resolve_plan(args: argparse.Namespace) -> SetupNodePlan:
         )
 
     default_preset = "basic" if mode == "local" else "indexed"
+    if prompt and args.preset is None:
+        _prompt_note("The preset controls optional services written into the node profile.")
     preset = args.preset or (
         _prompt_choice(
             "Runtime preset",
             [
-                ("basic", "single node with minimal sidecars"),
-                ("indexed", "single node with BDS, dashboard, and monitoring"),
+                ("basic", "minimal sidecars; fastest local or development setup"),
+                ("indexed", "adds BDS, dashboard, and monitoring for operator observability"),
             ],
             default=default_preset,
         )
@@ -510,9 +532,18 @@ def _resolve_plan(args: argparse.Namespace) -> SetupNodePlan:
         elif args.bootstrap_mode is not None:
             restore_snapshot = args.bootstrap_mode == "snapshot"
         elif prompt:
+            _prompt_note(
+                "Snapshots can speed up joining, but only use snapshots from a trusted "
+                "manifest or operator."
+            )
             restore_snapshot = _prompt_bool("Restore configured snapshot after init", default=False)
 
     if args.start is None:
+        if prompt:
+            _prompt_note(
+                "Starting now runs the node lifecycle command and a local RPC health check "
+                "after setup."
+            )
         start = _prompt_bool("Start the node after setup", default=True) if prompt else False
     else:
         start = bool(args.start)
