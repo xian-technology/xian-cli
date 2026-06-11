@@ -12,6 +12,7 @@ import tempfile
 import tomllib
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
+from importlib.metadata import version
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
 from urllib.error import URLError
@@ -67,9 +68,7 @@ CANONICAL_RELEASE_SPLIT_IMAGE = (
 
 class ParserUxTests(unittest.TestCase):
     def test_top_level_version_flag_reports_package_version(self) -> None:
-        expected_version = tomllib.loads(
-            (Path(__file__).resolve().parents[1] / "pyproject.toml").read_text(encoding="utf-8")
-        )["project"]["version"]
+        expected_version = version("xian-tech-cli")
         stdout = io.StringIO()
 
         with redirect_stdout(stdout):
