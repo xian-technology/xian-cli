@@ -14,6 +14,8 @@ from xian_cli.models import (
 )
 from xian_cli.runtime import DEFAULT_RPC_TIMEOUT_SECONDS
 
+VALIDATOR_SELECTION_MODES = ("manual", "auto_top_n", "hybrid")
+
 
 def _package_version() -> str:
     try:
@@ -425,6 +427,14 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     create_parser.add_argument(
+        "--validator-selection-mode",
+        choices=VALIDATOR_SELECTION_MODES,
+        help=(
+            "validators contract selection mode for generated local genesis: "
+            "manual, auto_top_n, or hybrid"
+        ),
+    )
+    create_parser.add_argument(
         "--founder-private-key",
         help=(
             "64-character hex private key for the founder account; defaults "
@@ -765,6 +775,14 @@ def build_parser() -> argparse.ArgumentParser:
         "--genesis-bundle",
         default="local",
         help="genesis contract bundle used for --mode local; defaults to local",
+    )
+    setup_node_parser.add_argument(
+        "--validator-selection-mode",
+        choices=VALIDATOR_SELECTION_MODES,
+        help=(
+            "validators contract selection mode for generated --mode local genesis: "
+            "manual, auto_top_n, or hybrid"
+        ),
     )
     setup_node_parser.add_argument(
         "--bootstrap-mode",

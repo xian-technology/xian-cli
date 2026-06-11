@@ -195,6 +195,7 @@ def _build_creation_genesis(
     founder_private_key: str,
     validators: list[dict[str, object]],
     genesis_bundle: str,
+    validator_constructor_overrides: dict[str, object] | None = None,
 ) -> dict:
     genesis_builder = get_genesis_builder_module()
     return genesis_builder.build_local_network_genesis(
@@ -202,6 +203,7 @@ def _build_creation_genesis(
         founder_private_key=founder_private_key,
         validators=_build_creation_validator_entries(validators=validators),
         network=genesis_bundle,
+        validator_constructor_overrides=validator_constructor_overrides,
     )
 
 

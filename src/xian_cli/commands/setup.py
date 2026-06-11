@@ -30,6 +30,12 @@ BLOCK_POLICY_CHOICES = [
     ("periodic", "fixed empty-block schedule; useful when tooling expects regular blocks"),
 ]
 
+VALIDATOR_SELECTION_MODE_CHOICES = [
+    ("manual", "active validators are changed through governance votes"),
+    ("auto_top_n", "the top eligible bonded validators become active automatically"),
+    ("hybrid", "governance approves eligibility, then rebalance selects the top bonded set"),
+]
+
 RUNTIME_ARG_DEFAULTS = {
     "enable_bds": None,
     "enable_pruning": None,
@@ -142,6 +148,8 @@ class SetupNodePlan:
     block_policy_mode: str
     block_policy_interval: str
     block_policy_source: str
+    validator_selection_mode: str | None
+    validator_selection_source: str
     runtime_args: dict[str, Any]
 
     @property
@@ -239,6 +247,14 @@ def _describe_block_policy(mode: str, interval: str) -> str:
     if mode == "idle_interval":
         return f"idle_interval ({interval} idle empty-block interval)"
     return f"periodic ({interval} scheduled empty-block interval)"
+
+
+def _describe_validator_selection_mode(mode: str) -> str:
+    if mode == "auto_top_n":
+        return "auto_top_n (top eligible bonded validators are selected automatically)"
+    if mode == "hybrid":
+        return "hybrid (governance approves eligibility; rebalance selects the bonded set)"
+    return "manual (active validators are changed through governance votes)"
 
 
 def _prompt_interval_default(current_interval: str) -> str:
@@ -363,6 +379,47 @@ def _resolve_block_policy(
     return default_mode, default_interval, source
 
 
+def _resolve_validator_selection_mode(
+    *,
+    args: argparse.Namespace,
+    mode: str,
+    prompt: bool,
+) -> tuple[str | None, str]:
+    if args.validator_selection_mode is not None:
+        if mode != "local":
+            raise ValueError("--validator-selection-mode is only valid with --mode local")
+        if args.genesis_source is not None:
+            raise ValueError(
+                "--validator-selection-mode only applies when generating a local genesis"
+            )
+        return args.validator_selection_mode, "arguments"
+
+    if mode != "local" or args.genesis_source is not None:
+        return None, "not_applicable"
+
+    if prompt:
+        print(
+            "Effective validator selection policy: "
+            f"{_describe_validator_selection_mode('manual')}",
+            file=sys.stderr,
+        )
+        _prompt_note(
+            "This is written into genesis. Keep manual unless you are testing "
+            "stake-weighted validator-set selection."
+        )
+        if _prompt_bool("Customize validator selection policy", default=False):
+            return (
+                _prompt_choice(
+                    "Validator selection policy",
+                    VALIDATOR_SELECTION_MODE_CHOICES,
+                    default="manual",
+                ),
+                "wizard",
+            )
+
+    return None, "default"
+
+
 def _prompt_line(prompt: str) -> str:
     print(prompt, end="", file=sys.stderr, flush=True)
     return sys.stdin.readline().strip()
@@ -477,6 +534,10 @@ def _resolve_plan(args: argparse.Namespace) -> SetupNodePlan:
         raise ValueError("--network-manifest is only valid when --mode join")
     if mode == "local" and (args.restore_snapshot or args.bootstrap_mode == "snapshot"):
         raise ValueError("snapshot restore is only valid when --mode join")
+    if mode == "join" and args.validator_selection_mode is not None:
+        raise ValueError("--validator-selection-mode is only valid with --mode local")
+    if mode == "local" and args.validator_selection_mode is not None and args.genesis_source:
+        raise ValueError("--validator-selection-mode only applies when generating a local genesis")
     if args.restore_snapshot and args.bootstrap_mode == "genesis":
         raise ValueError("pass either --bootstrap-mode genesis or --restore-snapshot, not both")
 
@@ -562,6 +623,11 @@ def _resolve_plan(args: argparse.Namespace) -> SetupNodePlan:
         prompt=prompt,
         runtime_args=runtime_args,
     )
+    validator_selection_mode, validator_selection_source = _resolve_validator_selection_mode(
+        args=args,
+        mode=mode,
+        prompt=prompt,
+    )
 
     return SetupNodePlan(
         mode=mode,
@@ -595,6 +661,8 @@ def _resolve_plan(args: argparse.Namespace) -> SetupNodePlan:
         block_policy_mode=block_policy_mode,
         block_policy_interval=block_policy_interval,
         block_policy_source=block_policy_source,
+        validator_selection_mode=validator_selection_mode,
+        validator_selection_source=validator_selection_source,
         runtime_args=runtime_args,
     )
 
@@ -619,6 +687,11 @@ def _network_command(plan: SetupNodePlan) -> list[str]:
             _add_path_option(command, "--validator-key-dir", plan.validator_key_dir)
         else:
             _add_path_option(command, "--validator-key-ref", plan.validator_key_ref)
+        _add_value_option(
+            command,
+            "--validator-selection-mode",
+            plan.validator_selection_mode,
+        )
         _add_value_option(command, "--genesis-source", plan.genesis_source)
         _add_value_option(command, "--genesis-bundle", plan.genesis_bundle)
     else:
@@ -717,7 +790,7 @@ def _plan_payload(plan: SetupNodePlan, *, dry_run: bool = False) -> dict[str, ob
     if plan.home is not None:
         writes.append(str(plan.home))
 
-    return {
+    payload: dict[str, object] = {
         "dry_run": dry_run,
         "mode": plan.mode,
         "name": plan.name,
@@ -744,6 +817,12 @@ def _plan_payload(plan: SetupNodePlan, *, dry_run: bool = False) -> dict[str, ob
         "writes": writes,
         "steps": _plan_steps(plan),
     }
+    if plan.mode == "local" and plan.genesis_source is None:
+        payload["validator_policy"] = {
+            "selection_mode": plan.validator_selection_mode or "manual",
+            "source": plan.validator_selection_source,
+        }
+    return payload
 
 
 def _format_plan(plan: SetupNodePlan) -> str:
@@ -754,6 +833,12 @@ def _format_plan(plan: SetupNodePlan) -> str:
         f"{_describe_block_policy(plan.block_policy_mode, plan.block_policy_interval)} "
         f"({plan.block_policy_source})"
     )
+    if plan.mode == "local" and plan.genesis_source is None:
+        lines.append(
+            "Validator selection: "
+            f"{_describe_validator_selection_mode(plan.validator_selection_mode or 'manual')} "
+            f"({plan.validator_selection_source})"
+        )
     for index, step in enumerate(payload["steps"], start=1):
         lines.append(f"{index}. {step['name']}: {' '.join(step['command'])}")
     if payload["writes"]:
@@ -784,6 +869,7 @@ def _network_args(plan: SetupNodePlan) -> argparse.Namespace:
         "stack_dir": plan.stack_dir,
         "seed": plan.seed,
         "genesis_source": plan.genesis_source,
+        "validator_selection_mode": plan.validator_selection_mode,
         "snapshot_url": plan.snapshot_url,
         "snapshot_signing_key": plan.snapshot_signing_keys,
         "home": plan.home,

@@ -350,6 +350,46 @@ class SetupNodeCommandTests(unittest.TestCase):
             self.assertIn("--block-policy-interval", payload["steps"][0]["command"])
             self.assertIn("1s", payload["steps"][0]["command"])
 
+    def test_setup_node_plan_forwards_validator_selection_mode(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            base_dir = Path(tmp_dir)
+            stdout = io.StringIO()
+
+            with redirect_stdout(stdout):
+                exit_code = main(
+                    [
+                        "setup",
+                        "node",
+                        "--mode",
+                        "local",
+                        "--network",
+                        "local-dev",
+                        "--name",
+                        "validator-1",
+                        "--chain-id",
+                        "xian-local-1",
+                        "--preset",
+                        "basic",
+                        "--key-mode",
+                        "generate",
+                        "--validator-selection-mode",
+                        "auto_top_n",
+                        "--no-start",
+                        "--base-dir",
+                        str(base_dir),
+                        "--plan",
+                    ]
+                )
+
+            self.assertEqual(exit_code, 0)
+            payload = json.loads(stdout.getvalue())
+            self.assertEqual(
+                payload["validator_policy"],
+                {"selection_mode": "auto_top_n", "source": "arguments"},
+            )
+            self.assertIn("--validator-selection-mode", payload["steps"][0]["command"])
+            self.assertIn("auto_top_n", payload["steps"][0]["command"])
+
     def test_setup_node_rejects_interval_without_periodic_policy(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             with self.assertRaisesRegex(ValueError, "has no effect"):
@@ -372,6 +412,32 @@ class SetupNodeCommandTests(unittest.TestCase):
                             "generate",
                             "--block-policy-interval",
                             "1s",
+                            "--base-dir",
+                            tmp_dir,
+                            "--plan",
+                        ]
+                    )
+
+    def test_setup_node_rejects_validator_selection_mode_for_join(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            with self.assertRaisesRegex(ValueError, "only valid with --mode local"):
+                with redirect_stdout(io.StringIO()):
+                    main(
+                        [
+                            "setup",
+                            "node",
+                            "--mode",
+                            "join",
+                            "--network",
+                            "testnet",
+                            "--name",
+                            "validator-1",
+                            "--preset",
+                            "indexed",
+                            "--key-mode",
+                            "generate",
+                            "--validator-selection-mode",
+                            "hybrid",
                             "--base-dir",
                             tmp_dir,
                             "--plan",
@@ -549,7 +615,7 @@ class SetupNodeCommandTests(unittest.TestCase):
             stderr = io.StringIO()
 
             with (
-                patch("sys.stdin", TtyInput("y\nperiodic\n1s\ny\n")),
+                patch("sys.stdin", TtyInput("y\nperiodic\n1s\nn\ny\n")),
                 redirect_stdout(stdout),
                 redirect_stderr(stderr),
             ):
@@ -592,11 +658,80 @@ class SetupNodeCommandTests(unittest.TestCase):
                 payload["plan"]["block_policy"],
                 {"mode": "periodic", "interval": "1s", "source": "wizard"},
             )
+            self.assertEqual(
+                payload["plan"]["validator_policy"],
+                {"selection_mode": "manual", "source": "default"},
+            )
             profile = json.loads(
                 (base_dir / "nodes" / "validator-1.json").read_text(encoding="utf-8")
             )
             self.assertEqual(profile["block_policy_mode"], "periodic")
             self.assertEqual(profile["block_policy_interval"], "1s")
+
+    def test_setup_node_interactive_prompt_can_override_validator_selection_mode(self) -> None:
+        class TtyInput(io.StringIO):
+            def isatty(self) -> bool:
+                return True
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            base_dir = Path(tmp_dir)
+            home = base_dir / ".cometbft"
+            stdout = io.StringIO()
+            stderr = io.StringIO()
+
+            with (
+                patch("sys.stdin", TtyInput("n\ny\nhybrid\ny\n")),
+                redirect_stdout(stdout),
+                redirect_stderr(stderr),
+            ):
+                exit_code = main(
+                    [
+                        "setup",
+                        "node",
+                        "--mode",
+                        "local",
+                        "--network",
+                        "local-dev",
+                        "--name",
+                        "validator-1",
+                        "--chain-id",
+                        "xian-local-1",
+                        "--preset",
+                        "basic",
+                        "--key-mode",
+                        "generate",
+                        "--base-dir",
+                        str(base_dir),
+                        "--configs-dir",
+                        str(WORKSPACE_ROOT / "xian-configs"),
+                        "--home",
+                        str(home),
+                        "--no-start",
+                    ]
+                )
+
+            self.assertEqual(exit_code, 0)
+            self.assertIn("Effective validator selection policy", stderr.getvalue())
+            self.assertIn("stake-weighted validator-set selection", stderr.getvalue())
+            payload = json.loads(stdout.getvalue())
+            self.assertEqual(
+                payload["plan"]["validator_policy"],
+                {"selection_mode": "hybrid", "source": "wizard"},
+            )
+            self.assertEqual(
+                payload["network"]["validator_policy"],
+                {"selection_mode": "hybrid"},
+            )
+            generated_genesis = json.loads(
+                (base_dir / "networks" / "local-dev" / "genesis.json").read_text(
+                    encoding="utf-8"
+                )
+            )
+            state_by_key = {
+                entry["key"]: entry["value"]
+                for entry in generated_genesis["abci_genesis"]["genesis"]
+            }
+            self.assertEqual(state_by_key["validators.config:selection_mode"], "hybrid")
 
     def test_setup_node_forwards_runtime_service_options(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -2828,6 +2963,86 @@ class NetworkManifestTests(unittest.TestCase):
                 {"__time__": [2026, 1, 1, 0, 0, 0, 0]},
             )
             (genesis_builder.build_local_network_genesis.assert_called_once())
+
+    def test_network_create_forwards_validator_selection_mode_to_genesis_builder(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            base_dir = Path(tmp_dir)
+            stdout = io.StringIO()
+            fake_genesis = {
+                "chain_id": "xian-local-1",
+                "validators": [],
+                "abci_genesis": {"genesis": []},
+            }
+            genesis_builder = type(
+                "GenesisBuilder",
+                (),
+                {
+                    "build_local_network_genesis": staticmethod(
+                        unittest.mock.Mock(return_value=fake_genesis)
+                    )
+                },
+            )()
+
+            with patch(
+                "xian_cli.commands.node_context.get_genesis_builder_module",
+                return_value=genesis_builder,
+            ):
+                with redirect_stdout(stdout):
+                    exit_code = main(
+                        [
+                            "network",
+                            "create",
+                            "local-dev",
+                            "--base-dir",
+                            str(base_dir),
+                            "--chain-id",
+                            "xian-local-1",
+                            "--generate-validator-key",
+                            "--bootstrap-node",
+                            "validator-1",
+                            "--validator-selection-mode",
+                            "hybrid",
+                        ]
+                    )
+
+            self.assertEqual(exit_code, 0)
+            result = json.loads(stdout.getvalue())
+            self.assertEqual(result["validator_policy"], {"selection_mode": "hybrid"})
+            manifest = json.loads(
+                (base_dir / "networks" / "local-dev" / "manifest.json").read_text(
+                    encoding="utf-8"
+                )
+            )
+            self.assertEqual(
+                manifest["genesis_build"]["validator_policy"],
+                {"selection_mode": "hybrid"},
+            )
+            self.assertEqual(
+                genesis_builder.build_local_network_genesis.call_args.kwargs[
+                    "validator_constructor_overrides"
+                ],
+                {"selection_mode": "hybrid"},
+            )
+
+    def test_network_create_rejects_validator_selection_mode_with_external_genesis(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            with self.assertRaisesRegex(ValueError, "only applies"):
+                with redirect_stdout(io.StringIO()):
+                    main(
+                        [
+                            "network",
+                            "create",
+                            "local-dev",
+                            "--base-dir",
+                            tmp_dir,
+                            "--chain-id",
+                            "xian-local-1",
+                            "--genesis-source",
+                            "genesis.json",
+                            "--validator-selection-mode",
+                            "auto_top_n",
+                        ]
+                    )
 
     def test_network_create_can_generate_multiple_initial_validators(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
