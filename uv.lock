@@ -594,6 +594,7 @@ dev = [
     { name = "pytest" },
     { name = "pytest-cov" },
     { name = "ruff" },
+    { name = "xian-tech-vm-core" },
 ]
 
 [package.metadata]
@@ -609,6 +610,7 @@ dev = [
     { name = "pytest", specifier = ">=9.0.3,<10" },
     { name = "pytest-cov", specifier = ">=7.1.0,<8" },
     { name = "ruff", specifier = ">=0.15.12,<0.16" },
+    { name = "xian-tech-vm-core", editable = "../xian-contracting/packages/xian-vm-core" },
 ]
 
 [[package]]
@@ -686,6 +688,17 @@ dev = [
 name = "xian-tech-runtime-types"
 version = "0.1.4b1"
 source = { editable = "../xian-contracting/packages/xian-runtime-types" }
+
+[[package]]
+name = "xian-tech-vm-core"
+version = "0.1.0"
+source = { editable = "../xian-contracting/packages/xian-vm-core" }
+dependencies = [
+    { name = "xian-tech-contracting" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "xian-tech-contracting", editable = "../xian-contracting" }]
 
 [[package]]
 name = "yarl"
