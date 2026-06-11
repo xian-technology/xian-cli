@@ -723,9 +723,7 @@ class SetupNodeCommandTests(unittest.TestCase):
                 {"selection_mode": "hybrid"},
             )
             generated_genesis = json.loads(
-                (base_dir / "networks" / "local-dev" / "genesis.json").read_text(
-                    encoding="utf-8"
-                )
+                (base_dir / "networks" / "local-dev" / "genesis.json").read_text(encoding="utf-8")
             )
             state_by_key = {
                 entry["key"]: entry["value"]
@@ -3009,9 +3007,7 @@ class NetworkManifestTests(unittest.TestCase):
             result = json.loads(stdout.getvalue())
             self.assertEqual(result["validator_policy"], {"selection_mode": "hybrid"})
             manifest = json.loads(
-                (base_dir / "networks" / "local-dev" / "manifest.json").read_text(
-                    encoding="utf-8"
-                )
+                (base_dir / "networks" / "local-dev" / "manifest.json").read_text(encoding="utf-8")
             )
             self.assertEqual(
                 manifest["genesis_build"]["validator_policy"],

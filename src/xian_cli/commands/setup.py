@@ -399,8 +399,7 @@ def _resolve_validator_selection_mode(
 
     if prompt:
         print(
-            "Effective validator selection policy: "
-            f"{_describe_validator_selection_mode('manual')}",
+            f"Effective validator selection policy: {_describe_validator_selection_mode('manual')}",
             file=sys.stderr,
         )
         _prompt_note(

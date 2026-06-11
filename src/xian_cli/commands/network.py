@@ -166,8 +166,7 @@ def _handle_network_create(args: argparse.Namespace) -> int:
         template=template,
     )
     if validator_constructor_overrides is not None and (
-        not validator_names
-        or (not args.generate_validator_key and args.validator_key_ref is None)
+        not validator_names or (not args.generate_validator_key and args.validator_key_ref is None)
     ):
         raise ValueError(
             "--validator-selection-mode requires generated local genesis; pass "
