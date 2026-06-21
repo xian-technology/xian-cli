@@ -658,7 +658,6 @@ dependencies = [
     { name = "aiohttp" },
     { name = "pynacl" },
     { name = "xian-tech-accounts" },
-    { name = "xian-tech-contracting" },
     { name = "xian-tech-runtime-types" },
 ]
 
@@ -672,10 +671,10 @@ requires-dist = [
     { name = "pynacl", specifier = ">=1.5.0,<2" },
     { name = "uvicorn", marker = "extra == 'app'", specifier = ">=0.46.0,<0.47" },
     { name = "xian-tech-accounts", editable = "../xian-contracting/packages/xian-accounts" },
-    { name = "xian-tech-contracting", editable = "../xian-contracting" },
+    { name = "xian-tech-contracting", marker = "extra == 'compile'", editable = "../xian-contracting" },
     { name = "xian-tech-runtime-types", editable = "../xian-contracting/packages/xian-runtime-types" },
 ]
-provides-extras = ["hd", "eth", "app"]
+provides-extras = ["compile", "hd", "eth", "app"]
 
 [package.metadata.requires-dev]
 dev = [

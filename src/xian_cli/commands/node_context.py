@@ -76,6 +76,7 @@ def _build_bundle_genesis_payload(
     chain_id: str,
     genesis_bundle: str,
     genesis_time: str | None,
+    runtime_features: dict | None,
     configs_dir: Path | None,
 ) -> dict:
     genesis_builder = get_genesis_builder_module()
@@ -85,6 +86,7 @@ def _build_bundle_genesis_payload(
         network=genesis_bundle,
         contracts_dir=resolved_configs_dir / "contracts",
         genesis_time=genesis_time,
+        runtime_features=runtime_features,
     )
 
 
@@ -119,6 +121,7 @@ def _resolve_effective_genesis_payload(
                 chain_id=network["chain_id"],
                 genesis_bundle=genesis_bundle,
                 genesis_time=genesis.get("genesis_time"),
+                runtime_features=network.get("runtime_features"),
                 configs_dir=configs_dir,
             ),
             f"bundle:{genesis_bundle}",

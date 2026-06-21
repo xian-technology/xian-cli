@@ -64,6 +64,7 @@ DEFAULT_TX_FEE_MODE = "paid_metered"
 DEFAULT_FREE_TX_MAX_CHI = 1_000_000
 DEFAULT_FREE_BLOCK_MAX_CHI = 20_000_000
 SUPPORTED_RECOVERY_ARTIFACT_KINDS = {"snapshot_url"}
+SUPPORTED_RUNTIME_FEATURES = {"zk"}
 
 DEFAULT_P2P = {
     "seeds": [],
@@ -211,6 +212,27 @@ def _require_bool(payload: dict, key: str, *, default: bool) -> bool:
     if not isinstance(value, bool):
         raise ValueError(f"{key} must be a boolean")
     return value
+
+
+def _normalize_runtime_features(
+    payload: dict,
+    key: str = "runtime_features",
+) -> dict[str, bool] | None:
+    value = payload.get(key)
+    if value is None:
+        return None
+    if not isinstance(value, dict):
+        raise ValueError(f"{key} must be an object when provided")
+    _reject_unknown_fields(
+        value,
+        allowed=SUPPORTED_RUNTIME_FEATURES,
+        label=key,
+    )
+    return {
+        feature: _require_bool(value, feature, default=False)
+        for feature in sorted(SUPPORTED_RUNTIME_FEATURES)
+        if feature in value
+    }
 
 
 def _require_int(payload: dict, key: str, *, default: int) -> int:
@@ -878,6 +900,7 @@ def normalize_network_manifest(payload: dict) -> dict:
             "privacy_artifact_catalog",
             "shielded_history_policy",
             "privacy_submission_policy",
+            "runtime_features",
             "node_release_manifest",
         },
         label="network manifest",
@@ -914,6 +937,7 @@ def normalize_network_manifest(payload: dict) -> dict:
         "privacy_submission_policy": _normalize_privacy_submission_policy(
             payload, "privacy_submission_policy"
         ),
+        "runtime_features": _normalize_runtime_features(payload),
         "node_release_manifest": _normalize_node_release_manifest(
             payload,
             "node_release_manifest",

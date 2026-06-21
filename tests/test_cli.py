@@ -1861,6 +1861,7 @@ class NetworkManifestTests(unittest.TestCase):
                             "hidden_sender_submission_mode": "relayer_optional",
                             "operator_notice": ("shared relayers require operator auth"),
                         },
+                        runtime_features={"zk": True},
                         block_policy_mode="on_demand",
                         block_policy_interval="0s",
                     )
@@ -1882,6 +1883,7 @@ class NetworkManifestTests(unittest.TestCase):
             manifest["privacy_submission_policy"]["hidden_sender_submission_mode"],
             "relayer_optional",
         )
+        self.assertEqual(manifest["runtime_features"], {"zk": True})
 
     def test_read_network_manifest_rejects_incomplete_registry_image_config(
         self,
@@ -2105,6 +2107,72 @@ class NetworkManifestTests(unittest.TestCase):
             self.assertNotIn("--runtime-backend", join_script)
             self.assertTrue(os.access(bundle_dir / "participant-join.sh", os.X_OK))
             self.assertTrue(os.access(bundle_dir / "participant-bds-node.sh", os.X_OK))
+
+    def test_network_package_operator_bundle_forwards_runtime_features_to_genesis(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            base_dir = Path(tmp_dir)
+            network_dir = base_dir / "networks" / "mainnet"
+            network_dir.mkdir(parents=True)
+            manifest_path = network_dir / "manifest.json"
+            manifest_path.write_text(
+                json.dumps(
+                    _manifest_payload(
+                        name="mainnet",
+                        chain_id="xian-mainnet-1",
+                        genesis={
+                            "kind": "bundle",
+                            "bundle": "mainnet",
+                            "genesis_time": "2026-06-21T00:00:00.000000Z",
+                        },
+                        node_image_mode="local_build",
+                        runtime_features={"zk": True},
+                        block_policy_mode="idle_interval",
+                        block_policy_interval="5s",
+                    )
+                ),
+                encoding="utf-8",
+            )
+            fake_genesis = {
+                "chain_id": "xian-mainnet-1",
+                "validators": [],
+                "abci_genesis": {"genesis": []},
+            }
+            build_bundle = unittest.mock.Mock(return_value=fake_genesis)
+            genesis_builder = type(
+                "GenesisBuilder",
+                (),
+                {"build_bundle_network_genesis": staticmethod(build_bundle)},
+            )()
+
+            stdout = io.StringIO()
+            with patch(
+                "xian_cli.commands.node_context.get_genesis_builder_module",
+                return_value=genesis_builder,
+            ):
+                with redirect_stdout(stdout):
+                    exit_code = main(
+                        [
+                            "network",
+                            "package-operator-bundle",
+                            "mainnet",
+                            "--base-dir",
+                            str(base_dir),
+                        ]
+                    )
+
+            self.assertEqual(exit_code, 0)
+            build_bundle.assert_called_once()
+            self.assertEqual(
+                build_bundle.call_args.kwargs["runtime_features"],
+                {"zk": True},
+            )
+            result = json.loads(stdout.getvalue())
+            bundled_manifest = json.loads(
+                (Path(result["bundle_dir"]) / "manifest.json").read_text(encoding="utf-8")
+            )
+            self.assertEqual(bundled_manifest["runtime_features"], {"zk": True})
 
     def test_network_join_writes_node_profile(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -5890,6 +5958,12 @@ class ConfigRepoTests(unittest.TestCase):
                 },
                 read_network_manifest,
                 "p2p has unknown field\\(s\\): seed_nodes",
+            ),
+            (
+                "manifest.json",
+                _manifest_payload(runtime_features={"native": True}),
+                read_network_manifest,
+                "runtime_features has unknown field\\(s\\): native",
             ),
             (
                 "profile.json",
