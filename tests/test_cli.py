@@ -452,7 +452,7 @@ class SetupNodeCommandTests(unittest.TestCase):
                 json.dumps(
                     _manifest_payload(
                         name="testnet",
-                        chain_id="xian-testnet-12",
+                        chain_id="xian-testnet-1",
                         genesis={"kind": "source", "source": str(TEST_FIXTURE_GENESIS)},
                     )
                 ),
@@ -1025,10 +1025,10 @@ class ClientCommandTests(unittest.TestCase):
 
     def test_resolve_chain_id_uses_environment(self) -> None:
         args = argparse.Namespace(chain_id=None)
-        with patch.dict("os.environ", {"XIAN_CHAIN_ID": "xian-1"}):
+        with patch.dict("os.environ", {"XIAN_CHAIN_ID": "xian-local-1"}):
             self.assertEqual(
                 client_handlers._resolve_chain_id(args),
-                "xian-1",
+                "xian-local-1",
             )
 
     def test_load_private_key_from_file(self) -> None:
@@ -1088,7 +1088,7 @@ class ClientCommandTests(unittest.TestCase):
     def test_make_client_constructs_xian(self) -> None:
         args = argparse.Namespace(
             node_url="http://node.example",
-            chain_id="xian-1",
+            chain_id="xian-local-1",
         )
         wallet = object()
         with patch(
@@ -1100,7 +1100,7 @@ class ClientCommandTests(unittest.TestCase):
         self.assertEqual(client, "client")
         ctor.assert_called_once_with(
             "http://node.example",
-            chain_id="xian-1",
+            chain_id="xian-local-1",
             wallet=wallet,
         )
 
@@ -2805,7 +2805,7 @@ class NetworkManifestTests(unittest.TestCase):
                         "create",
                         "local-dev",
                         "--chain-id",
-                        "xian-testnet-12",
+                        "xian-testnet-1",
                         "--genesis-source",
                         str(genesis_source),
                         "--output",
@@ -3256,7 +3256,7 @@ class NodeInitTests(unittest.TestCase):
                         "create",
                         "local-dev",
                         "--chain-id",
-                        "xian-testnet-12",
+                        "xian-testnet-1",
                         "--genesis-source",
                         str(genesis_source),
                         "--seed",
@@ -3608,7 +3608,7 @@ class NodeInitTests(unittest.TestCase):
                         "create",
                         "local-dev",
                         "--chain-id",
-                        "xian-testnet-12",
+                        "xian-testnet-1",
                         "--genesis-source",
                         str(genesis_source),
                         "--output",
@@ -3821,7 +3821,7 @@ class NodeInitTests(unittest.TestCase):
                         "create",
                         "local-dev",
                         "--chain-id",
-                        "xian-testnet-12",
+                        "xian-testnet-1",
                         "--genesis-source",
                         str(genesis_source),
                         "--snapshot-url",
@@ -3887,7 +3887,7 @@ class NodeInitTests(unittest.TestCase):
                 "https://example.invalid/snapshot-manifest.json",
                 home,
                 trusted_manifest_public_keys=["a" * 64],
-                expected_chain_id="xian-testnet-12",
+                expected_chain_id="xian-testnet-1",
             )
             result = json.loads(stdout.getvalue())
             self.assertTrue(result["snapshot_restored"])
@@ -4006,7 +4006,7 @@ class NodeRuntimeTests(unittest.TestCase):
                 json.dumps(
                     _manifest_payload(
                         name="mainnet",
-                        chain_id="xian-1",
+                        chain_id="xian-local-1",
                         node_image_mode="registry",
                         node_integrated_image=(CANONICAL_RELEASE_INTEGRATED_IMAGE),
                         node_split_image=CANONICAL_RELEASE_SPLIT_IMAGE,
@@ -4076,7 +4076,7 @@ class NodeRuntimeTests(unittest.TestCase):
                 json.dumps(
                     _manifest_payload(
                         name="mainnet",
-                        chain_id="xian-1",
+                        chain_id="xian-local-1",
                         node_image_mode="registry",
                         node_integrated_image=(CANONICAL_RELEASE_INTEGRATED_IMAGE),
                         node_split_image=CANONICAL_RELEASE_SPLIT_IMAGE,
@@ -4124,7 +4124,7 @@ class NodeRuntimeTests(unittest.TestCase):
                         "catching_up": False,
                     },
                     "node_info": {
-                        "network": "xian-1",
+                        "network": "xian-local-1",
                         "other": {"n_peers": "4"},
                     },
                 }
@@ -5720,7 +5720,7 @@ class ConfigRepoTests(unittest.TestCase):
                 json.dumps(
                     {
                         "name": "mainnet",
-                        "chain_id": "xian-1",
+                        "chain_id": "xian-local-1",
                     }
                 ),
                 encoding="utf-8",
