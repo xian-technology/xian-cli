@@ -978,11 +978,11 @@ class _FakeContextClient:
         self.send_tx_calls.append(kwargs)
         return self.responses["send_tx"]
 
-    def submit_contract(self, name, deployment_artifacts, args=None, **kwargs):
+    def submit_contract(self, name, code, args=None, **kwargs):
         self.submit_contract_calls.append(
             {
                 "name": name,
-                "deployment_artifacts": deployment_artifacts,
+                "code": code,
                 "args": args,
                 **kwargs,
             }
@@ -1414,7 +1414,7 @@ class ClientCommandTests(unittest.TestCase):
         self.assertEqual(call["timeout_seconds"], 5.0)
         self.assertEqual(call["chi"], 123)
 
-    def test_client_tx_submit_artifacts_uses_artifact_module_name(self) -> None:
+    def test_client_tx_submit_source_infers_module_name(self) -> None:
         fake_client = _FakeContextClient(
             submit_contract={
                 "submitted": True,
@@ -1423,18 +1423,9 @@ class ClientCommandTests(unittest.TestCase):
             }
         )
         with tempfile.TemporaryDirectory() as tmp_dir:
-            artifact_path = Path(tmp_dir) / "con_counter.artifacts.json"
-            artifact_path.write_text(
-                json.dumps(
-                    {
-                        "format": "xian_contract_artifact_v1",
-                        "module_name": "con_counter",
-                        "vm_profile": "xian_vm_v1",
-                        "source": "counter = Variable()\n",
-                        "vm_ir_json": "{}",
-                        "hashes": {},
-                    }
-                ),
+            source_path = Path(tmp_dir) / "con_counter.s.py"
+            source_path.write_text(
+                "counter = Variable()\n",
                 encoding="utf-8",
             )
 
@@ -1454,10 +1445,10 @@ class ClientCommandTests(unittest.TestCase):
                         [
                             "client",
                             "tx",
-                            "submit-artifacts",
+                            "submit-source",
                             "--node-url",
                             "http://node.example",
-                            str(artifact_path),
+                            str(source_path),
                             "--args-json",
                             '{"seed":7}',
                             "--mode",
@@ -1476,43 +1467,32 @@ class ClientCommandTests(unittest.TestCase):
         self.assertEqual(call["args"], {"seed": 7})
         self.assertEqual(call["mode"], "checktx")
         self.assertEqual(call["nonce"], 42)
-        self.assertEqual(
-            call["deployment_artifacts"]["format"],
-            "xian_contract_artifact_v1",
-        )
+        self.assertEqual(call["code"], "counter = Variable()\n")
 
-    def test_client_tx_submit_artifacts_rejects_name_mismatch(self) -> None:
+    def test_client_tx_submit_source_requires_name_for_stdin(self) -> None:
         fake_client = _FakeContextClient(submit_contract={})
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            artifact_path = Path(tmp_dir) / "artifacts.json"
-            artifact_path.write_text(
-                json.dumps({"module_name": "con_counter"}),
-                encoding="utf-8",
-            )
-
-            with (
-                patch(
-                    "xian_cli.client.handlers._make_client",
-                    return_value=fake_client,
-                ),
-                patch(
-                    "xian_cli.client.handlers._build_wallet",
-                    return_value=object(),
-                ),
-            ):
-                with self.assertRaisesRegex(ValueError, "module_name"):
-                    main(
-                        [
-                            "client",
-                            "tx",
-                            "submit-artifacts",
-                            "--node-url",
-                            "http://node.example",
-                            str(artifact_path),
-                            "--name",
-                            "con_other",
-                        ]
-                    )
+        with (
+            patch(
+                "xian_cli.client.handlers._make_client",
+                return_value=fake_client,
+            ),
+            patch(
+                "xian_cli.client.handlers._build_wallet",
+                return_value=object(),
+            ),
+            patch("sys.stdin", io.StringIO("counter = Variable()\n")),
+        ):
+            with self.assertRaisesRegex(ValueError, "--name is required"):
+                main(
+                    [
+                        "client",
+                        "tx",
+                        "submit-source",
+                        "--node-url",
+                        "http://node.example",
+                        "-",
+                    ]
+                )
 
         self.assertEqual(fake_client.submit_contract_calls, [])
 

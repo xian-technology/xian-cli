@@ -331,7 +331,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     contract_build_artifacts_parser = contract_subparsers.add_parser(
         "build-artifacts",
-        help="build xian_vm_v1 deployment artifacts from contract source",
+        help="build xian_vm_v1 artifacts from contract source for inspection",
     )
     contract_build_artifacts_parser.add_argument(
         "source",

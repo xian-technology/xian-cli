@@ -84,6 +84,17 @@ def _parse_json_object_from_path(path: str, *, label: str) -> dict[str, Any]:
     return _parse_json_object(raw, flag_name=label)
 
 
+def _read_text_from_path(path: str) -> str:
+    return sys.stdin.read() if path == "-" else Path(path).read_text(encoding="utf-8")
+
+
+def _infer_contract_module_name(source_path: str) -> str:
+    filename = Path(source_path).name
+    if filename.endswith(".s.py"):
+        return filename[: -len(".s.py")]
+    return Path(filename).stem
+
+
 def _submission_kwargs(args: argparse.Namespace) -> dict[str, Any]:
     return {
         "chi": getattr(args, "chi", None),
@@ -195,28 +206,24 @@ def handle_tx_send(args: argparse.Namespace) -> int:
     return 0
 
 
-def handle_tx_submit_artifacts(args: argparse.Namespace) -> int:
-    artifacts = _parse_json_object_from_path(
-        args.artifacts,
-        label="artifact JSON",
-    )
+def handle_tx_submit_source(args: argparse.Namespace) -> int:
+    code = _read_text_from_path(args.source)
+    if not isinstance(code, str) or not code.strip():
+        raise ValueError("contract source must be a non-empty string")
     constructor_args = _parse_json_object(
         args.args_json,
         flag_name="--args-json",
     )
-    artifact_name = artifacts.get("module_name")
-    name = args.name or artifact_name
+    name = args.name or (None if args.source == "-" else _infer_contract_module_name(args.source))
     if not isinstance(name, str) or not name.strip():
-        raise ValueError("--name is required when artifact module_name is missing")
+        raise ValueError("--name is required when reading source from stdin")
     name = name.strip()
-    if isinstance(artifact_name, str) and artifact_name.strip() and artifact_name.strip() != name:
-        raise ValueError("contract name does not match artifact module_name")
 
     wallet = _build_wallet(args)
     with _make_client(args, wallet=wallet) as client:
         result = client.submit_contract(
             name,
-            artifacts,
+            code,
             args=constructor_args or None,
             nonce=args.nonce,
             **_submission_kwargs(args),

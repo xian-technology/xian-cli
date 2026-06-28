@@ -151,7 +151,7 @@ operations to `xian-stack`, and uses `xian-py` for wallet / RPC automation.
 | Operate a node | `xian node start/status/health/endpoints/stop ...` | `xian-stack` |
 | Diagnose a setup | `xian doctor ...`, `xian snapshot restore ...` | `xian-stack`, `xian-abci` |
 | Validate deployment bundles | `xian contract bundle validate ...` | product or contract repos |
-| Submit deployment artifacts | `xian client tx submit-artifacts ...` | product or contract repos, `xian-py` |
+| Submit contract source | `xian client tx submit-source ...` | product or contract repos, `xian-py` |
 | Script chain interactions | `xian client query/call/simulate/tx ...` | `xian-py` |
 
 Typical local development loop:
@@ -183,18 +183,18 @@ Validate a hash-pinned contract bundle directly:
 uv run xian contract bundle validate ../xian-dex/contract-bundle.json
 ```
 
-Build Xian VM deployment artifacts from source for SDKs or CI:
+Build Xian VM artifacts from source for offline inspection or CI checks:
 
 ```bash
 uv run xian contract build-artifacts ./contracts/con_counter.s.py \
   --output ./dist/con_counter.artifacts.json
 ```
 
-Submit prebuilt deployment artifacts through the same signed transaction
-surface as other client automation:
+Submit contract source through the same signed transaction surface as other
+client automation:
 
 ```bash
-uv run xian client tx submit-artifacts ./dist/con_counter.artifacts.json \
+uv run xian client tx submit-source ./contracts/con_counter.s.py \
   --node-url http://127.0.0.1:26657 \
   --private-key-env XIAN_PRIVATE_KEY \
   --mode commit
@@ -247,7 +247,7 @@ uv run xian client query balance \
 - endpoint and health discovery, including optional dashboard, monitoring,
   and stack-managed `xian-intentkit` / `xian-dex-automation`
 - snapshot restore and doctor diagnostics
-- Xian VM deployment artifact generation from contract source
+- Xian VM artifact generation from contract source for offline inspection
 - hash-pinned contract-bundle validation
 - wallet, query, call / simulate, and transaction automation via `xian-py`
 
@@ -261,8 +261,8 @@ uv run xian client query balance \
 - `xian network package-operator-bundle ...` — package a shareable operator handoff
 - `xian node ...` — initialize, start, stop, inspect, and recover a node profile
 - `xian client ...` — wallet, query, call / simulate, and transaction automation
-  including artifact-backed contract submission
-- `xian contract build-artifacts ...` — build Xian VM deployment artifacts
+  including source-backed contract submission
+- `xian contract build-artifacts ...` — build Xian VM artifacts for inspection
 - `xian contract bundle ...` — validate hash-pinned contract bundles
 - `xian doctor ...` — run broader local diagnostics
 

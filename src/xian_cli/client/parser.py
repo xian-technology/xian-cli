@@ -203,27 +203,27 @@ def register_client_commands(subparsers: argparse._SubParsersAction) -> None:
     )
     tx_send_parser.set_defaults(handler=handlers.handle_tx_send)
 
-    tx_submit_artifacts_parser = tx_subparsers.add_parser(
-        "submit-artifacts",
-        help="submit prebuilt contract deployment artifacts",
+    tx_submit_source_parser = tx_subparsers.add_parser(
+        "submit-source",
+        help="submit contract source for node-side compilation",
     )
-    _add_connection_args(tx_submit_artifacts_parser)
-    _add_wallet_args(tx_submit_artifacts_parser)
-    _add_submission_args(tx_submit_artifacts_parser)
-    tx_submit_artifacts_parser.add_argument(
-        "artifacts",
-        help="deployment artifact JSON path, or '-' to read from stdin",
+    _add_connection_args(tx_submit_source_parser)
+    _add_wallet_args(tx_submit_source_parser)
+    _add_submission_args(tx_submit_source_parser)
+    tx_submit_source_parser.add_argument(
+        "source",
+        help="contract source file path, or '-' to read from stdin",
     )
-    tx_submit_artifacts_parser.add_argument(
+    tx_submit_source_parser.add_argument(
         "--name",
-        help="contract name; defaults to artifact module_name",
+        help="contract name; defaults to the source filename with '.s.py' stripped",
     )
-    tx_submit_artifacts_parser.add_argument(
+    tx_submit_source_parser.add_argument(
         "--args-json",
         default="{}",
         help="JSON object of constructor arguments",
     )
-    tx_submit_artifacts_parser.set_defaults(handler=handlers.handle_tx_submit_artifacts)
+    tx_submit_source_parser.set_defaults(handler=handlers.handle_tx_submit_source)
 
     tx_transfer_parser = tx_subparsers.add_parser(
         "transfer",

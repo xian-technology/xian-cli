@@ -17,12 +17,12 @@ behind network manifests, node profiles, and backend integration.
   - `doctor.py`: workspace and node diagnostics
   - `common.py`: small shared formatting and runtime-option helpers
 - `client/`: automation-oriented wallet/query/transaction commands backed by
-  `xian-py`, including artifact-backed contract submission
+  `xian-py`, including source-backed contract submission
 - `models.py`: typed manifest, profile, and related config models
 - `config_repo.py`: canonical network/template resolution
 - `contract_bundles.py`: hash-pinned contract bundle validation helpers
-- `contract build-artifacts`: command surface for compiler-backed deployment
-  artifact generation
+- `contract build-artifacts`: command surface for compiler-backed artifact
+  generation for offline inspection
 - `runtime.py`: local runtime backend integration
 - `abci_bridge.py`: direct integration points with backend node tooling
 
