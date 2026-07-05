@@ -13,6 +13,7 @@ from xian_py.wallet import Wallet
 from xian_py.xian import Xian
 
 from xian_cli.output import emit_json
+from xian_cli.secret_files import load_secret_from_args, secure_write_text
 
 
 def _resolve_node_url(args: argparse.Namespace) -> str:
@@ -28,29 +29,21 @@ def _resolve_chain_id(args: argparse.Namespace) -> str | None:
 
 
 def _load_private_key_from_args(args: argparse.Namespace) -> str:
-    direct = getattr(args, "private_key", None)
-    env_name = getattr(args, "private_key_env", None)
-    file_path = getattr(args, "private_key_file", None)
-
-    values = [
-        value
-        for value in (
-            direct,
-            os.environ.get(env_name) if isinstance(env_name, str) else None,
-            Path(file_path).read_text(encoding="utf-8").strip() if file_path is not None else None,
-        )
-        if isinstance(value, str) and value.strip()
-    ]
-    if not values:
-        raise ValueError(
-            "private key is required; pass --private-key, --private-key-env, or --private-key-file"
-        )
-    if len(values) > 1:
-        raise ValueError(
-            "provide only one private key source: --private-key, "
-            "--private-key-env, or --private-key-file"
-        )
-    return values[0].strip()
+    private_key = load_secret_from_args(
+        args,
+        direct_attr="private_key",
+        env_attr="private_key_env",
+        file_attr="private_key_file",
+        stdin_attr="private_key_stdin",
+        secret_name="private key",
+        direct_flag="--private-key",
+        env_flag="--private-key-env",
+        file_flag="--private-key-file",
+        stdin_flag="--private-key-stdin",
+        required=True,
+    )
+    assert private_key is not None
+    return private_key
 
 
 def _build_wallet(args: argparse.Namespace) -> Wallet:
@@ -109,17 +102,16 @@ def _submission_kwargs(args: argparse.Namespace) -> dict[str, Any]:
 
 def handle_wallet_generate(args: argparse.Namespace) -> int:
     wallet = Wallet()
+    if args.include_private_key:
+        raise ValueError("refusing to print private key to stdout; use --private-key-out")
     if args.private_key_out is not None:
         out_path = Path(args.private_key_out)
-        out_path.parent.mkdir(parents=True, exist_ok=True)
-        out_path.write_text(wallet.private_key + "\n", encoding="utf-8")
+        secure_write_text(out_path, wallet.private_key + "\n")
 
     payload: dict[str, Any] = {
         "address": wallet.public_key,
         "public_key": wallet.public_key,
     }
-    if args.include_private_key:
-        payload["private_key"] = wallet.private_key
     if args.private_key_out is not None:
         payload["private_key_path"] = str(Path(args.private_key_out).resolve())
     emit_json(payload)

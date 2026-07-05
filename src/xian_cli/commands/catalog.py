@@ -5,7 +5,6 @@ import json
 import sys
 from pathlib import Path
 
-from xian_cli.abci_bridge import get_node_setup_module
 from xian_cli.commands.common import _write_validator_material_files
 from xian_cli.config_repo import (
     list_network_template_paths,
@@ -17,6 +16,7 @@ from xian_cli.models import (
     read_network_template,
     write_json,
 )
+from xian_cli.secret_files import load_secret_from_args
 
 
 def _load_template(
@@ -103,16 +103,39 @@ def _infer_contract_module_name(source_path: Path) -> str:
 
 
 def _handle_keys_validator_generate(args: argparse.Namespace) -> int:
-    if args.out_dir is not None:
-        metadata_path = _write_validator_material_files(
-            out_dir=args.out_dir.resolve(),
-            private_key=args.private_key,
-            force=args.force,
+    if args.out_dir is None:
+        raise ValueError(
+            "validator private key material must be written with --out-dir; "
+            "refusing to print private key material to stdout"
         )
-        payload = read_json(metadata_path)
-    else:
-        payload = get_node_setup_module().generate_validator_material(args.private_key)
-
-    json.dump(payload, sys.stdout, indent=2)
+    private_key = load_secret_from_args(
+        args,
+        direct_attr="private_key",
+        env_attr="private_key_env",
+        file_attr="private_key_file",
+        stdin_attr="private_key_stdin",
+        secret_name="validator private key",
+        direct_flag="--private-key",
+        env_flag="--private-key-env",
+        file_flag="--private-key-file",
+        stdin_flag="--private-key-stdin",
+        required=False,
+    )
+    metadata_path = _write_validator_material_files(
+        out_dir=args.out_dir.resolve(),
+        private_key=private_key,
+        force=args.force,
+    )
+    payload = read_json(metadata_path)
+    json.dump(
+        {
+            "validator_key_info_path": str(metadata_path),
+            "priv_validator_key_path": str(metadata_path.parent / "priv_validator_key.json"),
+            "address": payload["priv_validator_key"]["address"],
+            "validator_public_key_hex": payload["validator_public_key_hex"],
+        },
+        sys.stdout,
+        indent=2,
+    )
     sys.stdout.write("\n")
     return 0

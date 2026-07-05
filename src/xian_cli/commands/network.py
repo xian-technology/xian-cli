@@ -32,6 +32,7 @@ from xian_cli.models import (
     write_json,
 )
 from xian_cli.network_plans import build_profile_runtime_fields
+from xian_cli.secret_files import load_secret_from_args, validate_secret_sources
 
 
 def _collect_creation_validator_names(
@@ -137,8 +138,41 @@ def _validator_constructor_overrides(args: argparse.Namespace) -> dict[str, obje
     return {"selection_mode": validator_selection_mode}
 
 
+def _validate_founder_private_key_sources(args: argparse.Namespace) -> None:
+    validate_secret_sources(
+        args,
+        direct_attr="founder_private_key",
+        env_attr="founder_private_key_env",
+        file_attr="founder_private_key_file",
+        stdin_attr="founder_private_key_stdin",
+        secret_name="founder private key",
+        direct_flag="--founder-private-key",
+        env_flag="--founder-private-key-env",
+        file_flag="--founder-private-key-file",
+        stdin_flag="--founder-private-key-stdin",
+        required=False,
+    )
+
+
+def _load_founder_private_key(args: argparse.Namespace) -> str | None:
+    return load_secret_from_args(
+        args,
+        direct_attr="founder_private_key",
+        env_attr="founder_private_key_env",
+        file_attr="founder_private_key_file",
+        stdin_attr="founder_private_key_stdin",
+        secret_name="founder private key",
+        direct_flag="--founder-private-key",
+        env_flag="--founder-private-key-env",
+        file_flag="--founder-private-key-file",
+        stdin_flag="--founder-private-key-stdin",
+        required=False,
+    )
+
+
 def _handle_network_create(args: argparse.Namespace) -> int:
     base_dir = args.base_dir.resolve()
+    _validate_founder_private_key_sources(args)
     template = _load_template(
         base_dir=base_dir,
         template_name=args.template,
@@ -222,9 +256,9 @@ def _handle_network_create(args: argparse.Namespace) -> int:
                     "--generate-validator-key or --validator-key-ref"
                 )
         else:
-            founder_private_key = args.founder_private_key or _extract_validator_private_key_hex(
-                validators[0]["validator_key_payload"]
-            )
+            founder_private_key = _load_founder_private_key(
+                args
+            ) or _extract_validator_private_key_hex(validators[0]["validator_key_payload"])
             generated_genesis_path = network_dir / "genesis.json"
             genesis = _build_creation_genesis(
                 chain_id=args.chain_id,

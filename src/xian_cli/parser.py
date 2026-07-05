@@ -261,7 +261,23 @@ def build_parser() -> argparse.ArgumentParser:
     )
     generate_parser.add_argument(
         "--private-key",
-        help=("existing 64-character hex private key; omit to generate a new one"),
+        help=(
+            "deprecated and rejected because process arguments can leak; "
+            "use --private-key-env, --private-key-file, or --private-key-stdin"
+        ),
+    )
+    generate_parser.add_argument(
+        "--private-key-env",
+        help="environment variable that contains the existing private key",
+    )
+    generate_parser.add_argument(
+        "--private-key-file",
+        help="path to a 0600 file that contains the existing private key",
+    )
+    generate_parser.add_argument(
+        "--private-key-stdin",
+        action="store_true",
+        help="read the existing private key from stdin",
     )
     generate_parser.add_argument(
         "--out-dir",
@@ -437,9 +453,23 @@ def build_parser() -> argparse.ArgumentParser:
     create_parser.add_argument(
         "--founder-private-key",
         help=(
-            "64-character hex private key for the founder account; defaults "
-            "to the validator private key when a validator key is available"
+            "deprecated and rejected because process arguments can leak; "
+            "use --founder-private-key-env, --founder-private-key-file, "
+            "or --founder-private-key-stdin"
         ),
+    )
+    create_parser.add_argument(
+        "--founder-private-key-env",
+        help="environment variable that contains the founder private key",
+    )
+    create_parser.add_argument(
+        "--founder-private-key-file",
+        help="path to a 0600 file that contains the founder private key",
+    )
+    create_parser.add_argument(
+        "--founder-private-key-stdin",
+        action="store_true",
+        help="read the founder private key from stdin",
     )
     create_parser.add_argument(
         "--validator-key-ref",

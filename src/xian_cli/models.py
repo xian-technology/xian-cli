@@ -10,6 +10,8 @@ from xian_runtime_types.decimal import ContractingDecimal
 from xian_runtime_types.encoding import encode
 from xian_runtime_types.time import Datetime
 
+from xian_cli.secret_files import secure_write_text
+
 SCHEMA_VERSION = 1
 SUPPORTED_BLOCK_POLICY_MODES = {"on_demand", "idle_interval", "periodic"}
 SUPPORTED_NODE_IMAGE_MODES = {"local_build", "registry"}
@@ -1439,12 +1441,17 @@ def write_json(
     *,
     force: bool = False,
     preserve_runtime_types: bool = False,
+    private: bool = False,
 ) -> None:
+    normalized = _normalize_json_value(payload, preserve_runtime_types=preserve_runtime_types)
+    content = json.dumps(normalized, indent=2) + "\n"
+    if private:
+        secure_write_text(path, content, force=force)
+        return
     path.parent.mkdir(parents=True, exist_ok=True)
     if path.exists() and not force:
         raise FileExistsError(f"{path} already exists; pass --force to overwrite")
-    normalized = _normalize_json_value(payload, preserve_runtime_types=preserve_runtime_types)
-    path.write_text(json.dumps(normalized, indent=2) + "\n", encoding="utf-8")
+    path.write_text(content, encoding="utf-8")
 
 
 def read_json(path: Path) -> dict:

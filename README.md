@@ -128,7 +128,7 @@ snapshot signing keys in the network manifest or node profile.
 Wallet, query, and transaction automation against a running node:
 
 ```bash
-uv run xian client wallet generate --include-private-key
+uv run xian client wallet generate --private-key-out ./wallet.key
 uv run xian client query nonce --node-url http://127.0.0.1:26657 <address>
 uv run xian client tx transfer \
   --node-url http://127.0.0.1:26657 \

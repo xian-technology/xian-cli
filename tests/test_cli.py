@@ -211,16 +211,28 @@ class ValidatorKeyTests(unittest.TestCase):
 
     def test_generate_validator_files(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
-            with redirect_stdout(io.StringIO()):
+            stdout = io.StringIO()
+            with redirect_stdout(stdout):
                 exit_code = main(["keys", "validator", "generate", "--out-dir", tmp_dir])
             self.assertEqual(exit_code, 0)
 
             output_dir = Path(tmp_dir)
             priv_validator_path = output_dir / "priv_validator_key.json"
             metadata_path = output_dir / "validator_key_info.json"
+            output_payload = json.loads(stdout.getvalue())
 
             self.assertTrue(priv_validator_path.exists())
             self.assertTrue(metadata_path.exists())
+            self.assertNotIn("validator_private_key_hex", output_payload)
+            self.assertNotIn("priv_validator_key", output_payload)
+            self.assertEqual(
+                output_payload["validator_key_info_path"],
+                str(metadata_path.resolve()),
+            )
+            if os.name != "nt":
+                self.assertEqual(oct(output_dir.stat().st_mode & 0o777), "0o700")
+                self.assertEqual(oct(priv_validator_path.stat().st_mode & 0o777), "0o600")
+                self.assertEqual(oct(metadata_path.stat().st_mode & 0o777), "0o600")
 
             priv_validator_payload = json.loads(priv_validator_path.read_text(encoding="utf-8"))
             metadata_payload = json.loads(metadata_path.read_text(encoding="utf-8"))
@@ -229,6 +241,26 @@ class ValidatorKeyTests(unittest.TestCase):
                 priv_validator_payload["address"],
                 metadata_payload["priv_validator_key"]["address"],
             )
+
+    def test_generate_validator_refuses_stdout_private_key_material(self) -> None:
+        with self.assertRaisesRegex(ValueError, "refusing to print private key material"):
+            main(["keys", "validator", "generate"])
+
+    def test_generate_validator_rejects_direct_private_key_arg(self) -> None:
+        account = Ed25519Account.generate()
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            with self.assertRaisesRegex(ValueError, "cannot be passed with --private-key"):
+                main(
+                    [
+                        "keys",
+                        "validator",
+                        "generate",
+                        "--out-dir",
+                        tmp_dir,
+                        "--private-key",
+                        account.private_key,
+                    ]
+                )
 
 
 class SetupNodeCommandTests(unittest.TestCase):
@@ -1036,6 +1068,7 @@ class ClientCommandTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp_dir:
             key_path = Path(tmp_dir) / "wallet.key"
             key_path.write_text(account.private_key + "\n", encoding="utf-8")
+            key_path.chmod(0o600)
             args = argparse.Namespace(
                 private_key=None,
                 private_key_env=None,
@@ -1045,6 +1078,20 @@ class ClientCommandTests(unittest.TestCase):
                 client_handlers._load_private_key_from_args(args),
                 account.private_key,
             )
+
+    def test_load_private_key_rejects_too_open_file(self) -> None:
+        account = Ed25519Account.generate()
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            key_path = Path(tmp_dir) / "wallet.key"
+            key_path.write_text(account.private_key + "\n", encoding="utf-8")
+            key_path.chmod(0o644)
+            args = argparse.Namespace(
+                private_key=None,
+                private_key_env=None,
+                private_key_file=str(key_path),
+            )
+            with self.assertRaisesRegex(PermissionError, "permissions are too open"):
+                client_handlers._load_private_key_from_args(args)
 
     def test_load_private_key_from_env(self) -> None:
         account = Ed25519Account.generate()
@@ -1062,19 +1109,47 @@ class ClientCommandTests(unittest.TestCase):
                 account.private_key,
             )
 
-    def test_load_private_key_requires_single_source(self) -> None:
+    def test_load_private_key_from_stdin(self) -> None:
+        account = Ed25519Account.generate()
+        args = argparse.Namespace(
+            private_key=None,
+            private_key_env=None,
+            private_key_file=None,
+            private_key_stdin=True,
+        )
+        with patch("sys.stdin", io.StringIO(account.private_key + "\n")):
+            self.assertEqual(
+                client_handlers._load_private_key_from_args(args),
+                account.private_key,
+            )
+
+    def test_load_private_key_rejects_direct_argv(self) -> None:
         account = Ed25519Account.generate()
         args = argparse.Namespace(
             private_key=account.private_key,
-            private_key_env="XIAN_PRIVATE_KEY",
+            private_key_env=None,
             private_key_file=None,
         )
-        with patch.dict(
-            "os.environ",
-            {"XIAN_PRIVATE_KEY": account.private_key},
-        ):
-            with self.assertRaisesRegex(ValueError, "provide only one"):
-                client_handlers._load_private_key_from_args(args)
+        with self.assertRaisesRegex(ValueError, "cannot be passed with --private-key"):
+            client_handlers._load_private_key_from_args(args)
+
+    def test_load_private_key_requires_single_source(self) -> None:
+        account = Ed25519Account.generate()
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            key_path = Path(tmp_dir) / "wallet.key"
+            key_path.write_text(account.private_key + "\n", encoding="utf-8")
+            key_path.chmod(0o600)
+            args = argparse.Namespace(
+                private_key=None,
+                private_key_env="XIAN_PRIVATE_KEY",
+                private_key_file=str(key_path),
+            )
+            with patch.dict(
+                "os.environ",
+                {"XIAN_PRIVATE_KEY": account.private_key},
+            ):
+                with self.assertRaisesRegex(ValueError, "provide only one"):
+                    client_handlers._load_private_key_from_args(args)
 
     def test_load_private_key_requires_value(self) -> None:
         args = argparse.Namespace(
@@ -1121,7 +1196,7 @@ class ClientCommandTests(unittest.TestCase):
         self.assertEqual(payload["address"], payload["public_key"])
         self.assertNotIn("private_key", payload)
 
-    def test_client_wallet_generate_can_emit_and_write_private_key(
+    def test_client_wallet_generate_can_write_private_key(
         self,
     ) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -1133,7 +1208,6 @@ class ClientCommandTests(unittest.TestCase):
                         "client",
                         "wallet",
                         "generate",
-                        "--include-private-key",
                         "--private-key-out",
                         str(out_path),
                     ]
@@ -1141,11 +1215,15 @@ class ClientCommandTests(unittest.TestCase):
 
             self.assertEqual(exit_code, 0)
             payload = json.loads(stdout.getvalue())
-            self.assertEqual(len(payload["private_key"]), 64)
-            self.assertEqual(
-                out_path.read_text(encoding="utf-8").strip(),
-                payload["private_key"],
-            )
+            self.assertNotIn("private_key", payload)
+            self.assertEqual(len(out_path.read_text(encoding="utf-8").strip()), 64)
+            self.assertEqual(payload["private_key_path"], str(out_path.resolve()))
+            if os.name != "nt":
+                self.assertEqual(oct(out_path.stat().st_mode & 0o777), "0o600")
+
+    def test_client_wallet_generate_refuses_private_key_stdout(self) -> None:
+        with self.assertRaisesRegex(ValueError, "refusing to print private key to stdout"):
+            main(["client", "wallet", "generate", "--include-private-key"])
 
     def test_client_query_nonce(self) -> None:
         with patch(
@@ -3008,6 +3086,24 @@ class NetworkManifestTests(unittest.TestCase):
                 {"__time__": [2026, 1, 1, 0, 0, 0, 0]},
             )
             (genesis_builder.build_local_network_genesis.assert_called_once())
+
+    def test_network_create_rejects_direct_founder_private_key_arg(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            with self.assertRaisesRegex(ValueError, "cannot be passed with --founder-private-key"):
+                main(
+                    [
+                        "network",
+                        "create",
+                        "local-dev",
+                        "--base-dir",
+                        tmp_dir,
+                        "--chain-id",
+                        "xian-local-1",
+                        "--founder-private-key",
+                        "11" * 32,
+                        "--dry-run",
+                    ]
+                )
 
     def test_network_create_forwards_validator_selection_mode_to_genesis_builder(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
