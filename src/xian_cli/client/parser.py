@@ -148,6 +148,34 @@ def register_client_commands(subparsers: argparse._SubParsersAction) -> None:
     query_tx_parser.add_argument("tx_hash", help="uppercase or lowercase tx hash")
     query_tx_parser.set_defaults(handler=handlers.handle_query_tx)
 
+    query_indexed_tx_parser = query_subparsers.add_parser(
+        "indexed-tx",
+        help="get a BDS-indexed transaction by hash",
+    )
+    _add_connection_args(query_indexed_tx_parser)
+    query_indexed_tx_parser.add_argument("tx_hash", help="uppercase or lowercase tx hash")
+    query_indexed_tx_parser.set_defaults(handler=handlers.handle_query_indexed_tx)
+
+    query_txs_by_sender_parser = query_subparsers.add_parser(
+        "txs-by-sender",
+        help="list BDS-indexed transactions for a sender",
+    )
+    _add_connection_args(query_txs_by_sender_parser)
+    query_txs_by_sender_parser.add_argument("sender", help="sender public key/address")
+    query_txs_by_sender_parser.add_argument("--limit", type=int, default=100)
+    query_txs_by_sender_parser.add_argument("--offset", type=int, default=0)
+    query_txs_by_sender_parser.set_defaults(handler=handlers.handle_query_txs_by_sender)
+
+    query_txs_by_contract_parser = query_subparsers.add_parser(
+        "txs-by-contract",
+        help="list BDS-indexed transactions for a contract",
+    )
+    _add_connection_args(query_txs_by_contract_parser)
+    query_txs_by_contract_parser.add_argument("contract", help="contract name")
+    query_txs_by_contract_parser.add_argument("--limit", type=int, default=100)
+    query_txs_by_contract_parser.add_argument("--offset", type=int, default=0)
+    query_txs_by_contract_parser.set_defaults(handler=handlers.handle_query_txs_by_contract)
+
     query_block_parser = query_subparsers.add_parser(
         "block",
         help="get a block by height or hash",

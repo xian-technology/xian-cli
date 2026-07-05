@@ -18,7 +18,7 @@ from unittest.mock import AsyncMock, patch
 from urllib.error import URLError
 
 from xian_accounts import Ed25519Account
-from xian_py.models import IndexedBlock, TransactionReceipt
+from xian_py.models import IndexedBlock, IndexedTransaction, TransactionReceipt
 from xian_runtime_types.decimal import ContractingDecimal
 from xian_runtime_types.time import Datetime
 
@@ -993,6 +993,15 @@ class _FakeContextClient:
     def get_tx(self, tx_hash: str):
         return self.responses["tx"]
 
+    def get_indexed_tx(self, tx_hash: str):
+        return self.responses["indexed_tx"]
+
+    def list_txs_by_sender(self, sender: str, *, limit: int = 100, offset: int = 0):
+        return self.responses["txs_by_sender"]
+
+    def list_txs_by_contract(self, contract: str, *, limit: int = 100, offset: int = 0):
+        return self.responses["txs_by_contract"]
+
     def get_block(self, height: int):
         return self.responses["block"]
 
@@ -1308,6 +1317,117 @@ class ClientCommandTests(unittest.TestCase):
         self.assertTrue(payload["success"])
         self.assertEqual(payload["tx_hash"], "ABC123")
         self.assertEqual(payload["execution"]["status_code"], 0)
+
+    def test_client_query_indexed_tx_serializes_canonical_tx_hash(self) -> None:
+        indexed_tx = IndexedTransaction.from_dict(
+            {
+                "tx_hash": "ABC123",
+                "block_height": 7,
+                "sender": "alice",
+                "nonce": 2,
+                "contract": "currency",
+                "function": "transfer",
+                "success": True,
+            }
+        )
+        fake_client = _FakeContextClient(indexed_tx=indexed_tx)
+        with patch(
+            "xian_cli.client.handlers._make_client",
+            return_value=fake_client,
+        ):
+            stdout = io.StringIO()
+            with redirect_stdout(stdout):
+                exit_code = main(
+                    [
+                        "client",
+                        "query",
+                        "indexed-tx",
+                        "--node-url",
+                        "http://node.example",
+                        "ABC123",
+                    ]
+                )
+
+        self.assertEqual(exit_code, 0)
+        payload = json.loads(stdout.getvalue())
+        self.assertEqual(payload["tx_hash"], "ABC123")
+        self.assertNotIn("hash", payload["raw"])
+
+    def test_client_query_txs_by_sender_serializes_canonical_tx_hash(self) -> None:
+        fake_client = _FakeContextClient(
+            txs_by_sender=[
+                IndexedTransaction.from_dict(
+                    {
+                        "tx_hash": "ABC123",
+                        "block_height": 7,
+                        "sender": "alice",
+                        "contract": "currency",
+                        "function": "transfer",
+                    }
+                )
+            ]
+        )
+        with patch(
+            "xian_cli.client.handlers._make_client",
+            return_value=fake_client,
+        ):
+            stdout = io.StringIO()
+            with redirect_stdout(stdout):
+                exit_code = main(
+                    [
+                        "client",
+                        "query",
+                        "txs-by-sender",
+                        "--node-url",
+                        "http://node.example",
+                        "alice",
+                        "--limit",
+                        "5",
+                    ]
+                )
+
+        self.assertEqual(exit_code, 0)
+        payload = json.loads(stdout.getvalue())
+        self.assertEqual(payload[0]["tx_hash"], "ABC123")
+        self.assertNotIn("hash", payload[0]["raw"])
+
+    def test_client_query_txs_by_contract_serializes_canonical_tx_hash(self) -> None:
+        fake_client = _FakeContextClient(
+            txs_by_contract=[
+                IndexedTransaction.from_dict(
+                    {
+                        "tx_hash": "DEF456",
+                        "block_height": 8,
+                        "sender": "alice",
+                        "contract": "currency",
+                        "function": "transfer",
+                    }
+                )
+            ]
+        )
+        with patch(
+            "xian_cli.client.handlers._make_client",
+            return_value=fake_client,
+        ):
+            stdout = io.StringIO()
+            with redirect_stdout(stdout):
+                exit_code = main(
+                    [
+                        "client",
+                        "query",
+                        "txs-by-contract",
+                        "--node-url",
+                        "http://node.example",
+                        "currency",
+                        "--offset",
+                        "1",
+                    ]
+                )
+
+        self.assertEqual(exit_code, 0)
+        payload = json.loads(stdout.getvalue())
+        self.assertEqual(payload[0]["tx_hash"], "DEF456")
+        self.assertNotIn("hash", payload[0]["raw"])
 
     def test_client_query_block_by_height_serializes_dataclass(self) -> None:
         block = IndexedBlock.from_dict(

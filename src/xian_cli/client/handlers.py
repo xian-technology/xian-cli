@@ -150,6 +150,35 @@ def handle_query_tx(args: argparse.Namespace) -> int:
     return 0
 
 
+def handle_query_indexed_tx(args: argparse.Namespace) -> int:
+    with _make_client(args) as client:
+        tx = client.get_indexed_tx(args.tx_hash)
+    emit_json(tx)
+    return 0
+
+
+def handle_query_txs_by_sender(args: argparse.Namespace) -> int:
+    with _make_client(args) as client:
+        txs = client.list_txs_by_sender(
+            args.sender,
+            limit=args.limit,
+            offset=args.offset,
+        )
+    emit_json(txs)
+    return 0
+
+
+def handle_query_txs_by_contract(args: argparse.Namespace) -> int:
+    with _make_client(args) as client:
+        txs = client.list_txs_by_contract(
+            args.contract,
+            limit=args.limit,
+            offset=args.offset,
+        )
+    emit_json(txs)
+    return 0
+
+
 def handle_query_block(args: argparse.Namespace) -> int:
     with _make_client(args) as client:
         if args.height is not None:
