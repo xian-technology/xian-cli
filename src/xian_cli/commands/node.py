@@ -400,24 +400,65 @@ def _resolve_node_context(args: argparse.Namespace) -> dict[str, object]:
 
 
 def _format_url_host(hostname: str) -> str:
+    hostname = hostname.strip()
     if ":" in hostname and not hostname.startswith("["):
         return f"[{hostname}]"
     return hostname
 
 
-def _display_endpoint_host(hostname: str) -> str:
-    if hostname == "0.0.0.0":
-        return "127.0.0.1"
-    if hostname == "::":
-        return "::1"
+def _unbracket_url_host(hostname: str) -> str:
+    hostname = hostname.strip()
+    if hostname.startswith("[") and hostname.endswith("]"):
+        return hostname[1:-1]
     return hostname
+
+
+def _display_endpoint_host(hostname: str) -> str:
+    hostname = _unbracket_url_host(hostname)
+    if hostname == "0.0.0.0":
+        return _format_url_host("127.0.0.1")
+    if hostname == "::":
+        return _format_url_host("::1")
+    return _format_url_host(hostname)
+
+
+def _endpoint_url(*, host: str, port: int, suffix: str = "", scheme: str = "http") -> str:
+    return f"{scheme}://{_display_endpoint_host(host)}:{port}{suffix}"
+
+
+def _display_endpoint_url(url: str) -> str:
+    parsed = urlparse(url)
+    if not parsed.netloc:
+        return url
+    try:
+        port = parsed.port
+    except ValueError:
+        return url
+    hostname = parsed.hostname
+    if hostname is None:
+        return url
+    userinfo = ""
+    if parsed.username is not None:
+        userinfo = parsed.username
+        if parsed.password is not None:
+            userinfo = f"{userinfo}:{parsed.password}"
+        userinfo = f"{userinfo}@"
+    netloc = f"{userinfo}{_display_endpoint_host(hostname)}"
+    if port is not None:
+        netloc = f"{netloc}:{port}"
+    scheme = parsed.scheme or "http"
+    return parsed._replace(scheme=scheme, netloc=netloc).geturl()
 
 
 def _replace_url_port(url: str, *, port: int, suffix: str = "") -> str:
     parsed = urlparse(url)
     scheme = parsed.scheme or "http"
-    hostname = _format_url_host(parsed.hostname or "127.0.0.1")
-    return f"{scheme}://{hostname}:{port}{suffix}"
+    return _endpoint_url(
+        scheme=scheme,
+        host=parsed.hostname or "127.0.0.1",
+        port=port,
+        suffix=suffix,
+    )
 
 
 def _rpc_base_url(rpc_status_url: str) -> str:
@@ -432,6 +473,7 @@ def _fallback_node_endpoints(
     profile: NodeProfile,
     network: dict[str, object] | None = None,
 ) -> dict[str, str]:
+    rpc_status_url = _display_endpoint_url(rpc_status_url)
     base_url = _rpc_base_url(rpc_status_url)
     endpoints = {
         "rpc": base_url,
@@ -453,27 +495,31 @@ def _fallback_node_endpoints(
     intentkit = _service_config(profile, "intentkit")
     shielded_relayer = _service_config(profile, "shielded_relayer")
     if bool(dashboard.get("enabled")):
-        dashboard_host = _display_endpoint_host(str(dashboard.get("host", "127.0.0.1")))
         dashboard_port = int(dashboard.get("port", 8080))
-        dashboard_url = f"http://{dashboard_host}:{dashboard_port}"
+        dashboard_url = _endpoint_url(
+            host=str(dashboard.get("host", "127.0.0.1")),
+            port=dashboard_port,
+        )
         endpoints["dashboard"] = dashboard_url
         endpoints["dashboard_status"] = f"{dashboard_url}/api/status"
     if bool(monitoring.get("enabled")):
         endpoints["prometheus"] = _replace_url_port(base_url, port=9090)
         endpoints["grafana"] = _replace_url_port(base_url, port=3000)
     if bool(intentkit.get("enabled")):
-        intentkit_host = _display_endpoint_host(str(intentkit.get("host", "127.0.0.1")))
         intentkit_port = int(intentkit.get("port", 38000))
         intentkit_api_port = int(intentkit.get("api_port", 38080))
-        frontend_url = f"http://{intentkit_host}:{intentkit_port}"
-        api_url = f"http://{intentkit_host}:{intentkit_api_port}"
+        intentkit_host = str(intentkit.get("host", "127.0.0.1"))
+        frontend_url = _endpoint_url(host=intentkit_host, port=intentkit_port)
+        api_url = _endpoint_url(host=intentkit_host, port=intentkit_api_port)
         endpoints["intentkit"] = frontend_url
         endpoints["intentkit_api"] = api_url
         endpoints["intentkit_api_health"] = f"{api_url}/health"
     if bool(shielded_relayer.get("enabled")):
-        relayer_host = _display_endpoint_host(str(shielded_relayer.get("host", "127.0.0.1")))
         relayer_port = int(shielded_relayer.get("port", 38180))
-        relayer_url = f"http://{relayer_host}:{relayer_port}"
+        relayer_url = _endpoint_url(
+            host=str(shielded_relayer.get("host", "127.0.0.1")),
+            port=relayer_port,
+        )
         endpoints["shielded_relayer"] = relayer_url
         endpoints["shielded_relayer_health"] = f"{relayer_url}/health"
         endpoints["shielded_relayer_info"] = f"{relayer_url}/v1/info"

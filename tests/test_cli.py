@@ -2122,6 +2122,7 @@ class NetworkManifestTests(unittest.TestCase):
                 encoding="utf-8",
             )
 
+            bootstrap_seed = "abc@[2001:db8::7]:26656"
             stdout = io.StringIO()
             with redirect_stdout(stdout):
                 exit_code = main(
@@ -2132,7 +2133,7 @@ class NetworkManifestTests(unittest.TestCase):
                         "--base-dir",
                         str(base_dir),
                         "--bootstrap-seed",
-                        "abc@seed.example:26656",
+                        bootstrap_seed,
                     ]
                 )
 
@@ -2150,7 +2151,7 @@ class NetworkManifestTests(unittest.TestCase):
             )
             self.assertEqual(
                 bundled_manifest["p2p"]["seeds"],
-                ["abc@seed.example:26656"],
+                [bootstrap_seed],
             )
             self.assertNotIn("runtime_backend", bundled_manifest)
             self.assertNotIn("tracer_mode", bundled_manifest)
@@ -2158,7 +2159,7 @@ class NetworkManifestTests(unittest.TestCase):
             self.assertTrue((bundle_dir / "privacy" / "artifacts.json").exists())
             self.assertEqual(
                 (bundle_dir / "bootstrap-seed.txt").read_text(encoding="utf-8"),
-                "abc@seed.example:26656\n",
+                f"{bootstrap_seed}\n",
             )
             self.assertIn("--parallel-execution-enabled", join_script)
             self.assertNotIn("--tracer-mode", join_script)
@@ -5764,6 +5765,66 @@ class RuntimeHelperTests(unittest.TestCase):
             endpoints["dashboard_status"],
             "http://127.0.0.1:18080/api/status",
         )
+
+    def test_fallback_node_endpoints_brackets_explicit_ipv6_hosts(self) -> None:
+        services = _services_payload(
+            dashboard_enabled=True,
+            dashboard_host="2001:db8::5",
+            dashboard_port=18080,
+        )
+        services["intentkit"] = {
+            "enabled": True,
+            "host": "::1",
+            "port": 38000,
+            "api_port": 38080,
+        }
+        services["shielded_relayer"] = {
+            "enabled": True,
+            "host": "[2001:db8::6]",
+            "port": 38180,
+        }
+        profile = {"services": services}
+
+        endpoints = _fallback_node_endpoints(
+            rpc_status_url="http://[2001:db8::1]:26657/status",
+            profile=profile,
+        )
+
+        self.assertEqual(endpoints["rpc"], "http://[2001:db8::1]:26657")
+        self.assertEqual(
+            endpoints["rpc_status"],
+            "http://[2001:db8::1]:26657/status",
+        )
+        self.assertEqual(
+            endpoints["xian_metrics"],
+            "http://[2001:db8::1]:9108/metrics",
+        )
+        self.assertEqual(endpoints["dashboard"], "http://[2001:db8::5]:18080")
+        self.assertEqual(endpoints["intentkit"], "http://[::1]:38000")
+        self.assertEqual(endpoints["intentkit_api"], "http://[::1]:38080")
+        self.assertEqual(
+            endpoints["shielded_relayer"],
+            "http://[2001:db8::6]:38180",
+        )
+
+    def test_fallback_node_endpoints_displays_ipv6_wildcard_as_loopback(self) -> None:
+        services = _services_payload(
+            dashboard_enabled=True,
+            dashboard_host="::",
+            dashboard_port=18080,
+            monitoring_enabled=True,
+        )
+        profile = {"services": services}
+
+        endpoints = _fallback_node_endpoints(
+            rpc_status_url="http://[::]:26657/status",
+            profile=profile,
+        )
+
+        self.assertEqual(endpoints["rpc"], "http://[::1]:26657")
+        self.assertEqual(endpoints["rpc_status"], "http://[::1]:26657/status")
+        self.assertEqual(endpoints["dashboard"], "http://[::1]:18080")
+        self.assertEqual(endpoints["prometheus"], "http://[::1]:9090")
 
     def test_run_backend_command_surfaces_backend_stderr(self) -> None:
         stack_dir = Path("/tmp/xian-stack")
