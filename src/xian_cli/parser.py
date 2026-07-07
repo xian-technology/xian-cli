@@ -260,13 +260,6 @@ def build_parser() -> argparse.ArgumentParser:
         "generate", help="generate validator key material"
     )
     generate_parser.add_argument(
-        "--private-key",
-        help=(
-            "deprecated and rejected because process arguments can leak; "
-            "use --private-key-env, --private-key-file, or --private-key-stdin"
-        ),
-    )
-    generate_parser.add_argument(
         "--private-key-env",
         help="environment variable that contains the existing private key",
     )
@@ -448,14 +441,6 @@ def build_parser() -> argparse.ArgumentParser:
         help=(
             "validators contract selection mode for generated local genesis: "
             "manual, auto_top_n, or hybrid"
-        ),
-    )
-    create_parser.add_argument(
-        "--founder-private-key",
-        help=(
-            "deprecated and rejected because process arguments can leak; "
-            "use --founder-private-key-env, --founder-private-key-file, "
-            "or --founder-private-key-stdin"
         ),
     )
     create_parser.add_argument(

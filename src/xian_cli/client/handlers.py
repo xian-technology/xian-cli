@@ -31,12 +31,10 @@ def _resolve_chain_id(args: argparse.Namespace) -> str | None:
 def _load_private_key_from_args(args: argparse.Namespace) -> str:
     private_key = load_secret_from_args(
         args,
-        direct_attr="private_key",
         env_attr="private_key_env",
         file_attr="private_key_file",
         stdin_attr="private_key_stdin",
         secret_name="private key",
-        direct_flag="--private-key",
         env_flag="--private-key-env",
         file_flag="--private-key-file",
         stdin_flag="--private-key-stdin",
@@ -102,8 +100,6 @@ def _submission_kwargs(args: argparse.Namespace) -> dict[str, Any]:
 
 def handle_wallet_generate(args: argparse.Namespace) -> int:
     wallet = Wallet()
-    if args.include_private_key:
-        raise ValueError("refusing to print private key to stdout; use --private-key-out")
     if args.private_key_out is not None:
         out_path = Path(args.private_key_out)
         secure_write_text(out_path, wallet.private_key + "\n")

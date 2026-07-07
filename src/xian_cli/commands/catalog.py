@@ -110,12 +110,10 @@ def _handle_keys_validator_generate(args: argparse.Namespace) -> int:
         )
     private_key = load_secret_from_args(
         args,
-        direct_attr="private_key",
         env_attr="private_key_env",
         file_attr="private_key_file",
         stdin_attr="private_key_stdin",
         secret_name="validator private key",
-        direct_flag="--private-key",
         env_flag="--private-key-env",
         file_flag="--private-key-file",
         stdin_flag="--private-key-stdin",

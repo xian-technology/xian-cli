@@ -18,13 +18,6 @@ def _add_connection_args(parser: argparse.ArgumentParser) -> None:
 
 def _add_wallet_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
-        "--private-key",
-        help=(
-            "deprecated and rejected because process arguments can leak; "
-            "use --private-key-env, --private-key-file, or --private-key-stdin"
-        ),
-    )
-    parser.add_argument(
         "--private-key-env",
         help="environment variable that contains the private key",
     )
@@ -101,11 +94,6 @@ def register_client_commands(subparsers: argparse._SubParsersAction) -> None:
     wallet_generate_parser = wallet_subparsers.add_parser(
         "generate",
         help="generate a new Xian wallet",
-    )
-    wallet_generate_parser.add_argument(
-        "--include-private-key",
-        action="store_true",
-        help="deprecated and rejected; use --private-key-out",
     )
     wallet_generate_parser.add_argument(
         "--private-key-out",

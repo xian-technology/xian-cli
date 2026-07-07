@@ -246,22 +246,6 @@ class ValidatorKeyTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "refusing to print private key material"):
             main(["keys", "validator", "generate"])
 
-    def test_generate_validator_rejects_direct_private_key_arg(self) -> None:
-        account = Ed25519Account.generate()
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            with self.assertRaisesRegex(ValueError, "cannot be passed with --private-key"):
-                main(
-                    [
-                        "keys",
-                        "validator",
-                        "generate",
-                        "--out-dir",
-                        tmp_dir,
-                        "--private-key",
-                        account.private_key,
-                    ]
-                )
-
 
 class SetupNodeCommandTests(unittest.TestCase):
     def test_setup_node_plan_join_prints_lifecycle_commands(self) -> None:
@@ -1132,16 +1116,6 @@ class ClientCommandTests(unittest.TestCase):
                 account.private_key,
             )
 
-    def test_load_private_key_rejects_direct_argv(self) -> None:
-        account = Ed25519Account.generate()
-        args = argparse.Namespace(
-            private_key=account.private_key,
-            private_key_env=None,
-            private_key_file=None,
-        )
-        with self.assertRaisesRegex(ValueError, "cannot be passed with --private-key"):
-            client_handlers._load_private_key_from_args(args)
-
     def test_load_private_key_requires_single_source(self) -> None:
         account = Ed25519Account.generate()
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -1229,10 +1203,6 @@ class ClientCommandTests(unittest.TestCase):
             self.assertEqual(payload["private_key_path"], str(out_path.resolve()))
             if os.name != "nt":
                 self.assertEqual(oct(out_path.stat().st_mode & 0o777), "0o600")
-
-    def test_client_wallet_generate_refuses_private_key_stdout(self) -> None:
-        with self.assertRaisesRegex(ValueError, "refusing to print private key to stdout"):
-            main(["client", "wallet", "generate", "--include-private-key"])
 
     def test_client_query_nonce(self) -> None:
         with patch(
@@ -3207,24 +3177,6 @@ class NetworkManifestTests(unittest.TestCase):
                 {"__time__": [2026, 1, 1, 0, 0, 0, 0]},
             )
             (genesis_builder.build_local_network_genesis.assert_called_once())
-
-    def test_network_create_rejects_direct_founder_private_key_arg(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            with self.assertRaisesRegex(ValueError, "cannot be passed with --founder-private-key"):
-                main(
-                    [
-                        "network",
-                        "create",
-                        "local-dev",
-                        "--base-dir",
-                        tmp_dir,
-                        "--chain-id",
-                        "xian-local-1",
-                        "--founder-private-key",
-                        "11" * 32,
-                        "--dry-run",
-                    ]
-                )
 
     def test_network_create_forwards_validator_selection_mode_to_genesis_builder(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:

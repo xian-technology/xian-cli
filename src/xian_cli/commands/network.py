@@ -141,12 +141,10 @@ def _validator_constructor_overrides(args: argparse.Namespace) -> dict[str, obje
 def _validate_founder_private_key_sources(args: argparse.Namespace) -> None:
     validate_secret_sources(
         args,
-        direct_attr="founder_private_key",
         env_attr="founder_private_key_env",
         file_attr="founder_private_key_file",
         stdin_attr="founder_private_key_stdin",
         secret_name="founder private key",
-        direct_flag="--founder-private-key",
         env_flag="--founder-private-key-env",
         file_flag="--founder-private-key-file",
         stdin_flag="--founder-private-key-stdin",
@@ -157,12 +155,10 @@ def _validate_founder_private_key_sources(args: argparse.Namespace) -> None:
 def _load_founder_private_key(args: argparse.Namespace) -> str | None:
     return load_secret_from_args(
         args,
-        direct_attr="founder_private_key",
         env_attr="founder_private_key_env",
         file_attr="founder_private_key_file",
         stdin_attr="founder_private_key_stdin",
         secret_name="founder private key",
-        direct_flag="--founder-private-key",
         env_flag="--founder-private-key-env",
         file_flag="--founder-private-key-file",
         stdin_flag="--founder-private-key-stdin",

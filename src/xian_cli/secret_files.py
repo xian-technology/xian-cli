@@ -16,21 +16,6 @@ def _safe_flag_list(*flags: str) -> str:
     return f"{', '.join(flags[:-1])}, or {flags[-1]}"
 
 
-def _secret_source_error(
-    *,
-    secret_name: str,
-    direct_flag: str,
-    env_flag: str,
-    file_flag: str,
-    stdin_flag: str,
-) -> ValueError:
-    safe_flags = _safe_flag_list(env_flag, file_flag, stdin_flag)
-    return ValueError(
-        f"{secret_name} cannot be passed with {direct_flag}; process arguments "
-        f"can leak through shell history and process lists. Use {safe_flags}."
-    )
-
-
 def _mode_is_too_open(mode: int) -> bool:
     return os.name != "nt" and bool(stat.S_IMODE(mode) & 0o077)
 
@@ -93,26 +78,15 @@ def read_secret_text(path: Path) -> str:
 def _secret_sources(
     args: argparse.Namespace,
     *,
-    direct_attr: str,
     env_attr: str,
     file_attr: str,
     stdin_attr: str,
     secret_name: str,
-    direct_flag: str,
     env_flag: str,
     file_flag: str,
     stdin_flag: str,
     required: bool,
 ) -> list[tuple[str, str | None]]:
-    if getattr(args, direct_attr, None) is not None:
-        raise _secret_source_error(
-            secret_name=secret_name,
-            direct_flag=direct_flag,
-            env_flag=env_flag,
-            file_flag=file_flag,
-            stdin_flag=stdin_flag,
-        )
-
     sources: list[tuple[str, str | None]] = []
     env_name = getattr(args, env_attr, None)
     if env_name is not None:
@@ -146,12 +120,10 @@ def _secret_sources(
 def validate_secret_sources(
     args: argparse.Namespace,
     *,
-    direct_attr: str,
     env_attr: str,
     file_attr: str,
     stdin_attr: str,
     secret_name: str,
-    direct_flag: str,
     env_flag: str,
     file_flag: str,
     stdin_flag: str,
@@ -159,12 +131,10 @@ def validate_secret_sources(
 ) -> None:
     _secret_sources(
         args,
-        direct_attr=direct_attr,
         env_attr=env_attr,
         file_attr=file_attr,
         stdin_attr=stdin_attr,
         secret_name=secret_name,
-        direct_flag=direct_flag,
         env_flag=env_flag,
         file_flag=file_flag,
         stdin_flag=stdin_flag,
@@ -175,12 +145,10 @@ def validate_secret_sources(
 def load_secret_from_args(
     args: argparse.Namespace,
     *,
-    direct_attr: str,
     env_attr: str,
     file_attr: str,
     stdin_attr: str,
     secret_name: str,
-    direct_flag: str,
     env_flag: str,
     file_flag: str,
     stdin_flag: str,
@@ -188,12 +156,10 @@ def load_secret_from_args(
 ) -> str | None:
     sources = _secret_sources(
         args,
-        direct_attr=direct_attr,
         env_attr=env_attr,
         file_attr=file_attr,
         stdin_attr=stdin_attr,
         secret_name=secret_name,
-        direct_flag=direct_flag,
         env_flag=env_flag,
         file_flag=file_flag,
         stdin_flag=stdin_flag,
