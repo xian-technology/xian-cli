@@ -24,7 +24,7 @@ jobs:
           python-version: "3.14"
 
       - name: Set up uv
-        uses: astral-sh/setup-uv@v8
+        uses: astral-sh/setup-uv@v8.3.2
 
       - name: Clean build directories
         run: rm -rf build dist
@@ -93,7 +93,7 @@ jobs:
           python-version: "3.14"
 
       - name: Set up uv
-        uses: astral-sh/setup-uv@v8
+        uses: astral-sh/setup-uv@v8.3.2
 
       - name: Download release artifacts
         uses: actions/download-artifact@v8
