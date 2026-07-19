@@ -405,9 +405,9 @@ class SetupNodeCommandTests(unittest.TestCase):
             self.assertIn("--validator-selection-mode", payload["steps"][0]["command"])
             self.assertIn("auto_top_n", payload["steps"][0]["command"])
 
-    def test_setup_node_rejects_interval_without_periodic_policy(self) -> None:
+    def test_setup_node_rejects_nonzero_interval_with_on_demand_policy(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
-            with self.assertRaisesRegex(ValueError, "has no effect"):
+            with self.assertRaisesRegex(ValueError, "must be 0s"):
                 with redirect_stdout(io.StringIO()):
                     main(
                         [
@@ -425,6 +425,8 @@ class SetupNodeCommandTests(unittest.TestCase):
                             "basic",
                             "--key-mode",
                             "generate",
+                            "--block-policy-mode",
+                            "on_demand",
                             "--block-policy-interval",
                             "1s",
                             "--base-dir",
@@ -567,9 +569,14 @@ class SetupNodeCommandTests(unittest.TestCase):
             profile = json.loads(
                 (base_dir / "nodes" / "validator-1.json").read_text(encoding="utf-8")
             )
-            self.assertFalse(profile["services"]["bds"]["enabled"])
+            self.assertTrue(profile["services"]["bds"]["enabled"])
             self.assertEqual(profile["services"]["dashboard"]["host"], "127.0.0.1")
+            self.assertTrue(profile["services"]["dashboard"]["enabled"])
+            self.assertTrue(profile["services"]["monitoring"]["enabled"])
+            self.assertEqual(profile["monitoring_profile"], "local_stack")
             self.assertEqual(profile["operator_profile"], "local_development")
+            self.assertEqual(profile["block_policy_mode"], "periodic")
+            self.assertEqual(profile["block_policy_interval"], "5s")
 
     def test_setup_node_local_periodic_block_policy_writes_cometbft_config(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -5821,6 +5828,7 @@ class RuntimeHelperTests(unittest.TestCase):
     ) -> None:
         profile = {
             "services": _services_payload(
+                bds_enabled=True,
                 dashboard_enabled=True,
                 dashboard_host="0.0.0.0",
                 dashboard_port=18080,
@@ -5837,6 +5845,8 @@ class RuntimeHelperTests(unittest.TestCase):
             endpoints["dashboard_status"],
             "http://127.0.0.1:18080/api/status",
         )
+        self.assertEqual(endpoints["graphql"], "http://127.0.0.1:5000/graphql")
+        self.assertEqual(endpoints["graphiql"], "http://127.0.0.1:5000/graphiql")
 
     def test_fallback_node_endpoints_brackets_explicit_ipv6_hosts(self) -> None:
         services = _services_payload(

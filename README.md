@@ -78,6 +78,12 @@ uv run xian node start local-dev
 uv run xian node status local-dev
 ```
 
+`single-node-dev` is the full self-contained development profile. It enables
+BDS/Postgres, the read-only GraphQL endpoint and GraphiQL browser UI, the node
+dashboard, Prometheus, and Grafana. Host-facing endpoints stay on loopback;
+inspect their effective URLs with `xian node endpoints local-dev`. Periodic
+five-second blocks keep contract time advancing while the node is idle.
+
 For a metered 0-fee local network, add `--tx-fee-mode free_metered` plus
 explicit `--free-tx-max-chi` and `--free-block-max-chi` caps to `setup node`,
 `network create`, or `network join`.
@@ -155,7 +161,8 @@ operations to `xian-stack`, and uses `xian-py` for wallet / RPC automation.
 | Submit contract source | `xian client tx submit-source ...` | product or contract repos, `xian-py` |
 | Script chain interactions | `xian client query/call/simulate/tx ...` | `xian-py` |
 
-Typical local development loop:
+The `single-node-indexed` template provides the same indexed and observability
+surface with the `indexed_development` operator posture:
 
 ```bash
 uv run xian network template show single-node-indexed

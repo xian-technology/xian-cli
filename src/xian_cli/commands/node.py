@@ -490,6 +490,7 @@ def _fallback_node_endpoints(
             suffix="/metrics",
         ),
     }
+    bds = _service_config(profile, "bds")
     dashboard = _service_config(profile, "dashboard")
     monitoring = _service_config(profile, "monitoring")
     intentkit = _service_config(profile, "intentkit")
@@ -502,6 +503,10 @@ def _fallback_node_endpoints(
         )
         endpoints["dashboard"] = dashboard_url
         endpoints["dashboard_status"] = f"{dashboard_url}/api/status"
+    if bool(bds.get("enabled")):
+        graphql_base = _replace_url_port(base_url, port=5000)
+        endpoints["graphql"] = f"{graphql_base}/graphql"
+        endpoints["graphiql"] = f"{graphql_base}/graphiql"
     if bool(monitoring.get("enabled")):
         endpoints["prometheus"] = _replace_url_port(base_url, port=9090)
         endpoints["grafana"] = _replace_url_port(base_url, port=3000)
@@ -652,6 +657,8 @@ def _summarize_node_status(result: dict[str, object]) -> dict[str, object]:
         if summary["monitoring_enabled"]:
             summary["prometheus_reachable"] = backend_status.get("prometheus_reachable")
             summary["grafana_reachable"] = backend_status.get("grafana_reachable")
+        if summary["bds_enabled"]:
+            summary["graphiql_reachable"] = backend_status.get("graphiql_reachable")
         if summary["intentkit_enabled"]:
             summary["intentkit_running"] = backend_status.get("intentkit_running")
             summary["intentkit_reachable"] = backend_status.get("intentkit_reachable")
