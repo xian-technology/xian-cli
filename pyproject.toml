@@ -29,7 +29,7 @@ dev = [
     "pytest>=9.0.3,<10",
     "pytest-cov>=7.1.0,<8",
     "ruff>=0.15.12,<0.16",
-    "xian-tech-vm-core>=0.1.0,<0.2",
+    "xian-tech-vm-core>=0.1.1,<0.2",
 ]
 
 [project.scripts]
