@@ -158,9 +158,10 @@ def read_contract_source_from_bundle(
         _require_str(contract, "path"),
     )
     expected_sha256 = _require_sha256(contract, "sha256")
-    actual_sha256 = _sha256_file(source_path)
+    source_bytes = source_path.read_bytes()
+    actual_sha256 = hashlib.sha256(source_bytes).hexdigest()
     if actual_sha256 != expected_sha256:
         raise ValueError(
             f"{contract['path']} sha256 mismatch: expected {expected_sha256}, got {actual_sha256}"
         )
-    return source_path.read_text(encoding="utf-8")
+    return source_bytes.decode("utf-8")
