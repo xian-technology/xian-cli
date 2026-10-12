@@ -291,3 +291,20 @@ uv run pytest
 - [docs/BACKLOG.md](docs/BACKLOG.md) — open work and follow-ups
 - [docs/LIFECYCLE_CONTRACT.md](docs/LIFECYCLE_CONTRACT.md) — node-lifecycle contract that the CLI enforces
 - [docs/DISTRIBUTION.md](docs/DISTRIBUTION.md) — packaging, install paths, and release-channel rules
+
+## Hybrid transaction custody
+
+`client tx` commands accept `--active-backup-file /secure/active.json` and
+`--backup-password-env XIAN_BACKUP_PASSWORD` instead of a legacy key input.
+Use `--chain-id` with the intended local network. These flags load an existing
+encrypted active backup; they do not enroll accounts or generate recovery keys.
+The sender remains the original address. Mixing either mode or supplying a cold
+recovery backup is rejected. Derive this active-only credential from the verified master backup and keep
+the master offline. See the [account recovery guide](../xian-docs-web/concepts/hybrid-account-recovery.md).
+
+## Fresh-chain balance migration
+
+`xian network convert-legacy-balances` converts legacy exported state rows;
+`xian network migrate-balances` creates a separately reconciled genesis bundle.
+See the [migration specification](../xian-meta/docs/SNAPSHOT_GENESIS_MIGRATION.md).
+Neither command enables enrollment or selects final launch allocations.

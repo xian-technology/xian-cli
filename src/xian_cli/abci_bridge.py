@@ -44,3 +44,11 @@ def get_genesis_builder_module():
             "xian-abci helpers are required for network creation; "
             "install xian-tech-abci in the current environment"
         ) from exc
+
+
+@lru_cache(maxsize=1)
+def get_genesis_migration_module():
+    try:
+        return _load_xian_module("genesis_migration")
+    except RuntimeError as exc:
+        raise RuntimeError("xian-abci helpers are required for balance migration") from exc

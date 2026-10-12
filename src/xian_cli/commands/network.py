@@ -920,3 +920,65 @@ def _handle_network_package_operator_bundle(args: argparse.Namespace) -> int:
     }
     print(json.dumps(result, indent=2))
     return 0
+
+
+def _handle_network_migrate_balances(args: argparse.Namespace) -> int:
+    from xian_cli.abci_bridge import get_genesis_migration_module
+
+    report = get_genesis_migration_module().prepare_bundle(
+        args.snapshot,
+        args.plan,
+        args.contracts_dir,
+        args.bundle,
+        args.output_dir,
+        rehearsal=args.rehearsal,
+    )
+    print(
+        json.dumps(
+            {
+                "output_dir": str(args.output_dir.resolve()),
+                "total_supply": report["total_supply"],
+                "destination_accounts": report["destination_accounts"],
+                "enrollment_ready": False,
+                "launch_approved": False,
+            },
+            indent=2,
+        )
+    )
+    return 0
+
+
+def _handle_network_convert_legacy_balances(args: argparse.Namespace) -> int:
+    from xian_cli.abci_bridge import get_genesis_migration_module
+
+    report = get_genesis_migration_module().convert_legacy_export(
+        args.state,
+        chain_id=args.chain_id,
+        height=args.height,
+        block_hash=args.block_hash,
+        total_supply=args.total_supply,
+        scope=args.scope,
+        output_path=args.output,
+        contract_inventory=args.contract_inventory,
+    )
+    print(json.dumps(report, indent=2))
+    return 0
+
+
+def _handle_network_build_genesis(args: argparse.Namespace) -> int:
+    from xian_runtime_types.encoding import encode
+
+    from xian_cli.abci_bridge import get_genesis_builder_module
+
+    if args.output.exists():
+        raise ValueError("genesis output must not exist")
+    genesis = get_genesis_builder_module().build_bundle_network_genesis(
+        chain_id=args.chain_id,
+        network=args.bundle,
+        contracts_dir=args.contracts_dir,
+        genesis_time=args.genesis_time,
+    )
+    with args.output.open("x", encoding="utf-8") as handle:
+        handle.write(encode(genesis))
+    print(json.dumps({"output": str(args.output.resolve()), "app_hash": genesis["app_hash"]}))
+    return 0

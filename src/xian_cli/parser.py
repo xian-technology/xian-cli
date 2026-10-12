@@ -287,6 +287,46 @@ def build_parser() -> argparse.ArgumentParser:
     network_parser = subparsers.add_parser("network", help="network manifests")
     network_subparsers = network_parser.add_subparsers(dest="network_command", required=True)
 
+    genesis_parser = network_subparsers.add_parser(
+        "build-genesis", help="build genesis from an explicit reviewed contract directory"
+    )
+    genesis_parser.add_argument("--contracts-dir", type=Path, required=True)
+    genesis_parser.add_argument("--bundle", required=True)
+    genesis_parser.add_argument("--chain-id", required=True)
+    genesis_parser.add_argument("--genesis-time", required=True)
+    genesis_parser.add_argument("--output", type=Path, required=True)
+    genesis_parser.set_defaults(handler_name="_handle_network_build_genesis")
+
+    snapshot_parser = network_subparsers.add_parser(
+        "convert-legacy-balances", help="convert exported legacy balance/allowance rows"
+    )
+    snapshot_parser.add_argument("--state", type=Path, required=True)
+    snapshot_parser.add_argument(
+        "--contract-inventory",
+        type=Path,
+        help="JSON array of source contract names; required for complete snapshots",
+    )
+    snapshot_parser.add_argument("--output", type=Path, required=True)
+    snapshot_parser.add_argument("--chain-id", required=True)
+    snapshot_parser.add_argument("--height", type=int, required=True)
+    snapshot_parser.add_argument("--block-hash", required=True)
+    snapshot_parser.add_argument("--total-supply", required=True)
+    snapshot_parser.add_argument("--scope", choices=("complete", "sample"), required=True)
+    snapshot_parser.set_defaults(handler_name="_handle_network_convert_legacy_balances")
+
+    migration_parser = network_subparsers.add_parser(
+        "migrate-balances", help="reconcile a snapshot into a fresh genesis contract bundle"
+    )
+    for argument in ("snapshot", "plan", "contracts-dir", "output-dir"):
+        migration_parser.add_argument("--" + argument, type=Path, required=True)
+    migration_parser.add_argument("--bundle", default="mainnet")
+    migration_parser.add_argument(
+        "--rehearsal",
+        action="store_true",
+        help="allow sample snapshots; output is not a launch allocation",
+    )
+    migration_parser.set_defaults(handler_name="_handle_network_migrate_balances")
+
     template_parser = network_subparsers.add_parser(
         "template", help="inspect canonical network templates"
     )

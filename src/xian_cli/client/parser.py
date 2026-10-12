@@ -18,6 +18,13 @@ def _add_connection_args(parser: argparse.ArgumentParser) -> None:
 
 def _add_wallet_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
+        "--active-backup-file",
+        help="encrypted hybrid active backup; cannot be combined with private-key inputs",
+    )
+    parser.add_argument(
+        "--backup-password-env", help="environment variable containing the active backup password"
+    )
+    parser.add_argument(
         "--private-key-env",
         help="environment variable that contains the private key",
     )

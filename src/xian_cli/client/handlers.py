@@ -45,6 +45,23 @@ def _load_private_key_from_args(args: argparse.Namespace) -> str:
 
 
 def _build_wallet(args: argparse.Namespace) -> Wallet:
+    backup = getattr(args, "active_backup_file", None)
+    password_env = getattr(args, "backup_password_env", None)
+    if backup or password_env:
+        from xian_py.signers import load_signing_wallet
+
+        if any(
+            getattr(args, name, None)
+            for name in ("private_key_env", "private_key_file", "private_key_stdin")
+        ):
+            raise ValueError("active backup cannot be combined with private-key inputs")
+        if not backup or not password_env:
+            raise ValueError("--active-backup-file and --backup-password-env are both required")
+        return load_signing_wallet(
+            active_backup_file=backup,
+            backup_password=os.environ.get(password_env),
+            chain_id=_resolve_chain_id(args),
+        )
     return Wallet(private_key=_load_private_key_from_args(args))
 
 
