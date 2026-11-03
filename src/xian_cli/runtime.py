@@ -6,6 +6,7 @@ import subprocess
 import sys
 import threading
 import time
+from collections import deque
 from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
@@ -15,6 +16,7 @@ from urllib.request import urlopen
 from xian_cli.setup_contract import BackendRequest, drop_none
 
 DEFAULT_RPC_TIMEOUT_SECONDS = 90.0
+BACKEND_STDERR_TAIL_CHARS = 65_536
 
 BACKEND_OPTION_KEYS = (
     ("node_image_mode", "node_image_mode"),
@@ -145,6 +147,28 @@ def _backend_script(stack_dir: Path) -> Path:
     return stack_dir / "scripts" / "backend.py"
 
 
+def _display_backend_progress(chunk: str) -> bool:
+    try:
+        sys.stderr.write(chunk)
+        sys.stderr.flush()
+    except (OSError, ValueError):
+        return False
+    return True
+
+
+def _append_stderr_tail(chunks: deque[str], chunk: str, retained: int) -> tuple[int, bool]:
+    chunks.append(chunk)
+    retained += len(chunk)
+    truncated = retained > BACKEND_STDERR_TAIL_CHARS
+    while retained > BACKEND_STDERR_TAIL_CHARS:
+        first = chunks.popleft()
+        removed = min(len(first), retained - BACKEND_STDERR_TAIL_CHARS)
+        if removed < len(first):
+            chunks.appendleft(first[removed:])
+        retained -= removed
+    return retained, truncated
+
+
 def _run_backend_command_with_streamed_stderr(
     cmd: list[str],
     *,
@@ -161,15 +185,20 @@ def _run_backend_command_with_streamed_stderr(
         text=True,
         env=dict(env),
     )
-    stderr_chunks: list[str] = []
+    stderr_chunks: deque[str] = deque()
+    stderr_truncated = False
 
     def drain_stderr() -> None:
+        nonlocal stderr_truncated
         if process.stderr is None:
             return
-        for line in process.stderr:
-            stderr_chunks.append(line)
-            sys.stderr.write(line)
-            sys.stderr.flush()
+        retained = 0
+        progress_available = True
+        for line in iter(lambda: process.stderr.readline(4096), ""):
+            retained, truncated = _append_stderr_tail(stderr_chunks, line, retained)
+            stderr_truncated |= truncated
+            if progress_available:
+                progress_available = _display_backend_progress(line)
 
     stderr_thread = threading.Thread(target=drain_stderr, daemon=True)
     stderr_thread.start()
@@ -187,6 +216,8 @@ def _run_backend_command_with_streamed_stderr(
     finally:
         stderr_thread.join()
     stderr = "".join(stderr_chunks)
+    if stderr_truncated:
+        stderr = "[earlier backend stderr omitted]\n" + stderr
 
     if returncode != 0:
         raise subprocess.CalledProcessError(

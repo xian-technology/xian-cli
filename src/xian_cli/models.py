@@ -947,6 +947,14 @@ def normalize_network_manifest(payload: dict) -> dict:
     }
 
 
+def _normalize_app_log_budgets(payload: dict) -> dict[str, int]:
+    file_mb = _require_positive_int(payload, "app_log_max_file_mb", default=50)
+    total_mb = _require_positive_int(payload, "app_log_max_total_mb", default=250)
+    if total_mb < file_mb:
+        raise ValueError("app_log_max_total_mb must be at least app_log_max_file_mb")
+    return {"app_log_max_file_mb": file_mb, "app_log_max_total_mb": total_mb}
+
+
 def normalize_node_profile(payload: dict) -> dict:
     if not isinstance(payload, dict):
         raise ValueError("node profile must be a JSON object")
@@ -977,6 +985,8 @@ def normalize_node_profile(payload: dict) -> dict:
             "app_log_json",
             "app_log_rotation_hours",
             "app_log_retention_days",
+            "app_log_max_file_mb",
+            "app_log_max_total_mb",
             "simulation_enabled",
             "simulation_max_concurrency",
             "simulation_timeout_ms",
@@ -1060,6 +1070,7 @@ def normalize_node_profile(payload: dict) -> dict:
         "app_log_retention_days": _require_positive_int(
             payload, "app_log_retention_days", default=7
         ),
+        **_normalize_app_log_budgets(payload),
         "simulation_enabled": _require_bool(payload, "simulation_enabled", default=True),
         "simulation_max_concurrency": _require_positive_int(
             payload, "simulation_max_concurrency", default=2
@@ -1115,6 +1126,8 @@ def normalize_network_template(payload: dict) -> dict:
             "app_log_json",
             "app_log_rotation_hours",
             "app_log_retention_days",
+            "app_log_max_file_mb",
+            "app_log_max_total_mb",
             "simulation_enabled",
             "simulation_max_concurrency",
             "simulation_timeout_ms",
@@ -1177,6 +1190,7 @@ def normalize_network_template(payload: dict) -> dict:
         "app_log_retention_days": _require_positive_int(
             payload, "app_log_retention_days", default=7
         ),
+        **_normalize_app_log_budgets(payload),
         "simulation_enabled": _require_bool(payload, "simulation_enabled", default=True),
         "simulation_max_concurrency": _require_positive_int(
             payload, "simulation_max_concurrency", default=2
@@ -1327,6 +1341,8 @@ class NodeProfile:
     app_log_json: bool = False
     app_log_rotation_hours: int = 1
     app_log_retention_days: int = 7
+    app_log_max_file_mb: int = 50
+    app_log_max_total_mb: int = 250
     simulation_enabled: bool = True
     simulation_max_concurrency: int = 2
     simulation_timeout_ms: int = 3000
@@ -1359,6 +1375,8 @@ class NetworkTemplate:
     app_log_json: bool = False
     app_log_rotation_hours: int = 1
     app_log_retention_days: int = 7
+    app_log_max_file_mb: int = 50
+    app_log_max_total_mb: int = 250
     simulation_enabled: bool = True
     simulation_max_concurrency: int = 2
     simulation_timeout_ms: int = 3000

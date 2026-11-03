@@ -191,7 +191,14 @@ Resolution policy:
 
 ### Node Profile
 
-The node profile is the machine-local source of truth. Target fields:
+The node profile is the machine-local source of truth. Application logging
+controls include `app_log_retention_days` (7), `app_log_rotation_hours` (1),
+`app_log_max_file_mb` (50) and `app_log_max_total_mb` (250). The size values
+are positive integer MiB; total must be at least the segment limit. Older
+profiles/templates receive these defaults. Explicit setup/create/join flags
+override template values and are rendered into the node configuration.
+
+Target fields:
 
 ```json
 {

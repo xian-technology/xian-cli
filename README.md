@@ -128,6 +128,13 @@ uv run xian doctor devnet-node --skip-live-checks
 uv run xian snapshot restore devnet-node
 ```
 
+Application logs default to seven-day retention, 50 MiB segments and a
+250 MiB total budget. Use `--app-log-max-file-mb` and
+`--app-log-max-total-mb` on setup/create/join to override the local node profile.
+The total must be at least the segment limit; disk pressure from logging may
+remove older records before seven days. See the node logging guide in
+`xian-docs-web/node/managing.md` for diagnostic and container-log boundaries.
+
 For remote snapshot bootstrap, prefer a signed snapshot manifest plus trusted
 snapshot signing keys in the network manifest or node profile.
 

@@ -191,6 +191,8 @@ def _initialize_node_from_args(args: argparse.Namespace) -> dict:
                 json_logging=bool(profile.get("app_log_json", False)),
                 rotation_hours=int(profile.get("app_log_rotation_hours", 1)),
                 retention_days=int(profile.get("app_log_retention_days", 7)),
+                max_file_mb=int(profile.get("app_log_max_file_mb", 50)),
+                max_total_mb=int(profile.get("app_log_max_total_mb", 250)),
             ),
             simulation=node_setup.SimulationOptions(
                 enabled=bool(profile.get("simulation_enabled", True)),

@@ -87,6 +87,16 @@ def add_node_profile_runtime_args(
         help=f"rotate application log files after this many hours in {subject}",
     )
     parser.add_argument(
+        "--app-log-max-file-mb",
+        type=int,
+        help=f"maximum application log segment size in MiB for {subject}",
+    )
+    parser.add_argument(
+        "--app-log-max-total-mb",
+        type=int,
+        help=f"maximum total application log storage in MiB for {subject}",
+    )
+    parser.add_argument(
         "--app-log-retention-days",
         type=int,
         help=f"retain rotated application logs for this many days in {subject}",

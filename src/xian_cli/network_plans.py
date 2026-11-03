@@ -193,6 +193,22 @@ def build_profile_runtime_fields(
             validate_positive_int,
         ),
         (
+            "app_log_max_file_mb",
+            "app_log_max_file_mb",
+            "app_log_max_file_mb",
+            50,
+            False,
+            validate_positive_int,
+        ),
+        (
+            "app_log_max_total_mb",
+            "app_log_max_total_mb",
+            "app_log_max_total_mb",
+            250,
+            False,
+            validate_positive_int,
+        ),
+        (
             "app_log_retention_days",
             "app_log_retention_days",
             "app_log_retention_days",
