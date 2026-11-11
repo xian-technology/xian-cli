@@ -12,12 +12,14 @@ import tempfile
 import tomllib
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
+from decimal import Decimal
 from importlib.metadata import version
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
 from urllib.error import URLError
 
 from xian_accounts import Ed25519Account
+from xian_py import XianClientConfig
 from xian_py.models import IndexedBlock, IndexedTransaction, TransactionReceipt
 from xian_runtime_types.decimal import ContractingDecimal
 from xian_runtime_types.time import Datetime
@@ -1166,7 +1168,18 @@ class ClientCommandTests(unittest.TestCase):
         ctor.assert_called_once_with(
             "http://node.example",
             chain_id="xian-local-1",
+            config=XianClientConfig(vm_profile="xian_vm_v2"),
             wallet=wallet,
+        )
+
+    def test_client_preserves_json_fraction_digits(self) -> None:
+
+        values = client_handlers._parse_json_object(
+            '{"amount":9007199254740993.000000000000000000000000000001}',
+            flag_name="--kwargs-json",
+        )
+        self.assertEqual(
+            values["amount"], Decimal("9007199254740993.000000000000000000000000000001")
         )
 
     def test_parse_json_object_rejects_invalid_json(self) -> None:
@@ -1805,6 +1818,12 @@ class ClientOutputTests(unittest.TestCase):
         )
         self.assertEqual(payload["execution"]["payload"], "hello")
         self.assertEqual(payload["execution"]["raw"], "ff")
+
+    def test_outputs_exact_decimal_and_large_integer(self) -> None:
+        self.assertEqual(
+            cli_output.to_jsonable([Decimal("1e-30"), 1 << 53]),
+            ["0." + "0" * 29 + "1", {"__big_int__": "9007199254740992"}],
+        )
 
     def test_emit_json_writes_newline_terminated_json(self) -> None:
         stdout = io.StringIO()
@@ -6313,7 +6332,7 @@ class ConfigRepoTests(unittest.TestCase):
             payload = json.loads(stdout.getvalue())
             self.assertEqual(payload["format"], "xian_contract_artifact_v1")
             self.assertEqual(payload["module_name"], "con_counter")
-            self.assertEqual(payload["vm_profile"], "xian_vm_v1")
+            self.assertEqual(payload["vm_profile"], "xian_vm_v2")
             self.assertIn("vm_ir_json", payload)
             self.assertIn("vm_ir_sha256", payload["hashes"])
 
@@ -6345,6 +6364,8 @@ class ConfigRepoTests(unittest.TestCase):
                         str(source_path),
                         "--name",
                         "con_counter",
+                        "--vm-profile",
+                        "xian_vm_v1",
                         "--output",
                         str(output_path),
                     ]

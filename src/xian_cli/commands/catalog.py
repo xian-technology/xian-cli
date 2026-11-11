@@ -86,7 +86,7 @@ def _handle_contract_build_artifacts(args: argparse.Namespace) -> int:
         module_name=module_name,
         source=source,
         lint=not args.no_lint,
-        vm_profile="xian_vm_v1",
+        vm_profile=args.vm_profile,
     )
     if args.output is None:
         print(json.dumps(artifacts, indent=2, sort_keys=True))

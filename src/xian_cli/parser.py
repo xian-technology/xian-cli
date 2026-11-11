@@ -350,7 +350,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     contract_build_artifacts_parser = contract_subparsers.add_parser(
         "build-artifacts",
-        help="build xian_vm_v1 artifacts from contract source for inspection",
+        help="build contract artifacts for a selected VM profile",
     )
     contract_build_artifacts_parser.add_argument(
         "source",
@@ -363,6 +363,12 @@ def build_parser() -> argparse.ArgumentParser:
             "contract module name; defaults to the source filename, with "
             "'.s.py' stripped when present"
         ),
+    )
+    contract_build_artifacts_parser.add_argument(
+        "--vm-profile",
+        choices=("xian_vm_v1", "xian_vm_v2"),
+        default="xian_vm_v2",
+        help="compiler profile (default: xian_vm_v2)",
     )
     contract_build_artifacts_parser.add_argument(
         "--output",

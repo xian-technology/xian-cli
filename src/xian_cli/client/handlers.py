@@ -5,10 +5,12 @@ import asyncio
 import json
 import os
 import sys
+from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
 import xian_py.transaction as tx_api
+from xian_py import XianClientConfig
 from xian_py.wallet import Wallet
 from xian_py.xian import Xian
 
@@ -56,13 +58,18 @@ def _make_client(
     return Xian(
         _resolve_node_url(args),
         chain_id=_resolve_chain_id(args),
+        config=XianClientConfig(vm_profile="xian_vm_v2"),
         wallet=wallet,
     )
 
 
+def _reject_nonfinite(token: str) -> None:
+    raise ValueError(f"{token} is not a finite JSON number")
+
+
 def _parse_json_object(raw: str, *, flag_name: str) -> dict[str, Any]:
     try:
-        value = json.loads(raw)
+        value = json.loads(raw, parse_float=Decimal, parse_constant=_reject_nonfinite)
     except json.JSONDecodeError as exc:
         raise ValueError(f"{flag_name} must be valid JSON") from exc
     if not isinstance(value, dict):

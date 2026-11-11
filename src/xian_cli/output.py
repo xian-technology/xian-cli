@@ -6,7 +6,7 @@ import json
 import sys
 from typing import Any
 
-from xian_runtime_types.decimal import ContractingDecimal
+from xian_runtime_types.decimal import ContractingDecimal, canonical_fixed
 from xian_runtime_types.time import Datetime
 
 
@@ -19,7 +19,11 @@ def to_jsonable(value: Any) -> Any:
         return [to_jsonable(item) for item in value]
     if isinstance(value, tuple):
         return [to_jsonable(item) for item in value]
-    if isinstance(value, (ContractingDecimal, decimal.Decimal, Datetime)):
+    if isinstance(value, (ContractingDecimal, decimal.Decimal)):
+        return canonical_fixed(value)
+    if isinstance(value, int) and abs(value) >= 1 << 53:
+        return {"__big_int__": str(value)}
+    if isinstance(value, Datetime):
         return str(value)
     if isinstance(value, bytes):
         try:
