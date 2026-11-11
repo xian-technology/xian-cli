@@ -143,7 +143,8 @@ def _initialize_node_from_args(args: argparse.Namespace) -> dict:
     profile_p2p = profile.get("p2p") if isinstance(profile.get("p2p"), dict) else {}
     p2p_seeds = list(network_p2p.get("seeds") or [])
     p2p_seeds.extend(profile_p2p.get("seeds") or [])
-    p2p_persistent_peers = list(profile_p2p.get("persistent_peers") or [])
+    p2p_persistent_peers = list(network_p2p.get("persistent_peers") or [])
+    p2p_persistent_peers.extend(profile_p2p.get("persistent_peers") or [])
     services_bds = _service_config(profile, "bds")
     advanced_cometbft = _advanced_config(profile, "cometbft")
     advanced_statesync = _advanced_config(profile, "statesync")

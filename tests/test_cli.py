@@ -3444,6 +3444,53 @@ class AbciBridgeTests(unittest.TestCase):
 
 
 class NodeInitTests(unittest.TestCase):
+    def test_node_init_combines_network_and_local_persistent_peers(self) -> None:
+        network_peer = "network-peer@127.0.0.1:26656"
+        local_peer = "local-peer@127.0.0.1:26657"
+        for local_peers in ([], [local_peer]):
+            with self.subTest(local_peers=local_peers), tempfile.TemporaryDirectory() as tmp_dir:
+                base_dir = Path(tmp_dir)
+                network_dir = base_dir / "networks" / "local-dev"
+                network_dir.mkdir(parents=True)
+                manifest = _manifest_payload(
+                    name="local-dev",
+                    chain_id="xian-testnet-1",
+                    genesis={"kind": "source", "source": str(TEST_FIXTURE_GENESIS)},
+                    p2p={"seeds": [], "persistent_peers": [network_peer]},
+                )
+                (network_dir / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+                with redirect_stdout(io.StringIO()):
+                    main(
+                        [
+                            "network",
+                            "join",
+                            "validator-1",
+                            "--base-dir",
+                            str(base_dir),
+                            "--network",
+                            "local-dev",
+                            "--generate-validator-key",
+                            "--home",
+                            str(base_dir / ".cometbft"),
+                        ]
+                    )
+                profile_path = base_dir / "nodes" / "validator-1.json"
+                profile = json.loads(profile_path.read_text(encoding="utf-8"))
+                profile["p2p"]["persistent_peers"] = local_peers
+                profile_path.write_text(json.dumps(profile), encoding="utf-8")
+
+                with redirect_stdout(io.StringIO()):
+                    result = main(["node", "init", "validator-1", "--base-dir", str(base_dir)])
+
+                self.assertEqual(result, 0)
+                config = tomllib.loads(
+                    (base_dir / ".cometbft" / "config" / "config.toml").read_text(encoding="utf-8")
+                )
+                self.assertEqual(
+                    config["p2p"]["persistent_peers"],
+                    ",".join([network_peer, *local_peers]),
+                )
+
     def test_node_init_materializes_home_from_canonical_network_manifest(
         self,
     ) -> None:
@@ -5510,7 +5557,7 @@ class SnapshotCommandTests(unittest.TestCase):
                     stop_mock,
                 ),
                 patch(
-                    "xian_cli.commands.recovery.shutil.make_archive",
+                    "xian_cli.commands.recovery._build_recovery_backup",
                     backup_mock,
                 ),
                 patch(

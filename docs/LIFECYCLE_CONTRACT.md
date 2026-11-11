@@ -86,6 +86,8 @@ Resolution policy:
 - generated profiles use `xian-stack`
 - node-local overrides such as extra P2P seeds, snapshot URL overrides, and
   genesis overrides belong in the node profile
+- node initialization combines manifest P2P seeds and persistent peers with
+  additional entries from the node profile, preserving manifest entries first
 - `network create` may write a colocated `genesis.json` beside the manifest
 - Generated V2 genesis state uses the node's wire encoding, including
   `__fixed__` for decimals and `__big_int__` for integers outside the safe JSON range.
@@ -149,6 +151,12 @@ explicit and stable:
 1. explicit CLI override
 2. node profile `snapshot_url`
 3. network manifest `snapshot_url`
+
+`recovery apply` backs up the complete node home before restoring unless
+`--skip-backup` is set. Backups contain private validator and node keys: on POSIX
+systems the backup directory uses mode `0700` and each archive uses mode `0600`.
+Every backup has a unique filename, including repeated recovery attempts within
+the same second.
 
 ### 9. Process Start and Health Checks
 

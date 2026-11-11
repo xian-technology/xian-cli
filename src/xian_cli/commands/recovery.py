@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import argparse
 import json
-import shutil
+import tarfile
+import tempfile
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -19,6 +20,7 @@ from xian_cli.runtime import (
     start_xian_stack_node,
     stop_xian_stack_node,
 )
+from xian_cli.secret_files import ensure_secret_dir
 
 
 def _resolve_recovery_rpc_status(
@@ -38,17 +40,19 @@ def _build_recovery_backup(
     plan_name: str,
     node_name: str,
 ) -> Path:
-    backup_dir.mkdir(parents=True, exist_ok=True)
+    ensure_secret_dir(backup_dir)
     timestamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
-    archive_base = backup_dir / f"{plan_name}-{node_name}-{timestamp}"
-    archive_path = Path(
-        shutil.make_archive(
-            str(archive_base),
-            "gztar",
-            root_dir=home.parent,
-            base_dir=home.name,
-        )
-    )
+    prefix = f"{Path(plan_name).name}-{Path(node_name).name}-{timestamp}-"
+    with tempfile.NamedTemporaryFile(
+        dir=backup_dir, prefix=prefix, suffix=".tar.gz", delete=False
+    ) as output:
+        archive_path = Path(output.name)
+        try:
+            with tarfile.open(fileobj=output, mode="w:gz") as archive:
+                archive.add(home, arcname=home.name)
+        except BaseException:
+            archive_path.unlink()
+            raise
     return archive_path
 
 
