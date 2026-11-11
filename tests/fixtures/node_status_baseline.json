@@ -1,0 +1,759 @@
+{
+  "inputs": {
+    "ready": {
+      "initialized": true,
+      "backend_checked": true,
+      "backend_running": true,
+      "rpc_checked": true,
+      "rpc_reachable": true,
+      "profile": {
+        "operator_profile": "validator",
+        "monitoring_profile": "validator",
+        "node_image_mode": "registry",
+        "node_integrated_image": "node:integrated",
+        "node_split_image": "node:split",
+        "services": {
+          "bds": {
+            "enabled": true
+          },
+          "dashboard": {
+            "enabled": true
+          },
+          "monitoring": {
+            "enabled": true
+          },
+          "intentkit": {
+            "enabled": true,
+            "network_id": "local"
+          },
+          "dex_automation": {
+            "enabled": true
+          },
+          "shielded_relayer": {
+            "enabled": true
+          }
+        }
+      },
+      "rpc_status": {
+        "result": {
+          "sync_info": {
+            "latest_block_height": "42",
+            "latest_block_time": "2026-11-11T00:00:00Z",
+            "catching_up": false
+          },
+          "node_info": {
+            "network": "local",
+            "other": {
+              "n_peers": "4"
+            }
+          }
+        }
+      },
+      "backend_status": {
+        "compose_services": [
+          {
+            "service": "abci",
+            "image": "node:current"
+          },
+          {
+            "service": "missing"
+          },
+          null
+        ],
+        "dashboard_reachable": true,
+        "prometheus_reachable": true,
+        "grafana_reachable": true,
+        "graphiql_reachable": true,
+        "intentkit_running": true,
+        "intentkit_reachable": true,
+        "intentkit_api_reachable": true,
+        "dex_automation_running": true,
+        "dex_automation_reachable": true,
+        "shielded_relayer_running": true,
+        "shielded_relayer_reachable": true
+      },
+      "node_release_manifest": {
+        "components": {
+          "xian-abci": {
+            "ref": "abc"
+          },
+          "invalid": "ignored"
+        },
+        "build": {
+          "python_image": "python:pinned",
+          "cometbft_version": "0.39.3"
+        }
+      }
+    },
+    "uninitialized": {
+      "initialized": false,
+      "backend_checked": true,
+      "backend_running": false,
+      "rpc_checked": true,
+      "rpc_reachable": false,
+      "profile": {
+        "operator_profile": "validator",
+        "monitoring_profile": "validator",
+        "node_image_mode": "registry",
+        "node_integrated_image": "node:integrated",
+        "node_split_image": "node:split",
+        "services": {
+          "bds": {
+            "enabled": true
+          },
+          "dashboard": {
+            "enabled": true
+          },
+          "monitoring": {
+            "enabled": true
+          },
+          "intentkit": {
+            "enabled": true,
+            "network_id": "local"
+          },
+          "dex_automation": {
+            "enabled": true
+          },
+          "shielded_relayer": {
+            "enabled": true
+          }
+        }
+      },
+      "rpc_status": {
+        "result": {
+          "sync_info": {
+            "latest_block_height": "42",
+            "latest_block_time": "2026-11-11T00:00:00Z",
+            "catching_up": false
+          },
+          "node_info": {
+            "network": "local",
+            "other": {
+              "n_peers": "4"
+            }
+          }
+        }
+      },
+      "backend_status": {
+        "compose_services": [
+          {
+            "service": "abci",
+            "image": "node:current"
+          },
+          {
+            "service": "missing"
+          },
+          null
+        ],
+        "dashboard_reachable": true,
+        "prometheus_reachable": true,
+        "grafana_reachable": true,
+        "graphiql_reachable": true,
+        "intentkit_running": true,
+        "intentkit_reachable": true,
+        "intentkit_api_reachable": true,
+        "dex_automation_running": true,
+        "dex_automation_reachable": true,
+        "shielded_relayer_running": true,
+        "shielded_relayer_reachable": true
+      },
+      "node_release_manifest": {
+        "components": {
+          "xian-abci": {
+            "ref": "abc"
+          },
+          "invalid": "ignored"
+        },
+        "build": {
+          "python_image": "python:pinned",
+          "cometbft_version": "0.39.3"
+        }
+      }
+    },
+    "stopped": {
+      "initialized": true,
+      "backend_checked": true,
+      "backend_running": false,
+      "rpc_checked": true,
+      "rpc_reachable": false,
+      "profile": {
+        "operator_profile": "validator",
+        "monitoring_profile": "validator",
+        "node_image_mode": "registry",
+        "node_integrated_image": "node:integrated",
+        "node_split_image": "node:split",
+        "services": {
+          "bds": {
+            "enabled": true
+          },
+          "dashboard": {
+            "enabled": true
+          },
+          "monitoring": {
+            "enabled": true
+          },
+          "intentkit": {
+            "enabled": true,
+            "network_id": "local"
+          },
+          "dex_automation": {
+            "enabled": true
+          },
+          "shielded_relayer": {
+            "enabled": true
+          }
+        }
+      },
+      "rpc_status": {
+        "result": {
+          "sync_info": {
+            "latest_block_height": "42",
+            "latest_block_time": "2026-11-11T00:00:00Z",
+            "catching_up": false
+          },
+          "node_info": {
+            "network": "local",
+            "other": {
+              "n_peers": "4"
+            }
+          }
+        }
+      },
+      "backend_status": {
+        "compose_services": [
+          {
+            "service": "abci",
+            "image": "node:current"
+          },
+          {
+            "service": "missing"
+          },
+          null
+        ],
+        "dashboard_reachable": true,
+        "prometheus_reachable": true,
+        "grafana_reachable": true,
+        "graphiql_reachable": true,
+        "intentkit_running": true,
+        "intentkit_reachable": true,
+        "intentkit_api_reachable": true,
+        "dex_automation_running": true,
+        "dex_automation_reachable": true,
+        "shielded_relayer_running": true,
+        "shielded_relayer_reachable": true
+      },
+      "node_release_manifest": {
+        "components": {
+          "xian-abci": {
+            "ref": "abc"
+          },
+          "invalid": "ignored"
+        },
+        "build": {
+          "python_image": "python:pinned",
+          "cometbft_version": "0.39.3"
+        }
+      }
+    },
+    "rpc_unreachable": {
+      "initialized": true,
+      "backend_checked": true,
+      "backend_running": true,
+      "rpc_checked": true,
+      "rpc_reachable": false,
+      "profile": {
+        "operator_profile": "validator",
+        "monitoring_profile": "validator",
+        "node_image_mode": "registry",
+        "node_integrated_image": "node:integrated",
+        "node_split_image": "node:split",
+        "services": {
+          "bds": {
+            "enabled": true
+          },
+          "dashboard": {
+            "enabled": true
+          },
+          "monitoring": {
+            "enabled": true
+          },
+          "intentkit": {
+            "enabled": true,
+            "network_id": "local"
+          },
+          "dex_automation": {
+            "enabled": true
+          },
+          "shielded_relayer": {
+            "enabled": true
+          }
+        }
+      },
+      "rpc_status": {
+        "result": {
+          "sync_info": {
+            "latest_block_height": "42",
+            "latest_block_time": "2026-11-11T00:00:00Z",
+            "catching_up": false
+          },
+          "node_info": {
+            "network": "local",
+            "other": {
+              "n_peers": "4"
+            }
+          }
+        }
+      },
+      "backend_status": {
+        "compose_services": [
+          {
+            "service": "abci",
+            "image": "node:current"
+          },
+          {
+            "service": "missing"
+          },
+          null
+        ],
+        "dashboard_reachable": true,
+        "prometheus_reachable": true,
+        "grafana_reachable": true,
+        "graphiql_reachable": true,
+        "intentkit_running": true,
+        "intentkit_reachable": true,
+        "intentkit_api_reachable": true,
+        "dex_automation_running": true,
+        "dex_automation_reachable": true,
+        "shielded_relayer_running": true,
+        "shielded_relayer_reachable": true
+      },
+      "node_release_manifest": {
+        "components": {
+          "xian-abci": {
+            "ref": "abc"
+          },
+          "invalid": "ignored"
+        },
+        "build": {
+          "python_image": "python:pinned",
+          "cometbft_version": "0.39.3"
+        }
+      }
+    },
+    "missing_metadata": {
+      "initialized": true,
+      "profile": {}
+    },
+    "disabled_services": {
+      "initialized": true,
+      "backend_checked": true,
+      "backend_running": true,
+      "rpc_checked": true,
+      "rpc_reachable": true,
+      "profile": {
+        "services": {}
+      },
+      "rpc_status": {
+        "result": {
+          "sync_info": {
+            "latest_block_height": "42",
+            "latest_block_time": "2026-11-11T00:00:00Z",
+            "catching_up": false
+          },
+          "node_info": {
+            "network": "local",
+            "other": {
+              "n_peers": "4"
+            }
+          }
+        }
+      },
+      "backend_status": {
+        "compose_services": [
+          {
+            "service": "abci",
+            "image": "node:current"
+          },
+          {
+            "service": "missing"
+          },
+          null
+        ],
+        "dashboard_reachable": true,
+        "prometheus_reachable": true,
+        "grafana_reachable": true,
+        "graphiql_reachable": true,
+        "intentkit_running": true,
+        "intentkit_reachable": true,
+        "intentkit_api_reachable": true,
+        "dex_automation_running": true,
+        "dex_automation_reachable": true,
+        "shielded_relayer_running": true,
+        "shielded_relayer_reachable": true
+      },
+      "node_release_manifest": {
+        "components": {
+          "xian-abci": {
+            "ref": "abc"
+          },
+          "invalid": "ignored"
+        },
+        "build": {
+          "python_image": "python:pinned",
+          "cometbft_version": "0.39.3"
+        }
+      }
+    },
+    "invalid_release_backend": {
+      "initialized": true,
+      "backend_checked": true,
+      "backend_running": true,
+      "rpc_checked": true,
+      "rpc_reachable": true,
+      "profile": {
+        "operator_profile": "validator",
+        "monitoring_profile": "validator",
+        "node_image_mode": "registry",
+        "node_integrated_image": "node:integrated",
+        "node_split_image": "node:split",
+        "services": {
+          "bds": {
+            "enabled": true
+          },
+          "dashboard": {
+            "enabled": true
+          },
+          "monitoring": {
+            "enabled": true
+          },
+          "intentkit": {
+            "enabled": true,
+            "network_id": "local"
+          },
+          "dex_automation": {
+            "enabled": true
+          },
+          "shielded_relayer": {
+            "enabled": true
+          }
+        }
+      },
+      "rpc_status": {
+        "result": {
+          "sync_info": {
+            "latest_block_height": "42",
+            "latest_block_time": "2026-11-11T00:00:00Z",
+            "catching_up": false
+          },
+          "node_info": {
+            "network": "local",
+            "other": {
+              "n_peers": "4"
+            }
+          }
+        }
+      },
+      "backend_status": [],
+      "node_release_manifest": []
+    }
+  },
+  "outputs": {
+    "ready": {
+      "state": "ready",
+      "initialized": true,
+      "operator_profile": "validator",
+      "monitoring_profile": "validator",
+      "bds_enabled": true,
+      "dashboard_enabled": true,
+      "monitoring_enabled": true,
+      "intentkit_enabled": true,
+      "intentkit_network_id": "local",
+      "dex_automation_enabled": true,
+      "shielded_relayer_enabled": true,
+      "backend_running": true,
+      "rpc_reachable": true,
+      "rpc_height": "42",
+      "rpc_latest_block_time": "2026-11-11T00:00:00Z",
+      "rpc_block_age_seconds": 7.25,
+      "rpc_catching_up": false,
+      "rpc_network": "local",
+      "peer_count": "4",
+      "node_image_mode": "registry",
+      "node_integrated_image": "node:integrated",
+      "node_split_image": "node:split",
+      "release_manifest_refs": {
+        "xian-abci": "abc"
+      },
+      "release_manifest_build": {
+        "python_image": "python:pinned",
+        "go_image": null,
+        "cometbft_version": "0.39.3",
+        "cometbft_source_url": null,
+        "cometbft_source_sha256": null,
+        "s6_overlay_version": null,
+        "s6_overlay_noarch_sha256": null,
+        "s6_overlay_x86_64_sha256": null,
+        "s6_overlay_aarch64_sha256": null
+      },
+      "runtime_service_images": {
+        "abci": "node:current"
+      },
+      "dashboard_reachable": true,
+      "prometheus_reachable": true,
+      "grafana_reachable": true,
+      "graphiql_reachable": true,
+      "intentkit_running": true,
+      "intentkit_reachable": true,
+      "intentkit_api_reachable": true,
+      "dex_automation_running": true,
+      "dex_automation_reachable": true,
+      "shielded_relayer_running": true,
+      "shielded_relayer_reachable": true
+    },
+    "uninitialized": {
+      "state": "not_initialized",
+      "initialized": false,
+      "operator_profile": "validator",
+      "monitoring_profile": "validator",
+      "bds_enabled": true,
+      "dashboard_enabled": true,
+      "monitoring_enabled": true,
+      "intentkit_enabled": true,
+      "intentkit_network_id": "local",
+      "dex_automation_enabled": true,
+      "shielded_relayer_enabled": true,
+      "backend_running": false,
+      "rpc_reachable": false,
+      "rpc_height": "42",
+      "rpc_latest_block_time": "2026-11-11T00:00:00Z",
+      "rpc_block_age_seconds": 7.25,
+      "rpc_catching_up": false,
+      "rpc_network": "local",
+      "peer_count": "4",
+      "node_image_mode": "registry",
+      "node_integrated_image": "node:integrated",
+      "node_split_image": "node:split",
+      "release_manifest_refs": {
+        "xian-abci": "abc"
+      },
+      "release_manifest_build": {
+        "python_image": "python:pinned",
+        "go_image": null,
+        "cometbft_version": "0.39.3",
+        "cometbft_source_url": null,
+        "cometbft_source_sha256": null,
+        "s6_overlay_version": null,
+        "s6_overlay_noarch_sha256": null,
+        "s6_overlay_x86_64_sha256": null,
+        "s6_overlay_aarch64_sha256": null
+      },
+      "runtime_service_images": {
+        "abci": "node:current"
+      },
+      "dashboard_reachable": true,
+      "prometheus_reachable": true,
+      "grafana_reachable": true,
+      "graphiql_reachable": true,
+      "intentkit_running": true,
+      "intentkit_reachable": true,
+      "intentkit_api_reachable": true,
+      "dex_automation_running": true,
+      "dex_automation_reachable": true,
+      "shielded_relayer_running": true,
+      "shielded_relayer_reachable": true
+    },
+    "stopped": {
+      "state": "stopped",
+      "initialized": true,
+      "operator_profile": "validator",
+      "monitoring_profile": "validator",
+      "bds_enabled": true,
+      "dashboard_enabled": true,
+      "monitoring_enabled": true,
+      "intentkit_enabled": true,
+      "intentkit_network_id": "local",
+      "dex_automation_enabled": true,
+      "shielded_relayer_enabled": true,
+      "backend_running": false,
+      "rpc_reachable": false,
+      "rpc_height": "42",
+      "rpc_latest_block_time": "2026-11-11T00:00:00Z",
+      "rpc_block_age_seconds": 7.25,
+      "rpc_catching_up": false,
+      "rpc_network": "local",
+      "peer_count": "4",
+      "node_image_mode": "registry",
+      "node_integrated_image": "node:integrated",
+      "node_split_image": "node:split",
+      "release_manifest_refs": {
+        "xian-abci": "abc"
+      },
+      "release_manifest_build": {
+        "python_image": "python:pinned",
+        "go_image": null,
+        "cometbft_version": "0.39.3",
+        "cometbft_source_url": null,
+        "cometbft_source_sha256": null,
+        "s6_overlay_version": null,
+        "s6_overlay_noarch_sha256": null,
+        "s6_overlay_x86_64_sha256": null,
+        "s6_overlay_aarch64_sha256": null
+      },
+      "runtime_service_images": {
+        "abci": "node:current"
+      },
+      "dashboard_reachable": true,
+      "prometheus_reachable": true,
+      "grafana_reachable": true,
+      "graphiql_reachable": true,
+      "intentkit_running": true,
+      "intentkit_reachable": true,
+      "intentkit_api_reachable": true,
+      "dex_automation_running": true,
+      "dex_automation_reachable": true,
+      "shielded_relayer_running": true,
+      "shielded_relayer_reachable": true
+    },
+    "rpc_unreachable": {
+      "state": "rpc_unreachable",
+      "initialized": true,
+      "operator_profile": "validator",
+      "monitoring_profile": "validator",
+      "bds_enabled": true,
+      "dashboard_enabled": true,
+      "monitoring_enabled": true,
+      "intentkit_enabled": true,
+      "intentkit_network_id": "local",
+      "dex_automation_enabled": true,
+      "shielded_relayer_enabled": true,
+      "backend_running": true,
+      "rpc_reachable": false,
+      "rpc_height": "42",
+      "rpc_latest_block_time": "2026-11-11T00:00:00Z",
+      "rpc_block_age_seconds": 7.25,
+      "rpc_catching_up": false,
+      "rpc_network": "local",
+      "peer_count": "4",
+      "node_image_mode": "registry",
+      "node_integrated_image": "node:integrated",
+      "node_split_image": "node:split",
+      "release_manifest_refs": {
+        "xian-abci": "abc"
+      },
+      "release_manifest_build": {
+        "python_image": "python:pinned",
+        "go_image": null,
+        "cometbft_version": "0.39.3",
+        "cometbft_source_url": null,
+        "cometbft_source_sha256": null,
+        "s6_overlay_version": null,
+        "s6_overlay_noarch_sha256": null,
+        "s6_overlay_x86_64_sha256": null,
+        "s6_overlay_aarch64_sha256": null
+      },
+      "runtime_service_images": {
+        "abci": "node:current"
+      },
+      "dashboard_reachable": true,
+      "prometheus_reachable": true,
+      "grafana_reachable": true,
+      "graphiql_reachable": true,
+      "intentkit_running": true,
+      "intentkit_reachable": true,
+      "intentkit_api_reachable": true,
+      "dex_automation_running": true,
+      "dex_automation_reachable": true,
+      "shielded_relayer_running": true,
+      "shielded_relayer_reachable": true
+    },
+    "missing_metadata": {
+      "state": "ready",
+      "initialized": true,
+      "operator_profile": null,
+      "monitoring_profile": null,
+      "bds_enabled": false,
+      "dashboard_enabled": false,
+      "monitoring_enabled": false,
+      "intentkit_enabled": false,
+      "intentkit_network_id": null,
+      "dex_automation_enabled": false,
+      "shielded_relayer_enabled": false,
+      "backend_running": null,
+      "rpc_reachable": null,
+      "rpc_height": null,
+      "rpc_latest_block_time": null,
+      "rpc_block_age_seconds": 7.25,
+      "rpc_catching_up": null,
+      "rpc_network": null,
+      "peer_count": null,
+      "node_image_mode": null,
+      "node_integrated_image": null,
+      "node_split_image": null
+    },
+    "disabled_services": {
+      "state": "ready",
+      "initialized": true,
+      "operator_profile": null,
+      "monitoring_profile": null,
+      "bds_enabled": false,
+      "dashboard_enabled": false,
+      "monitoring_enabled": false,
+      "intentkit_enabled": false,
+      "intentkit_network_id": null,
+      "dex_automation_enabled": false,
+      "shielded_relayer_enabled": false,
+      "backend_running": true,
+      "rpc_reachable": true,
+      "rpc_height": "42",
+      "rpc_latest_block_time": "2026-11-11T00:00:00Z",
+      "rpc_block_age_seconds": 7.25,
+      "rpc_catching_up": false,
+      "rpc_network": "local",
+      "peer_count": "4",
+      "node_image_mode": null,
+      "node_integrated_image": null,
+      "node_split_image": null,
+      "release_manifest_refs": {
+        "xian-abci": "abc"
+      },
+      "release_manifest_build": {
+        "python_image": "python:pinned",
+        "go_image": null,
+        "cometbft_version": "0.39.3",
+        "cometbft_source_url": null,
+        "cometbft_source_sha256": null,
+        "s6_overlay_version": null,
+        "s6_overlay_noarch_sha256": null,
+        "s6_overlay_x86_64_sha256": null,
+        "s6_overlay_aarch64_sha256": null
+      },
+      "runtime_service_images": {
+        "abci": "node:current"
+      }
+    },
+    "invalid_release_backend": {
+      "state": "ready",
+      "initialized": true,
+      "operator_profile": "validator",
+      "monitoring_profile": "validator",
+      "bds_enabled": true,
+      "dashboard_enabled": true,
+      "monitoring_enabled": true,
+      "intentkit_enabled": true,
+      "intentkit_network_id": "local",
+      "dex_automation_enabled": true,
+      "shielded_relayer_enabled": true,
+      "backend_running": true,
+      "rpc_reachable": true,
+      "rpc_height": "42",
+      "rpc_latest_block_time": "2026-11-11T00:00:00Z",
+      "rpc_block_age_seconds": 7.25,
+      "rpc_catching_up": false,
+      "rpc_network": "local",
+      "peer_count": "4",
+      "node_image_mode": "registry",
+      "node_integrated_image": "node:integrated",
+      "node_split_image": "node:split"
+    }
+  }
+}

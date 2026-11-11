@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import tomllib
+from dataclasses import dataclass, field
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -24,6 +25,10 @@ from xian_cli.commands.node_context import (
     _resolve_stack_dir_from_profile,
     _restore_snapshot,
 )
+from xian_cli.commands.node_options import node_config_options
+from xian_cli.commands.node_options import service_config as _service_config
+from xian_cli.commands.node_status import profile_service_summary as _profile_service_summary
+from xian_cli.commands.node_status import summarize_node_status
 from xian_cli.models import NodeProfile, read_json
 from xian_cli.runtime import (
     fetch_json,
@@ -34,40 +39,6 @@ from xian_cli.runtime import (
     start_xian_stack_node,
     stop_xian_stack_node,
 )
-
-
-def _service_config(profile: dict, name: str) -> dict:
-    services = profile.get("services")
-    if not isinstance(services, dict):
-        return {}
-    value = services.get(name)
-    return value if isinstance(value, dict) else {}
-
-
-def _advanced_config(profile: dict, name: str) -> dict:
-    advanced = profile.get("advanced")
-    if not isinstance(advanced, dict):
-        return {}
-    value = advanced.get(name)
-    return value if isinstance(value, dict) else {}
-
-
-def _profile_service_summary(profile: dict) -> dict[str, object]:
-    bds = _service_config(profile, "bds")
-    dashboard = _service_config(profile, "dashboard")
-    monitoring = _service_config(profile, "monitoring")
-    intentkit = _service_config(profile, "intentkit")
-    dex_automation = _service_config(profile, "dex_automation")
-    shielded_relayer = _service_config(profile, "shielded_relayer")
-    return {
-        "bds_enabled": bool(bds.get("enabled")),
-        "dashboard_enabled": bool(dashboard.get("enabled")),
-        "monitoring_enabled": bool(monitoring.get("enabled")),
-        "intentkit_enabled": bool(intentkit.get("enabled")),
-        "intentkit_network_id": intentkit.get("network_id"),
-        "dex_automation_enabled": bool(dex_automation.get("enabled")),
-        "shielded_relayer_enabled": bool(shielded_relayer.get("enabled")),
-    }
 
 
 def _describe_effective_genesis(*, profile: dict, network: dict) -> str | None:
@@ -83,9 +54,37 @@ def _describe_effective_genesis(*, profile: dict, network: dict) -> str | None:
     return None
 
 
-def _initialize_node_from_args(args: argparse.Namespace) -> dict:
-    node_setup = get_node_setup_module()
+@dataclass(frozen=True, slots=True)
+class _NodeInitialization:
+    base_dir: Path
+    profile_path: Path
+    profile: dict = field(repr=False)
+    network: dict = field(repr=False)
+    stack_dir: Path | None
+    validator_key_payload: dict = field(repr=False)
+    genesis: dict = field(repr=False)
+    effective_genesis_source: str
+    home: Path
 
+
+def _load_validator_key(
+    args: argparse.Namespace, *, base_dir: Path, profile_path: Path, profile: dict
+) -> dict:
+    explicit_key = args.validator_key
+    if explicit_key is not None and not explicit_key.is_absolute():
+        explicit_key = (base_dir / explicit_key).resolve()
+    reference = explicit_key or _resolve_path(
+        profile.get("validator_key_ref"), base_dir=base_dir, fallback_dir=profile_path.parent
+    )
+    if reference is None or not reference.exists():
+        raise FileNotFoundError(
+            "validator key reference is required; set validator_key_ref in the "
+            "node profile or pass --validator-key"
+        )
+    return _extract_priv_validator_key(read_json(reference))
+
+
+def _resolve_initialization(args: argparse.Namespace) -> _NodeInitialization:
     base_dir = args.base_dir.resolve()
     profile_path, profile, network_path, network = _load_profile_and_network(
         base_dir=base_dir,
@@ -94,43 +93,22 @@ def _initialize_node_from_args(args: argparse.Namespace) -> dict:
         network_arg=args.network,
         configs_dir=args.configs_dir,
     )
-
     stack_dir = _resolve_stack_dir_from_profile(
-        base_dir=base_dir,
-        profile=profile,
-        explicit_stack_dir=args.stack_dir,
+        base_dir=base_dir, profile=profile, explicit_stack_dir=args.stack_dir
     )
-
-    explicit_validator_key = args.validator_key
-    if explicit_validator_key is not None and not explicit_validator_key.is_absolute():
-        explicit_validator_key = (base_dir / explicit_validator_key).resolve()
-
-    validator_key_ref = explicit_validator_key or _resolve_path(
-        profile.get("validator_key_ref"),
-        base_dir=base_dir,
-        fallback_dir=profile_path.parent,
-    )
-    if validator_key_ref is None or not validator_key_ref.exists():
-        raise FileNotFoundError(
-            "validator key reference is required; set validator_key_ref in the "
-            "node profile or pass --validator-key"
-        )
-
-    validator_key_payload = _extract_priv_validator_key(read_json(validator_key_ref))
-    genesis, effective_genesis_source = _resolve_effective_genesis_payload(
+    key = _load_validator_key(args, base_dir=base_dir, profile_path=profile_path, profile=profile)
+    genesis, source = _resolve_effective_genesis_payload(
         profile=profile,
         network=network,
         base_dir=base_dir,
         manifest_path=network_path,
         configs_dir=args.configs_dir,
     )
-
     if genesis.get("chain_id") and genesis["chain_id"] != network["chain_id"]:
         raise ValueError(
             f"genesis chain_id {genesis['chain_id']} does not match manifest "
             f"chain_id {network['chain_id']}"
         )
-
     home = _resolve_home(
         base_dir=base_dir,
         profile=profile,
@@ -138,148 +116,58 @@ def _initialize_node_from_args(args: argparse.Namespace) -> dict:
         stack_dir=stack_dir,
         explicit_home=args.home,
     )
-
-    network_p2p = network.get("p2p") if isinstance(network.get("p2p"), dict) else {}
-    profile_p2p = profile.get("p2p") if isinstance(profile.get("p2p"), dict) else {}
-    p2p_seeds = list(network_p2p.get("seeds") or [])
-    p2p_seeds.extend(profile_p2p.get("seeds") or [])
-    p2p_persistent_peers = list(network_p2p.get("persistent_peers") or [])
-    p2p_persistent_peers.extend(profile_p2p.get("persistent_peers") or [])
-    services_bds = _service_config(profile, "bds")
-    advanced_cometbft = _advanced_config(profile, "cometbft")
-    advanced_statesync = _advanced_config(profile, "statesync")
-    advanced_metrics = _advanced_config(profile, "metrics")
-    advanced_pending_nonce = _advanced_config(profile, "pending_nonce")
-    advanced_parallel = _advanced_config(profile, "parallel_execution")
-
-    configs = node_setup.render_node_configs(
-        options=node_setup.NodeConfigOptions(
-            moniker=profile["moniker"],
-            p2p_seeds=tuple(p2p_seeds),
-            p2p_persistent_peers=tuple(p2p_persistent_peers),
-            allow_cors=bool(advanced_cometbft.get("allow_cors", True)),
-            bds_enabled=bool(services_bds.get("enabled")),
-            enable_pruning=bool(profile.get("pruning_enabled")),
-            blocks_to_keep=int(profile.get("blocks_to_keep", 100000)),
-            block_policy_mode=str(
-                profile.get(
-                    "block_policy_mode",
-                    network.get("block_policy_mode", "on_demand"),
-                )
-            ),
-            block_policy_interval=str(
-                profile.get(
-                    "block_policy_interval",
-                    network.get("block_policy_interval", "0s"),
-                )
-            ),
-            transaction_trace_logging=bool(profile.get("transaction_trace_logging", False)),
-            statesync=node_setup.StateSyncOptions(
-                enable=bool(advanced_statesync.get("enabled", False)),
-                rpc_servers=tuple(advanced_statesync.get("rpc_servers") or ()),
-                trust_height=int(advanced_statesync.get("trust_height", 0)),
-                trust_hash=str(advanced_statesync.get("trust_hash", "")),
-                trust_period=str(advanced_statesync.get("trust_period", "168h0m0s")),
-            ),
-            metrics=node_setup.MetricsOptions(
-                enabled=bool(advanced_metrics.get("enabled", True)),
-                host=str(advanced_metrics.get("host", "0.0.0.0")),
-                port=int(advanced_metrics.get("port", 9108)),
-                bds_refresh_seconds=float(advanced_metrics.get("bds_refresh_seconds", 5.0)),
-            ),
-            app_logging=node_setup.AppLoggingOptions(
-                level=str(profile.get("app_log_level", "INFO")),
-                json_logging=bool(profile.get("app_log_json", False)),
-                rotation_hours=int(profile.get("app_log_rotation_hours", 1)),
-                retention_days=int(profile.get("app_log_retention_days", 7)),
-                max_file_mb=int(profile.get("app_log_max_file_mb", 50)),
-                max_total_mb=int(profile.get("app_log_max_total_mb", 250)),
-            ),
-            simulation=node_setup.SimulationOptions(
-                enabled=bool(profile.get("simulation_enabled", True)),
-                max_concurrency=int(profile.get("simulation_max_concurrency", 2)),
-                timeout_ms=int(profile.get("simulation_timeout_ms", 3000)),
-                max_chi=int(profile.get("simulation_max_chi", 1_000_000)),
-            ),
-            tx_fee_mode=str(profile.get("tx_fee_mode", "paid_metered")),
-            free_tx_max_chi=int(profile.get("free_tx_max_chi", 1_000_000)),
-            free_block_max_chi=int(profile.get("free_block_max_chi", 20_000_000)),
-            parallel_execution=node_setup.ParallelExecutionOptions(
-                enabled=bool(profile.get("parallel_execution_enabled", False)),
-                workers=int(profile.get("parallel_execution_workers", 4)),
-                min_transactions=int(profile.get("parallel_execution_min_transactions", 8)),
-                max_speculative_waves=int(advanced_parallel.get("max_speculative_waves", 4)),
-                min_wave_acceptance_ratio=float(
-                    advanced_parallel.get("min_wave_acceptance_ratio", 0.25)
-                ),
-                low_acceptance_min_wave_size=int(
-                    advanced_parallel.get("low_acceptance_min_wave_size", 8)
-                ),
-                warm_workers=bool(advanced_parallel.get("warm_workers", True)),
-                access_estimates_enabled=bool(
-                    advanced_parallel.get("access_estimates_enabled", True)
-                ),
-            ),
-            pending_nonce_reservation_ttl_seconds=float(
-                advanced_pending_nonce.get("reservation_ttl_seconds", 60.0)
-            ),
-            max_pending_nonces_per_sender=int(advanced_pending_nonce.get("max_per_sender", 128)),
-            bds=node_setup.BdsOptions(
-                dsn=str(services_bds.get("dsn", "")),
-                host=str(services_bds.get("host", "")),
-                port=int(services_bds.get("port", 5432)),
-                database=str(services_bds.get("database", "xian")),
-                user=str(services_bds.get("user", "")),
-                password=str(services_bds.get("password", "")),
-                pool_min_size=int(services_bds.get("pool_min_size", 1)),
-                pool_max_size=int(services_bds.get("pool_max_size", 10)),
-                statement_timeout_ms=int(services_bds.get("statement_timeout_ms", 0)),
-                acquire_timeout_ms=int(services_bds.get("acquire_timeout_ms", 10000)),
-                application_name=str(services_bds.get("application_name", "xian-bds")),
-                queue_max_size=int(services_bds.get("queue_max_size", 128)),
-                catchup_enabled=bool(services_bds.get("catchup_enabled", True)),
-                catchup_poll_seconds=float(services_bds.get("catchup_poll_seconds", 1.0)),
-                rpc_url=str(services_bds.get("rpc_url") or ""),
-                spool_dir=str(services_bds.get("spool_dir", "")),
-                spool_warn_entries=int(services_bds.get("spool_warn_entries", 256)),
-                spool_warn_bytes=int(services_bds.get("spool_warn_bytes", 536_870_912)),
-                disk_free_warn_bytes=int(services_bds.get("disk_free_warn_bytes", 2_147_483_648)),
-            ),
-            proxy_app=str(advanced_cometbft.get("proxy_app", "unix:///tmp/abci.sock")),
-            prometheus=bool(advanced_cometbft.get("prometheus", True)),
-        )
-    )
-    config = configs["cometbft"]
-    xian_config = configs["xian"]
-
-    result = node_setup.materialize_cometbft_home(
-        home=home,
-        config=config,
-        xian_config=xian_config,
-        genesis=genesis,
-        priv_validator_key=validator_key_payload,
-        overwrite=args.force,
-    )
-    effective_snapshot_url = _resolve_effective_snapshot_url(
+    return _NodeInitialization(
+        base_dir=base_dir,
+        profile_path=profile_path,
         profile=profile,
         network=network,
+        stack_dir=stack_dir,
+        validator_key_payload=key,
+        genesis=genesis,
+        effective_genesis_source=source,
+        home=home,
+    )
+
+
+def _restore_initialization_snapshot(
+    result: dict, plan: _NodeInitialization, args: argparse.Namespace
+) -> None:
+    result["effective_snapshot_url"] = _resolve_effective_snapshot_url(
+        profile=plan.profile,
+        network=plan.network,
         explicit_snapshot_url=getattr(args, "snapshot_url", None),
     )
-    result["effective_snapshot_url"] = effective_snapshot_url
-    result["effective_genesis_source"] = effective_genesis_source
+    result["effective_genesis_source"] = plan.effective_genesis_source
     result["snapshot_restored"] = False
     if getattr(args, "restore_snapshot", False):
-        snapshot_result = _restore_snapshot(
-            base_dir=base_dir,
-            profile=profile,
-            profile_path=profile_path,
-            network=network,
-            stack_dir=stack_dir,
-            explicit_home=home,
+        snapshot = _restore_snapshot(
+            base_dir=plan.base_dir,
+            profile=plan.profile,
+            profile_path=plan.profile_path,
+            network=plan.network,
+            stack_dir=plan.stack_dir,
+            explicit_home=plan.home,
             explicit_snapshot_url=getattr(args, "snapshot_url", None),
         )
         result["snapshot_restored"] = True
-        result["snapshot"] = snapshot_result
+        result["snapshot"] = snapshot
+
+
+def _initialize_node_from_args(args: argparse.Namespace) -> dict:
+    node_setup = get_node_setup_module()
+    plan = _resolve_initialization(args)
+    configs = node_setup.render_node_configs(
+        options=node_config_options(node_setup, profile=plan.profile, network=plan.network)
+    )
+    result = node_setup.materialize_cometbft_home(
+        home=plan.home,
+        config=configs["cometbft"],
+        xian_config=configs["xian"],
+        genesis=plan.genesis,
+        priv_validator_key=plan.validator_key_payload,
+        overwrite=args.force,
+    )
+    _restore_initialization_snapshot(result, plan, args)
     return result
 
 
@@ -586,102 +474,10 @@ def _collect_node_endpoints(args: argparse.Namespace) -> dict[str, object]:
 
 
 def _summarize_node_status(result: dict[str, object]) -> dict[str, object]:
-    rpc_payload = result.get("rpc_status")
-    rpc_result = rpc_payload.get("result", {}) if isinstance(rpc_payload, dict) else {}
-    sync_info = rpc_result.get("sync_info", {}) if isinstance(rpc_result, dict) else {}
-    node_info = rpc_result.get("node_info", {}) if isinstance(rpc_result, dict) else {}
-    other = node_info.get("other", {}) if isinstance(node_info, dict) else {}
-
-    state = "ready"
-    if not result.get("initialized"):
-        state = "not_initialized"
-    elif result.get("backend_checked") and not result.get("backend_running"):
-        state = "stopped"
-    elif result.get("rpc_checked") and not result.get("rpc_reachable"):
-        state = "rpc_unreachable"
-
-    summary: dict[str, object] = {
-        "state": state,
-        "initialized": bool(result.get("initialized")),
-        "operator_profile": result.get("profile", {}).get("operator_profile"),
-        "monitoring_profile": result.get("profile", {}).get("monitoring_profile"),
-        **_profile_service_summary(result.get("profile", {})),
-        "backend_running": result.get("backend_running"),
-        "rpc_reachable": result.get("rpc_reachable"),
-        "rpc_height": sync_info.get("latest_block_height"),
-        "rpc_latest_block_time": sync_info.get("latest_block_time"),
-        "rpc_block_age_seconds": _block_age_seconds(sync_info.get("latest_block_time")),
-        "rpc_catching_up": sync_info.get("catching_up"),
-        "rpc_network": node_info.get("network"),
-        "peer_count": other.get("n_peers"),
-        "node_image_mode": result.get("profile", {}).get("node_image_mode"),
-        "node_integrated_image": result.get("profile", {}).get("node_integrated_image"),
-        "node_split_image": result.get("profile", {}).get("node_split_image"),
-    }
-
-    release_manifest = result.get("node_release_manifest")
-    if isinstance(release_manifest, dict):
-        components = release_manifest.get("components")
-        build = release_manifest.get("build")
-        if isinstance(components, dict):
-            summary["release_manifest_refs"] = {
-                str(name): component.get("ref")
-                for name, component in components.items()
-                if isinstance(name, str) and isinstance(component, dict)
-            }
-        if isinstance(build, dict):
-            summary["release_manifest_build"] = {
-                "python_image": build.get("python_image"),
-                "go_image": build.get("go_image"),
-                "cometbft_version": build.get("cometbft_version"),
-                "cometbft_source_url": build.get("cometbft_source_url"),
-                "cometbft_source_sha256": build.get("cometbft_source_sha256"),
-                "s6_overlay_version": build.get("s6_overlay_version"),
-                "s6_overlay_noarch_sha256": build.get("s6_overlay_noarch_sha256"),
-                "s6_overlay_x86_64_sha256": build.get("s6_overlay_x86_64_sha256"),
-                "s6_overlay_aarch64_sha256": build.get("s6_overlay_aarch64_sha256"),
-            }
-
-    backend_status = result.get("backend_status")
-    if isinstance(backend_status, dict):
-        compose_services = backend_status.get("compose_services")
-        if isinstance(compose_services, list):
-            runtime_images = {
-                str(service.get("service")): service.get("image")
-                for service in compose_services
-                if isinstance(service, dict)
-                and isinstance(service.get("service"), str)
-                and service.get("image")
-            }
-            if runtime_images:
-                summary["runtime_service_images"] = runtime_images
-        if summary["dashboard_enabled"]:
-            summary["dashboard_reachable"] = backend_status.get("dashboard_reachable")
-        if summary["monitoring_enabled"]:
-            summary["prometheus_reachable"] = backend_status.get("prometheus_reachable")
-            summary["grafana_reachable"] = backend_status.get("grafana_reachable")
-        if summary["bds_enabled"]:
-            summary["graphiql_reachable"] = backend_status.get("graphiql_reachable")
-        if summary["intentkit_enabled"]:
-            summary["intentkit_running"] = backend_status.get("intentkit_running")
-            summary["intentkit_reachable"] = backend_status.get("intentkit_reachable")
-            summary["intentkit_api_reachable"] = backend_status.get("intentkit_api_reachable")
-        if summary["dex_automation_enabled"]:
-            summary["dex_automation_running"] = backend_status.get("dex_automation_running")
-            summary["dex_automation_reachable"] = backend_status.get("dex_automation_reachable")
-        if summary["shielded_relayer_enabled"]:
-            summary["shielded_relayer_running"] = backend_status.get("shielded_relayer_running")
-            summary["shielded_relayer_reachable"] = backend_status.get("shielded_relayer_reachable")
-    return summary
+    return summarize_node_status(result, block_age_seconds=_block_age_seconds)
 
 
-def _collect_node_status(
-    args: argparse.Namespace,
-    *,
-    check_rpc: bool,
-    check_backend: bool = True,
-) -> dict:
-    context = _resolve_node_context(args)
+def _initial_node_status(context: dict, *, name: str, check_rpc: bool) -> dict:
     profile_path = context["profile_path"]
     profile = context["profile"]
     network_path = context["network_path"]
@@ -718,7 +514,7 @@ def _collect_node_status(
         ),
         "rpc_checked": check_rpc,
         "profile": {
-            "name": args.name,
+            "name": name,
             "network": profile.get("network"),
             "node_image_mode": node_image_mode,
             "node_integrated_image": node_integrated_image,
@@ -740,40 +536,58 @@ def _collect_node_status(
         except json.JSONDecodeError:
             result["node_id"] = None
 
-    if stack_dir is not None and check_backend:
-        try:
-            backend_status = get_xian_stack_node_status(
-                stack_dir=stack_dir,
-                cometbft_home=home,
-                **_stack_runtime_profile_kwargs(profile, context["network"]),
-            )
-            result["backend_status"] = backend_status
-            result["backend_checked"] = True
-            result["backend_running"] = backend_status.get("backend_running")
-            if result.get("node_id") is None:
-                result["node_id"] = backend_status.get("node_id")
-        except Exception as exc:
-            result["backend_checked"] = True
-            result["backend_error"] = str(exc)
+    return result
 
-    if check_rpc:
-        try:
-            result["rpc_status"] = fetch_json(args.rpc_url)
-            result["rpc_reachable"] = True
-        except Exception as exc:
-            result["rpc_reachable"] = False
-            result["rpc_error"] = str(exc)
 
+def _collect_backend_status(result: dict, context: dict) -> None:
+    try:
+        backend_status = get_xian_stack_node_status(
+            stack_dir=context["stack_dir"],
+            cometbft_home=context["home"],
+            **_stack_runtime_profile_kwargs(context["profile"], context["network"]),
+        )
+        result["backend_status"] = backend_status
+        result["backend_checked"] = True
+        result["backend_running"] = backend_status.get("backend_running")
+        if result.get("node_id") is None:
+            result["node_id"] = backend_status.get("node_id")
+    except Exception as exc:
+        result["backend_checked"] = True
+        result["backend_error"] = str(exc)
+
+
+def _collect_rpc_status(result: dict, rpc_url: str) -> None:
+    try:
+        result["rpc_status"] = fetch_json(rpc_url)
+        result["rpc_reachable"] = True
+    except Exception as exc:
+        result["rpc_reachable"] = False
+        result["rpc_error"] = str(exc)
+
+
+def _status_endpoints(result: dict, *, rpc_url: str, profile: dict) -> dict:
     if isinstance(result.get("backend_status"), dict) and isinstance(
         result["backend_status"].get("endpoints"), dict
     ):
-        result["endpoints"] = result["backend_status"]["endpoints"]
-    else:
-        result["endpoints"] = _fallback_node_endpoints(
-            rpc_status_url=args.rpc_url,
-            profile=profile,
-        )
+        return result["backend_status"]["endpoints"]
+    return _fallback_node_endpoints(
+        rpc_status_url=rpc_url,
+        profile=profile,
+    )
 
+
+def _collect_node_status(
+    args: argparse.Namespace, *, check_rpc: bool, check_backend: bool = True
+) -> dict:
+    context = _resolve_node_context(args)
+    result = _initial_node_status(context, name=args.name, check_rpc=check_rpc)
+    if context["stack_dir"] is not None and check_backend:
+        _collect_backend_status(result, context)
+    if check_rpc:
+        _collect_rpc_status(result, args.rpc_url)
+    result["endpoints"] = _status_endpoints(
+        result, rpc_url=args.rpc_url, profile=context["profile"]
+    )
     result["summary"] = _summarize_node_status(result)
     return result
 

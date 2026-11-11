@@ -1,0 +1,242 @@
+{
+  "defaults": {
+    "moniker": "validator",
+    "p2p_seeds": [],
+    "p2p_persistent_peers": [],
+    "allow_cors": true,
+    "bds_enabled": false,
+    "enable_pruning": false,
+    "blocks_to_keep": 100000,
+    "transaction_trace_logging": false,
+    "block_policy_mode": "on_demand",
+    "block_policy_interval": "0s",
+    "statesync": {
+      "enable": false,
+      "rpc_servers": [],
+      "trust_height": 0,
+      "trust_hash": "",
+      "trust_period": "168h0m0s"
+    },
+    "metrics": {
+      "enabled": true,
+      "host": "0.0.0.0",
+      "port": 9108,
+      "bds_refresh_seconds": 5.0
+    },
+    "app_logging": {
+      "level": "INFO",
+      "json_logging": false,
+      "rotation_hours": 1,
+      "retention_days": 7,
+      "max_file_mb": 50,
+      "max_total_mb": 250
+    },
+    "simulation": {
+      "enabled": true,
+      "max_concurrency": 2,
+      "timeout_ms": 3000,
+      "max_chi": 1000000
+    },
+    "tx_fee_mode": "paid_metered",
+    "free_tx_max_chi": 1000000,
+    "free_block_max_chi": 20000000,
+    "parallel_execution": {
+      "enabled": false,
+      "workers": 4,
+      "min_transactions": 8,
+      "max_speculative_waves": 4,
+      "min_wave_acceptance_ratio": 0.25,
+      "low_acceptance_min_wave_size": 8,
+      "warm_workers": true,
+      "access_estimates_enabled": true
+    },
+    "pending_nonce_reservation_ttl_seconds": 60.0,
+    "max_pending_nonces_per_sender": 128,
+    "bds": {
+      "dsn": "",
+      "host": "",
+      "port": 5432,
+      "database": "xian",
+      "user": "",
+      "password": "",
+      "pool_min_size": 1,
+      "pool_max_size": 10,
+      "statement_timeout_ms": 0,
+      "acquire_timeout_ms": 10000,
+      "application_name": "xian-bds",
+      "queue_max_size": 128,
+      "catchup_enabled": true,
+      "catchup_poll_seconds": 1.0,
+      "rpc_url": "",
+      "spool_dir": "",
+      "spool_warn_entries": 256,
+      "spool_warn_bytes": 536870912,
+      "disk_free_warn_bytes": 2147483648
+    },
+    "proxy_app": "unix:///tmp/abci.sock",
+    "prometheus": true
+  },
+  "inherited": {
+    "moniker": "validator",
+    "p2p_seeds": [],
+    "p2p_persistent_peers": [],
+    "allow_cors": true,
+    "bds_enabled": false,
+    "enable_pruning": false,
+    "blocks_to_keep": 100000,
+    "transaction_trace_logging": false,
+    "block_policy_mode": "periodic",
+    "block_policy_interval": "7s",
+    "statesync": {
+      "enable": false,
+      "rpc_servers": [],
+      "trust_height": 0,
+      "trust_hash": "",
+      "trust_period": "168h0m0s"
+    },
+    "metrics": {
+      "enabled": true,
+      "host": "0.0.0.0",
+      "port": 9108,
+      "bds_refresh_seconds": 5.0
+    },
+    "app_logging": {
+      "level": "INFO",
+      "json_logging": false,
+      "rotation_hours": 1,
+      "retention_days": 7,
+      "max_file_mb": 50,
+      "max_total_mb": 250
+    },
+    "simulation": {
+      "enabled": true,
+      "max_concurrency": 2,
+      "timeout_ms": 3000,
+      "max_chi": 1000000
+    },
+    "tx_fee_mode": "paid_metered",
+    "free_tx_max_chi": 1000000,
+    "free_block_max_chi": 20000000,
+    "parallel_execution": {
+      "enabled": false,
+      "workers": 4,
+      "min_transactions": 8,
+      "max_speculative_waves": 4,
+      "min_wave_acceptance_ratio": 0.25,
+      "low_acceptance_min_wave_size": 8,
+      "warm_workers": true,
+      "access_estimates_enabled": true
+    },
+    "pending_nonce_reservation_ttl_seconds": 60.0,
+    "max_pending_nonces_per_sender": 128,
+    "bds": {
+      "dsn": "",
+      "host": "",
+      "port": 5432,
+      "database": "xian",
+      "user": "",
+      "password": "",
+      "pool_min_size": 1,
+      "pool_max_size": 10,
+      "statement_timeout_ms": 0,
+      "acquire_timeout_ms": 10000,
+      "application_name": "xian-bds",
+      "queue_max_size": 128,
+      "catchup_enabled": true,
+      "catchup_poll_seconds": 1.0,
+      "rpc_url": "",
+      "spool_dir": "",
+      "spool_warn_entries": 256,
+      "spool_warn_bytes": 536870912,
+      "disk_free_warn_bytes": 2147483648
+    },
+    "proxy_app": "unix:///tmp/abci.sock",
+    "prometheus": true
+  },
+  "overrides": {
+    "moniker": "validator",
+    "p2p_seeds": [
+      "seed-network@127.0.0.1:26656",
+      "seed-local@127.0.0.1:26656"
+    ],
+    "p2p_persistent_peers": [
+      "peer-network@127.0.0.1:26656",
+      "peer-local@127.0.0.1:26656"
+    ],
+    "allow_cors": false,
+    "bds_enabled": true,
+    "enable_pruning": true,
+    "blocks_to_keep": 500,
+    "transaction_trace_logging": true,
+    "block_policy_mode": "idle_interval",
+    "block_policy_interval": "2s",
+    "statesync": {
+      "enable": true,
+      "rpc_servers": [
+        "http://localhost:26657",
+        "http://localhost:26667"
+      ],
+      "trust_height": 42,
+      "trust_hash": "abababababababababababababababababababababababababababababababab",
+      "trust_period": "48h0m0s"
+    },
+    "metrics": {
+      "enabled": false,
+      "host": "127.0.0.2",
+      "port": 9234,
+      "bds_refresh_seconds": 2.5
+    },
+    "app_logging": {
+      "level": "WARNING",
+      "json_logging": true,
+      "rotation_hours": 8,
+      "retention_days": 20,
+      "max_file_mb": 30,
+      "max_total_mb": 60
+    },
+    "simulation": {
+      "enabled": false,
+      "max_concurrency": 4,
+      "timeout_ms": 1010,
+      "max_chi": 333333
+    },
+    "tx_fee_mode": "free_metered",
+    "free_tx_max_chi": 123456,
+    "free_block_max_chi": 3456789,
+    "parallel_execution": {
+      "enabled": true,
+      "workers": 3,
+      "min_transactions": 2,
+      "max_speculative_waves": 9,
+      "min_wave_acceptance_ratio": 0.7,
+      "low_acceptance_min_wave_size": 3,
+      "warm_workers": false,
+      "access_estimates_enabled": false
+    },
+    "pending_nonce_reservation_ttl_seconds": 12.5,
+    "max_pending_nonces_per_sender": 7,
+    "bds": {
+      "dsn": "postgresql://user:pw@localhost:5432/db",
+      "host": "postgres",
+      "port": 5555,
+      "database": "testdb",
+      "user": "user",
+      "password": "pw",
+      "pool_min_size": 2,
+      "pool_max_size": 3,
+      "statement_timeout_ms": 12,
+      "acquire_timeout_ms": 345,
+      "application_name": "test-bds",
+      "queue_max_size": 31,
+      "catchup_enabled": false,
+      "catchup_poll_seconds": 2.0,
+      "rpc_url": "http://localhost:26657",
+      "spool_dir": "/test/spool",
+      "spool_warn_entries": 25,
+      "spool_warn_bytes": 512,
+      "disk_free_warn_bytes": 1024
+    },
+    "proxy_app": "unix:///tmp/custom.sock",
+    "prometheus": false
+  }
+}
