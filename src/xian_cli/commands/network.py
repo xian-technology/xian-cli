@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import shlex
 import shutil
 from pathlib import Path
 
@@ -660,7 +661,7 @@ fi
 args=(
   network join "${{NODE_NAME}}"
   --base-dir "${{BUNDLE_DIR}}"
-  --network "{network_name}"
+  --network {shlex.quote(network_name)}
   --network-manifest "${{BUNDLE_DIR}}/manifest.json"
   --generate-validator-key
   --seed "${{BOOTSTRAP_SEED}}"

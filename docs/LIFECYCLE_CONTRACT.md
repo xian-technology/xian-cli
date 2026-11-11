@@ -255,6 +255,8 @@ Rules:
 - manifests and profiles must declare `schema_version: 1`
 - network manifests do not contain private keys
 - node profiles reference keys; they do not inline them
+- numeric polling intervals, refresh periods, nonce reservation TTLs, and
+  acceptance ratios must be finite; each option also enforces its own range
 - `block_policy_mode` is network-owned by default and may be overridden
   intentionally in the node profile
 - `on_demand` means no idle empty blocks; `idle_interval` means empty blocks

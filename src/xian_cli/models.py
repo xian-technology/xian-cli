@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import decimal
 import json
+import math
 from copy import deepcopy
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
@@ -248,7 +249,13 @@ def _require_float(payload: dict, key: str, *, default: float) -> float:
     value = payload.get(key, default)
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         raise ValueError(f"{key} must be a number")
-    return float(value)
+    try:
+        number = float(value)
+    except OverflowError as exc:
+        raise ValueError(f"{key} must be a finite number") from exc
+    if not math.isfinite(number):
+        raise ValueError(f"{key} must be a finite number")
+    return number
 
 
 def _require_non_negative_int(payload: dict, key: str, *, default: int) -> int:
