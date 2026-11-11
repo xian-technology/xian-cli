@@ -1916,8 +1916,13 @@ class NetworkManifestTests(unittest.TestCase):
             self.assertNotIn("runtime_backend", manifest)
             self.assertEqual(
                 manifest["genesis"],
-                {"kind": "bundle", "bundle": "local"},
+                {
+                    "kind": "bundle",
+                    "bundle": "local",
+                    "genesis_time": manifest["genesis"]["genesis_time"],
+                },
             )
+            self.assertTrue(manifest["genesis"]["genesis_time"].endswith("Z"))
             self.assertEqual(manifest["p2p"]["seeds"], [])
             self.assertEqual(manifest["block_policy_mode"], "on_demand")
             self.assertEqual(manifest["block_policy_interval"], "0s")
@@ -1955,8 +1960,13 @@ class NetworkManifestTests(unittest.TestCase):
             self.assertNotIn("mode", manifest)
             self.assertEqual(
                 manifest["genesis"],
-                {"kind": "bundle", "bundle": "local"},
+                {
+                    "kind": "bundle",
+                    "bundle": "local",
+                    "genesis_time": manifest["genesis"]["genesis_time"],
+                },
             )
+            self.assertTrue(manifest["genesis"]["genesis_time"].endswith("Z"))
             self.assertEqual(manifest["block_policy_mode"], "on_demand")
             self.assertEqual(manifest["block_policy_interval"], "0s")
             self.assertNotIn("tracer_mode", manifest)

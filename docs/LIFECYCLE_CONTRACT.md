@@ -269,6 +269,9 @@ Rules:
 - canonical bundle manifests build genesis deterministically from a contract
   bundle plus a fixed `genesis_time`; they do not carry a checked-in
   `genesis.json`
+- `network create` without generated or external genesis records a bundle
+  genesis with the creation time as its fixed `genesis_time`, so every node
+  that joins the manifest materializes the same genesis
 - templates may provide defaults for tracing, bootstrap validator names, BDS,
   dashboard exposure, monitoring,
   `xian-intentkit` exposure, `xian-dex-automation` exposure, and pruning, but

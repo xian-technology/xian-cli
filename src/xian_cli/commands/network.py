@@ -4,6 +4,7 @@ import argparse
 import json
 import shlex
 import shutil
+from datetime import UTC, datetime
 from pathlib import Path
 
 from xian_cli.commands.catalog import _load_template
@@ -167,6 +168,11 @@ def _load_founder_private_key(args: argparse.Namespace) -> str | None:
     )
 
 
+def _created_genesis_time() -> str:
+    """Sample the network's genesis time once so every joining node shares it."""
+    return datetime.now(UTC).isoformat(timespec="microseconds").replace("+00:00", "Z")
+
+
 def _handle_network_create(args: argparse.Namespace) -> int:
     base_dir = args.base_dir.resolve()
     _validate_founder_private_key_sources(args)
@@ -283,7 +289,11 @@ def _handle_network_create(args: argparse.Namespace) -> int:
             "--generate-validator-key with --bootstrap-node"
         )
     if genesis is None:
-        genesis = {"kind": "bundle", "bundle": args.genesis_bundle}
+        genesis = {
+            "kind": "bundle",
+            "bundle": args.genesis_bundle,
+            "genesis_time": _created_genesis_time(),
+        }
     if bootstrap_name is not None and genesis is None and not validators:
         raise ValueError(
             "--bootstrap-node requires either --genesis-source or local "
