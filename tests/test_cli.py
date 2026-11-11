@@ -85,12 +85,12 @@ class ParserUxTests(unittest.TestCase):
 
         with redirect_stdout(stdout):
             with self.assertRaises(SystemExit) as exc:
-                main(["network", "join", "--help"])
+                main(["network", "create", "--help"])
 
         self.assertEqual(exc.exception.code, 0)
         help_text = stdout.getvalue()
         self.assertIn("--tx-fee-mode", help_text)
-        self.assertIn("transaction fee policy", help_text)
+        self.assertIn("genesis fee policy", help_text)
         self.assertIn("--free-tx-max-chi", help_text)
         self.assertIn("--free-block-max-chi", help_text)
 
@@ -270,12 +270,6 @@ class SetupNodeCommandTests(unittest.TestCase):
                         "indexed",
                         "--key-mode",
                         "generate",
-                        "--tx-fee-mode",
-                        "free_metered",
-                        "--free-tx-max-chi",
-                        "250000",
-                        "--free-block-max-chi",
-                        "1000000",
                         "--start",
                         "--base-dir",
                         str(base_dir),
@@ -303,16 +297,7 @@ class SetupNodeCommandTests(unittest.TestCase):
             )
             self.assertIn("--generate-validator-key", payload["steps"][0]["command"])
             self.assertIn("--init-node", payload["steps"][0]["command"])
-            self.assertIn("--tx-fee-mode", payload["steps"][0]["command"])
-            self.assertIn("free_metered", payload["steps"][0]["command"])
-            self.assertEqual(
-                payload["runtime_args"],
-                {
-                    "tx_fee_mode": "free_metered",
-                    "free_tx_max_chi": 250000,
-                    "free_block_max_chi": 1000000,
-                },
-            )
+            self.assertEqual(payload["runtime_args"], {})
             self.assertEqual(payload["steps"][1]["name"], "start-node")
             self.assertEqual(payload["steps"][2]["name"], "health-check")
 
@@ -2184,9 +2169,9 @@ class NetworkManifestTests(unittest.TestCase):
             self.assertEqual(profile["simulation_max_concurrency"], 3)
             self.assertEqual(profile["simulation_timeout_ms"], 2500)
             self.assertEqual(profile["simulation_max_chi"], 500000)
-            self.assertEqual(profile["tx_fee_mode"], "free_metered")
-            self.assertEqual(profile["free_tx_max_chi"], 250000)
-            self.assertEqual(profile["free_block_max_chi"], 1000000)
+            # The external genesis source already fixes the chain fee policy.
+            self.assertFalse({"tx_fee_mode", "free_tx_max_chi"} & set(profile))
+            self.assertIsNone(manifest["fee_policy"])
             self.assertTrue(profile["parallel_execution_enabled"])
             self.assertEqual(profile["parallel_execution_workers"], 4)
             self.assertEqual(profile["parallel_execution_min_transactions"], 12)
@@ -2744,12 +2729,6 @@ class NetworkManifestTests(unittest.TestCase):
                             "3500",
                             "--simulation-max-chi",
                             "900000",
-                            "--tx-fee-mode",
-                            "free_metered",
-                            "--free-tx-max-chi",
-                            "300000",
-                            "--free-block-max-chi",
-                            "900000",
                             "--parallel-execution-enabled",
                             "--parallel-execution-workers",
                             "6",
@@ -2774,9 +2753,6 @@ class NetworkManifestTests(unittest.TestCase):
             self.assertEqual(profile["simulation_max_concurrency"], 5)
             self.assertEqual(profile["simulation_timeout_ms"], 3500)
             self.assertEqual(profile["simulation_max_chi"], 900000)
-            self.assertEqual(profile["tx_fee_mode"], "free_metered")
-            self.assertEqual(profile["free_tx_max_chi"], 300000)
-            self.assertEqual(profile["free_block_max_chi"], 900000)
             self.assertTrue(profile["parallel_execution_enabled"])
             self.assertEqual(profile["parallel_execution_workers"], 6)
             self.assertEqual(profile["parallel_execution_min_transactions"], 14)
@@ -2891,17 +2867,8 @@ class NetworkManifestTests(unittest.TestCase):
                     ]
                 )
 
-    def test_network_join_rejects_invalid_free_fee_caps(self) -> None:
+    def test_network_create_rejects_invalid_free_fee_caps(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
-            base_dir = Path(tmp_dir)
-            configs_dir = base_dir / "xian-configs"
-            network_dir = configs_dir / "networks" / "canonical"
-            network_dir.mkdir(parents=True)
-            (network_dir / "manifest.json").write_text(
-                json.dumps(_manifest_payload()),
-                encoding="utf-8",
-            )
-
             with self.assertRaisesRegex(
                 ValueError,
                 "free_block_max_chi must be greater than or equal to free_tx_max_chi",
@@ -2909,14 +2876,12 @@ class NetworkManifestTests(unittest.TestCase):
                 main(
                     [
                         "network",
-                        "join",
-                        "validator-1",
+                        "create",
+                        "local-dev",
                         "--base-dir",
-                        str(base_dir),
-                        "--configs-dir",
-                        str(configs_dir),
-                        "--network",
-                        "canonical",
+                        tmp_dir,
+                        "--chain-id",
+                        "xian-local-1",
                         "--tx-fee-mode",
                         "free_metered",
                         "--free-tx-max-chi",
@@ -3623,12 +3588,6 @@ class NodeInitTests(unittest.TestCase):
                         "3200",
                         "--simulation-max-chi",
                         "700000",
-                        "--tx-fee-mode",
-                        "free_metered",
-                        "--free-tx-max-chi",
-                        "350000",
-                        "--free-block-max-chi",
-                        "1400000",
                         "--parallel-execution-enabled",
                         "--parallel-execution-workers",
                         "5",
@@ -3702,9 +3661,6 @@ class NodeInitTests(unittest.TestCase):
             self.assertIn("simulation_max_concurrency = 4", xian_toml)
             self.assertIn("simulation_timeout_ms = 3200", xian_toml)
             self.assertIn("simulation_max_chi = 700000", xian_toml)
-            self.assertIn('tx_fee_mode = "free_metered"', xian_toml)
-            self.assertIn("free_tx_max_chi = 350000", xian_toml)
-            self.assertIn("free_block_max_chi = 1400000", xian_toml)
             self.assertIn("parallel_execution_enabled = true", xian_toml)
             self.assertIn("parallel_execution_workers = 5", xian_toml)
             self.assertIn(
@@ -3719,9 +3675,10 @@ class NodeInitTests(unittest.TestCase):
             )
             self.assertTrue(rendered_xian["bds_enabled"])
             self.assertEqual(rendered_xian["metrics_bds_refresh_seconds"], 7.5)
-            self.assertEqual(rendered_xian["tx_fee_mode"], "free_metered")
-            self.assertEqual(rendered_xian["free_tx_max_chi"], 350000)
-            self.assertEqual(rendered_xian["free_block_max_chi"], 1400000)
+            # The fee policy is genesis state, never node-local configuration.
+            self.assertFalse(
+                {"tx_fee_mode", "free_tx_max_chi", "free_block_max_chi"} & set(rendered_xian)
+            )
             self.assertEqual(rendered_xian["parallel_execution_max_speculative_waves"], 6)
             self.assertEqual(rendered_xian["bds"]["host"], "postgres")
             self.assertEqual(rendered_xian["bds"]["port"], 5544)
@@ -6197,9 +6154,7 @@ class ConfigRepoTests(unittest.TestCase):
         self.assertFalse(profile["services"]["intentkit"]["enabled"])
         self.assertFalse(profile["services"]["dex_automation"]["enabled"])
         self.assertFalse(profile["services"]["shielded_relayer"]["enabled"])
-        self.assertEqual(profile["tx_fee_mode"], "paid_metered")
-        self.assertEqual(profile["free_tx_max_chi"], 1_000_000)
-        self.assertEqual(profile["free_block_max_chi"], 20_000_000)
+        self.assertFalse({"tx_fee_mode", "free_tx_max_chi", "free_block_max_chi"} & set(profile))
         self.assertEqual(profile["parallel_execution_workers"], 4)
         self.assertEqual(
             profile["advanced"]["metrics"]["host"],
@@ -6234,15 +6189,22 @@ class ConfigRepoTests(unittest.TestCase):
             ):
                 read_node_profile(profile_path)
 
-    def test_read_node_profile_rejects_invalid_free_fee_caps(self) -> None:
+    def test_read_network_manifest_rejects_invalid_free_fee_caps(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
-            profile_path = Path(tmp_dir) / "profile.json"
-            profile_path.write_text(
+            manifest_path = Path(tmp_dir) / "manifest.json"
+            manifest_path.write_text(
                 json.dumps(
-                    _profile_payload(
-                        tx_fee_mode="free_metered",
-                        free_tx_max_chi=1000,
-                        free_block_max_chi=999,
+                    _manifest_payload(
+                        genesis={
+                            "kind": "bundle",
+                            "bundle": "local",
+                            "genesis_time": "2026-01-01T00:00:00Z",
+                        },
+                        fee_policy={
+                            "tx_fee_mode": "free_metered",
+                            "free_tx_max_chi": 1000,
+                            "free_block_max_chi": 999,
+                        },
                     )
                 ),
                 encoding="utf-8",
@@ -6252,7 +6214,7 @@ class ConfigRepoTests(unittest.TestCase):
                 ValueError,
                 "free_block_max_chi must be greater than or equal to free_tx_max_chi",
             ):
-                read_node_profile(profile_path)
+                read_network_manifest(manifest_path)
 
     def test_read_configs_reject_unknown_schema_fields(self) -> None:
         cases = [

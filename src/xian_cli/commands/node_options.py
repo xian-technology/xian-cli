@@ -149,9 +149,6 @@ def node_config_options(
         metrics=metrics_options(node_setup, profile),
         app_logging=app_logging_options(node_setup, profile),
         simulation=simulation_options(node_setup, profile),
-        tx_fee_mode=str(profile.get("tx_fee_mode", "paid_metered")),
-        free_tx_max_chi=int(profile.get("free_tx_max_chi", 1_000_000)),
-        free_block_max_chi=int(profile.get("free_block_max_chi", 20_000_000)),
         parallel_execution=parallel_options(node_setup, profile),
         pending_nonce_reservation_ttl_seconds=float(
             advanced_pending_nonce.get("reservation_ttl_seconds", 60.0)

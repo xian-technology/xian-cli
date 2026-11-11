@@ -83,6 +83,7 @@ def _build_bundle_genesis_payload(
     genesis_bundle: str,
     genesis_time: str | None,
     runtime_features: dict | None,
+    fee_policy: dict | None,
     configs_dir: Path | None,
 ) -> dict:
     genesis_builder = get_genesis_builder_module()
@@ -93,6 +94,7 @@ def _build_bundle_genesis_payload(
         contracts_dir=resolved_configs_dir / "contracts",
         genesis_time=genesis_time,
         runtime_features=runtime_features,
+        fee_policy=fee_policy,
     )
 
 
@@ -134,6 +136,7 @@ def _resolve_effective_genesis_payload(
                 genesis_bundle=genesis_bundle,
                 genesis_time=genesis.get("genesis_time"),
                 runtime_features=network.get("runtime_features"),
+                fee_policy=network.get("fee_policy"),
                 configs_dir=configs_dir,
             ),
             f"bundle:{genesis_bundle}",
@@ -211,6 +214,7 @@ def _build_creation_genesis(
     validators: list[dict[str, object]],
     genesis_bundle: str,
     validator_constructor_overrides: dict[str, object] | None = None,
+    fee_policy: dict | None = None,
 ) -> dict:
     genesis_builder = get_genesis_builder_module()
     return genesis_builder.build_local_network_genesis(
@@ -219,6 +223,7 @@ def _build_creation_genesis(
         validators=_build_creation_validator_entries(validators=validators),
         network=genesis_bundle,
         validator_constructor_overrides=validator_constructor_overrides,
+        fee_policy=fee_policy,
     )
 
 

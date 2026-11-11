@@ -7,11 +7,10 @@ from typing import Any
 
 from xian_cli.models import (
     DEFAULT_ADVANCED_RUNTIME,
-    DEFAULT_FREE_BLOCK_MAX_CHI,
-    DEFAULT_FREE_TX_MAX_CHI,
     DEFAULT_SERVICES,
     DEFAULT_TX_FEE_MODE,
-    SUPPORTED_TX_FEE_MODES,
+    FEE_POLICY_FIELDS,
+    canonical_fee_policy,
 )
 
 
@@ -43,12 +42,6 @@ def validate_non_negative_int(name: str, value: Any) -> int:
     if normalized < 0:
         raise ValueError(f"{name} must be a non-negative integer")
     return normalized
-
-
-def validate_tx_fee_mode(name: str, value: Any) -> str:
-    if not isinstance(value, str) or value not in SUPPORTED_TX_FEE_MODES:
-        raise ValueError(f"{name} must be one of {sorted(SUPPORTED_TX_FEE_MODES)}")
-    return value
 
 
 def _template_value(
@@ -245,30 +238,6 @@ def build_profile_runtime_fields(
             "simulation_max_chi",
             "simulation_max_chi",
             1_000_000,
-            False,
-            validate_positive_int,
-        ),
-        (
-            "tx_fee_mode",
-            "tx_fee_mode",
-            "tx_fee_mode",
-            DEFAULT_TX_FEE_MODE,
-            False,
-            validate_tx_fee_mode,
-        ),
-        (
-            "free_tx_max_chi",
-            "free_tx_max_chi",
-            "free_tx_max_chi",
-            DEFAULT_FREE_TX_MAX_CHI,
-            False,
-            validate_positive_int,
-        ),
-        (
-            "free_block_max_chi",
-            "free_block_max_chi",
-            "free_block_max_chi",
-            DEFAULT_FREE_BLOCK_MAX_CHI,
             False,
             validate_positive_int,
         ),
@@ -507,6 +476,29 @@ def build_profile_runtime_fields(
             "parallel_execution_workers must be greater than zero when "
             "parallel_execution_enabled is true"
         )
-    if fields["free_block_max_chi"] < fields["free_tx_max_chi"]:
-        raise ValueError("free_block_max_chi must be greater than or equal to free_tx_max_chi")
     return fields
+
+
+def build_genesis_fee_policy(
+    *,
+    args: argparse.Namespace,
+    template: Mapping[str, Any] | None,
+) -> dict[str, Any]:
+    """Resolve the chain fee policy for a new genesis: flags, then template, then paid."""
+    explicit = {
+        name: value
+        for name in FEE_POLICY_FIELDS
+        if (value := getattr(args, name, None)) is not None
+    }
+    if "tx_fee_mode" not in explicit and template is not None:
+        mode = template.get("tx_fee_mode", DEFAULT_TX_FEE_MODE)
+        explicit["tx_fee_mode"] = mode
+        if mode == "free_metered":
+            for name in ("free_tx_max_chi", "free_block_max_chi"):
+                explicit.setdefault(name, template.get(name))
+            explicit = {name: value for name, value in explicit.items() if value is not None}
+    return canonical_fee_policy(explicit)
+
+
+def explicit_fee_policy_args(args: argparse.Namespace) -> list[str]:
+    return [name for name in FEE_POLICY_FIELDS if getattr(args, name, None) is not None]

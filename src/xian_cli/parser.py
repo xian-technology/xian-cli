@@ -24,6 +24,28 @@ def _package_version() -> str:
         return "unknown"
 
 
+def add_genesis_fee_policy_args(parser: argparse.ArgumentParser) -> None:
+    """Fee policy is chain state chosen at genesis, so only network creation sets it."""
+    parser.add_argument(
+        "--tx-fee-mode",
+        choices=sorted(SUPPORTED_TX_FEE_MODES),
+        help=(
+            "genesis fee policy of the new network: paid_metered charges native-token "
+            "fees, free_metered meters execution without charging transaction fees"
+        ),
+    )
+    parser.add_argument(
+        "--free-tx-max-chi",
+        type=int,
+        help="genesis limit on submitted chi per transaction for free_metered networks",
+    )
+    parser.add_argument(
+        "--free-block-max-chi",
+        type=int,
+        help="genesis limit on total submitted chi per block for free_metered networks",
+    )
+
+
 def add_node_profile_runtime_args(
     parser: argparse.ArgumentParser,
     *,
@@ -121,27 +143,6 @@ def add_node_profile_runtime_args(
         "--simulation-max-chi",
         type=int,
         help=f"chi budget cap used for readonly simulation in {subject}",
-    )
-    parser.add_argument(
-        "--tx-fee-mode",
-        choices=sorted(SUPPORTED_TX_FEE_MODES),
-        help=(
-            f"transaction fee policy for {subject}: paid_metered charges native-token "
-            "fees, free_metered meters execution without charging transaction fees"
-        ),
-    )
-    parser.add_argument(
-        "--free-tx-max-chi",
-        type=int,
-        help=f"maximum submitted chi budget for one transaction when {subject} uses free_metered",
-    )
-    parser.add_argument(
-        "--free-block-max-chi",
-        type=int,
-        help=(
-            f"maximum total submitted chi budget per proposed block when {subject} "
-            "uses free_metered"
-        ),
     )
     parser.add_argument(
         "--parallel-execution-enabled",
@@ -557,6 +558,7 @@ def build_parser() -> argparse.ArgumentParser:
         create_parser,
         subject="the bootstrap node profile",
     )
+    add_genesis_fee_policy_args(create_parser)
     create_parser.add_argument(
         "--output",
         type=Path,
@@ -860,6 +862,7 @@ def build_parser() -> argparse.ArgumentParser:
         setup_node_parser,
         subject="the node profile",
     )
+    add_genesis_fee_policy_args(setup_node_parser)
     setup_node_parser.add_argument(
         "--base-dir",
         type=Path,

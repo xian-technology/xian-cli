@@ -14,7 +14,7 @@ from xian_cli.commands.common import _pick_template_value
 from xian_cli.commands.network import _handle_network_create, _handle_network_join
 from xian_cli.commands.node import _handle_node_health, _handle_node_start
 from xian_cli.config_repo import resolve_network_manifest_path
-from xian_cli.models import read_network_manifest
+from xian_cli.models import FEE_POLICY_FIELDS, read_network_manifest
 
 PRESET_TEMPLATES = {
     "basic": "single-node-dev",
@@ -617,6 +617,12 @@ def _resolve_plan(args: argparse.Namespace) -> SetupNodePlan:
         for key in RUNTIME_ARG_DEFAULTS
         if (value := getattr(args, key, None)) is not None
     }
+    genesis_fee_args = sorted(set(runtime_args) & set(FEE_POLICY_FIELDS))
+    if mode == "join" and genesis_fee_args:
+        raise ValueError(
+            f"{', '.join(genesis_fee_args)} choose the chain fee policy at genesis; "
+            "use them only with --mode local"
+        )
     block_policy_mode, block_policy_interval, block_policy_source = _resolve_block_policy(
         args=args,
         base_dir=base_dir,

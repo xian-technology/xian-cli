@@ -210,6 +210,54 @@ def _validate_free_fee_caps(*, tx_max_chi: int, block_max_chi: int) -> None:
         raise ValueError("free_block_max_chi must be greater than or equal to free_tx_max_chi")
 
 
+FEE_POLICY_FIELDS = ("tx_fee_mode", "free_tx_max_chi", "free_block_max_chi")
+
+
+def canonical_fee_policy(settings: dict) -> dict:
+    """Return the genesis ``__fee_policy`` form; free limits apply only to free_metered."""
+    unknown = sorted(set(settings) - set(FEE_POLICY_FIELDS))
+    if unknown:
+        raise ValueError(f"unknown fee_policy settings: {', '.join(unknown)}")
+    mode = _require_tx_fee_mode(settings, "tx_fee_mode")
+    if mode != "free_metered":
+        if set(settings) - {"tx_fee_mode"}:
+            raise ValueError("free_tx_max_chi and free_block_max_chi require free_metered")
+        return {"tx_fee_mode": mode}
+    tx_max_chi = _require_positive_int(settings, "free_tx_max_chi", default=DEFAULT_FREE_TX_MAX_CHI)
+    block_max_chi = _require_positive_int(
+        settings, "free_block_max_chi", default=DEFAULT_FREE_BLOCK_MAX_CHI
+    )
+    _validate_free_fee_caps(tx_max_chi=tx_max_chi, block_max_chi=block_max_chi)
+    return {
+        "tx_fee_mode": mode,
+        "free_tx_max_chi": tx_max_chi,
+        "free_block_max_chi": block_max_chi,
+    }
+
+
+def _normalize_manifest_fee_policy(payload: dict, genesis: dict) -> dict | None:
+    value = payload.get("fee_policy")
+    if value is None:
+        return None
+    if not isinstance(value, dict):
+        raise ValueError("fee_policy must be an object")
+    if genesis["kind"] != "bundle":
+        raise ValueError(
+            "fee_policy only applies to bundle genesis; a source genesis already "
+            "carries its fee policy"
+        )
+    return canonical_fee_policy(value)
+
+
+def _reject_node_local_fee_settings(payload: dict) -> None:
+    configured = sorted(set(payload) & set(FEE_POLICY_FIELDS))
+    if configured:
+        raise ValueError(
+            f"node profile must not set {', '.join(configured)}: the fee policy is "
+            "chain state chosen at genesis; set fee_policy in the network manifest"
+        )
+
+
 def _require_bool(payload: dict, key: str, *, default: bool) -> bool:
     value = payload.get(key, default)
     if not isinstance(value, bool):
@@ -910,6 +958,7 @@ def normalize_network_manifest(payload: dict) -> dict:
             "shielded_history_policy",
             "privacy_submission_policy",
             "runtime_features",
+            "fee_policy",
             "node_release_manifest",
         },
         label="network manifest",
@@ -926,7 +975,7 @@ def normalize_network_manifest(payload: dict) -> dict:
         "schema_version": _require_schema_version(payload),
         "name": _require_str(payload, "name"),
         "chain_id": _require_str(payload, "chain_id"),
-        "genesis": _normalize_genesis(payload),
+        "genesis": (genesis := _normalize_genesis(payload)),
         "genesis_build": _require_optional_object(payload, "genesis_build"),
         "snapshot_url": _require_optional_str(payload, "snapshot_url"),
         "snapshot_signing_keys": _require_str_list(payload, "snapshot_signing_keys"),
@@ -947,6 +996,7 @@ def normalize_network_manifest(payload: dict) -> dict:
             payload, "privacy_submission_policy"
         ),
         "runtime_features": _normalize_runtime_features(payload),
+        "fee_policy": _normalize_manifest_fee_policy(payload, genesis),
         "node_release_manifest": _normalize_node_release_manifest(
             payload,
             "node_release_manifest",
@@ -965,6 +1015,7 @@ def _normalize_app_log_budgets(payload: dict) -> dict[str, int]:
 def normalize_node_profile(payload: dict) -> dict:
     if not isinstance(payload, dict):
         raise ValueError("node profile must be a JSON object")
+    _reject_node_local_fee_settings(payload)
     _reject_unknown_fields(
         payload,
         allowed={
@@ -998,9 +1049,6 @@ def normalize_node_profile(payload: dict) -> dict:
             "simulation_max_concurrency",
             "simulation_timeout_ms",
             "simulation_max_chi",
-            "tx_fee_mode",
-            "free_tx_max_chi",
-            "free_block_max_chi",
             "parallel_execution_enabled",
             "parallel_execution_workers",
             "parallel_execution_min_transactions",
@@ -1024,20 +1072,6 @@ def normalize_node_profile(payload: dict) -> dict:
     _validate_parallel_enabled_workers(
         enabled=parallel_execution_enabled,
         workers=parallel_execution_workers,
-    )
-    free_tx_max_chi = _require_positive_int(
-        payload,
-        "free_tx_max_chi",
-        default=DEFAULT_FREE_TX_MAX_CHI,
-    )
-    free_block_max_chi = _require_positive_int(
-        payload,
-        "free_block_max_chi",
-        default=DEFAULT_FREE_BLOCK_MAX_CHI,
-    )
-    _validate_free_fee_caps(
-        tx_max_chi=free_tx_max_chi,
-        block_max_chi=free_block_max_chi,
     )
 
     return {
@@ -1088,9 +1122,6 @@ def normalize_node_profile(payload: dict) -> dict:
         "simulation_max_chi": _require_positive_int(
             payload, "simulation_max_chi", default=1_000_000
         ),
-        "tx_fee_mode": _require_tx_fee_mode(payload, "tx_fee_mode"),
-        "free_tx_max_chi": free_tx_max_chi,
-        "free_block_max_chi": free_block_max_chi,
         "parallel_execution_enabled": parallel_execution_enabled,
         "parallel_execution_workers": parallel_execution_workers,
         "parallel_execution_min_transactions": _require_positive_int(
@@ -1311,6 +1342,7 @@ class NetworkManifest:
     privacy_artifact_catalog: dict | None = None
     shielded_history_policy: dict | None = None
     privacy_submission_policy: dict | None = None
+    fee_policy: dict | None = None
     node_release_manifest: dict | None = None
     snapshot_url: str | None = None
     snapshot_signing_keys: list[str] = field(default_factory=list)
@@ -1354,9 +1386,6 @@ class NodeProfile:
     simulation_max_concurrency: int = 2
     simulation_timeout_ms: int = 3000
     simulation_max_chi: int = 1_000_000
-    tx_fee_mode: str = DEFAULT_TX_FEE_MODE
-    free_tx_max_chi: int = DEFAULT_FREE_TX_MAX_CHI
-    free_block_max_chi: int = DEFAULT_FREE_BLOCK_MAX_CHI
     parallel_execution_enabled: bool = False
     parallel_execution_workers: int = 4
     parallel_execution_min_transactions: int = 8

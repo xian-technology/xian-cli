@@ -33,7 +33,11 @@ from xian_cli.models import (
     read_network_manifest,
     write_json,
 )
-from xian_cli.network_plans import build_profile_runtime_fields
+from xian_cli.network_plans import (
+    build_genesis_fee_policy,
+    build_profile_runtime_fields,
+    explicit_fee_policy_args,
+)
 from xian_cli.secret_files import load_secret_from_args, validate_secret_sources
 
 
@@ -209,6 +213,12 @@ def _handle_network_create(args: argparse.Namespace) -> int:
             "--validator-selection-mode requires generated local genesis; pass "
             "--generate-validator-key with --bootstrap-node"
         )
+    if args.genesis_source is not None and explicit_fee_policy_args(args):
+        raise ValueError(
+            "fee policy options shape a generated or bundle genesis; an external "
+            "--genesis-source already carries its fee policy"
+        )
+    fee_policy = build_genesis_fee_policy(args=args, template=template)
     if getattr(args, "dry_run", False):
         # All argument validation has passed; summarize the planned layout
         # without writing files or generating keys. If the user then drops
@@ -230,6 +240,8 @@ def _handle_network_create(args: argparse.Namespace) -> int:
         }
         if validator_constructor_overrides is not None:
             dry_plan["validator_policy"] = dict(validator_constructor_overrides)
+        if args.genesis_source is None:
+            dry_plan["fee_policy"] = fee_policy
         print(json.dumps(dry_plan, indent=2))
         return 0
     if args.init_node and bootstrap_name is None:
@@ -269,6 +281,7 @@ def _handle_network_create(args: argparse.Namespace) -> int:
                 validators=validators,
                 genesis_bundle=args.genesis_bundle,
                 validator_constructor_overrides=validator_constructor_overrides,
+                fee_policy=fee_policy,
             )
             write_json(
                 generated_genesis_path,
@@ -320,6 +333,7 @@ def _handle_network_create(args: argparse.Namespace) -> int:
         chain_id=args.chain_id,
         genesis=genesis,
         genesis_build=genesis_build,
+        fee_policy=fee_policy if genesis["kind"] == "bundle" else None,
         snapshot_url=args.snapshot_url,
         snapshot_signing_keys=args.snapshot_signing_key or [],
         p2p={"seeds": args.seed or [], "persistent_peers": []},
@@ -819,6 +833,8 @@ def _handle_network_package_operator_bundle(args: argparse.Namespace) -> int:
 
     bundled_manifest = dict(network)
     bundled_manifest["genesis"] = {"kind": "source", "source": "./genesis.json"}
+    # The materialized genesis now carries the fee policy.
+    bundled_manifest["fee_policy"] = None
     if args.bootstrap_seed:
         p2p = dict(bundled_manifest.get("p2p") or {})
         p2p_seeds = list(p2p.get("seeds") or [])

@@ -84,9 +84,13 @@ dashboard, Prometheus, and Grafana. Host-facing endpoints stay on loopback;
 inspect their effective URLs with `xian node endpoints local-dev`. Periodic
 five-second blocks keep contract time advancing while the node is idle.
 
-For a metered 0-fee local network, add `--tx-fee-mode free_metered` plus
-explicit `--free-tx-max-chi` and `--free-block-max-chi` caps to `setup node`,
-`network create`, or `network join`.
+The transaction fee policy is chain state chosen at genesis, not node
+configuration. For a metered 0-fee local network, pass `--tx-fee-mode
+free_metered` with explicit `--free-tx-max-chi` and `--free-block-max-chi`
+caps to `network create` or `setup node --mode local`. A bundle network records
+the policy as `fee_policy` in its manifest and every `node init` builds it into
+genesis; a generated genesis carries it directly. Joining nodes cannot choose
+it, and node profiles or `xian.toml` that set fee keys are rejected.
 
 Block production defaults come from the selected network template or manifest.
 For on-demand local development, use `--block-policy-mode on_demand`; for

@@ -37,9 +37,6 @@
       "timeout_ms": 3000,
       "max_chi": 1000000
     },
-    "tx_fee_mode": "paid_metered",
-    "free_tx_max_chi": 1000000,
-    "free_block_max_chi": 20000000,
     "parallel_execution": {
       "enabled": false,
       "workers": 4,
@@ -114,9 +111,6 @@
       "timeout_ms": 3000,
       "max_chi": 1000000
     },
-    "tx_fee_mode": "paid_metered",
-    "free_tx_max_chi": 1000000,
-    "free_block_max_chi": 20000000,
     "parallel_execution": {
       "enabled": false,
       "workers": 4,
@@ -200,9 +194,6 @@
       "timeout_ms": 1010,
       "max_chi": 333333
     },
-    "tx_fee_mode": "free_metered",
-    "free_tx_max_chi": 123456,
-    "free_block_max_chi": 3456789,
     "parallel_execution": {
       "enabled": true,
       "workers": 3,
