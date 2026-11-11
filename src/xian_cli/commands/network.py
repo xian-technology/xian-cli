@@ -822,7 +822,7 @@ def _handle_network_package_operator_bundle(args: argparse.Namespace) -> int:
         output_dir / "genesis.json",
         genesis,
         force=args.force,
-        preserve_runtime_types=True,
+        preserve_runtime_types=network["genesis"]["kind"] == "bundle",
     )
 
     privacy_catalog = bundled_manifest.get("privacy_artifact_catalog")

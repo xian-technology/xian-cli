@@ -206,7 +206,7 @@ uv run xian contract build-artifacts ./contracts/con_counter.s.py \
 ```
 
 Artifact inspection defaults to the fresh chain's `xian_vm_v2` profile.
-Select `--vm-profile xian_vm_v1` to inspect an earlier contract. Client calls,
+Select `--vm-profile xian_vm_v1` to reproduce an archived V1 test artifact. Client calls,
 simulations, transfers and deployments use V2. In `--kwargs-json` and
 `--args-json`, fractional JSON numbers are read directly as decimals. Use a
 quoted `--kwargs-json '{"amount":0.000000000000000000000000000001}'` to

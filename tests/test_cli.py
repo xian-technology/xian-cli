@@ -2201,8 +2201,12 @@ class NetworkManifestTests(unittest.TestCase):
             network_dir = base_dir / "networks" / "private-dev"
             privacy_dir = network_dir / "privacy"
             privacy_dir.mkdir(parents=True)
+            source_genesis = json.loads(TEST_FIXTURE_GENESIS.read_text(encoding="utf-8"))
+            source_genesis["abci_genesis"]["genesis"].append(
+                {"key": "con_archived.amount", "value": {"__fixed__": "1.2300"}}
+            )
             (network_dir / "genesis.json").write_text(
-                TEST_FIXTURE_GENESIS.read_text(encoding="utf-8"),
+                json.dumps(source_genesis),
                 encoding="utf-8",
             )
             (privacy_dir / "artifacts.json").write_text(
@@ -2271,7 +2275,7 @@ class NetworkManifestTests(unittest.TestCase):
             )
             self.assertNotIn("runtime_backend", bundled_manifest)
             self.assertNotIn("tracer_mode", bundled_manifest)
-            self.assertTrue((bundle_dir / "genesis.json").exists())
+            self.assertEqual(json.loads((bundle_dir / "genesis.json").read_text()), source_genesis)
             self.assertTrue((bundle_dir / "privacy" / "artifacts.json").exists())
             self.assertEqual(
                 (bundle_dir / "bootstrap-seed.txt").read_text(encoding="utf-8"),
@@ -2312,7 +2316,7 @@ class NetworkManifestTests(unittest.TestCase):
             fake_genesis = {
                 "chain_id": "xian-mainnet-1",
                 "validators": [],
-                "abci_genesis": {"genesis": []},
+                "abci_genesis": {"genesis": [{"key": "con_counter.count", "value": 2**53}]},
             }
             build_bundle = unittest.mock.Mock(return_value=fake_genesis)
             genesis_builder = type(
@@ -2348,6 +2352,11 @@ class NetworkManifestTests(unittest.TestCase):
                 (Path(result["bundle_dir"]) / "manifest.json").read_text(encoding="utf-8")
             )
             self.assertEqual(bundled_manifest["runtime_features"], {"zk": True})
+            genesis_file = Path(result["bundle_dir"]) / "genesis.json"
+            self.assertEqual(
+                json.loads(genesis_file.read_text())["abci_genesis"]["genesis"][0]["value"],
+                {"__big_int__": str(2**53)},
+            )
 
     def test_network_join_writes_node_profile(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -3125,6 +3134,10 @@ class NetworkManifestTests(unittest.TestCase):
                                 minute=0,
                             ),
                         },
+                        {
+                            "key": "con_registry.assets",
+                            "value": [2**80, b"proof", ContractingDecimal("0.00001")],
+                        },
                     ]
                 },
             }
@@ -3201,6 +3214,14 @@ class NetworkManifestTests(unittest.TestCase):
             self.assertEqual(
                 generated_genesis["abci_genesis"]["genesis"][1]["value"],
                 {"__time__": [2026, 1, 1, 0, 0, 0, 0]},
+            )
+            self.assertEqual(
+                generated_genesis["abci_genesis"]["genesis"][2]["value"],
+                [
+                    {"__big_int__": str(2**80)},
+                    {"__bytes__": "70726f6f66"},
+                    {"__fixed__": "0.00001"},
+                ],
             )
             (genesis_builder.build_local_network_genesis.assert_called_once())
 

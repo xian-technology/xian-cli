@@ -57,5 +57,5 @@ select = ["E", "F", "I"]
 [tool.uv.sources]
 xian-tech-abci = { path = "../xian-abci", editable = true }
 xian-tech-contracting = { path = "../xian-contracting", editable = true }
-xian-tech-vm-core = { path = "../xian-contracting/packages/xian-vm-core", editable = true }
+xian-tech-vm-core = { path = "../xian-contracting/packages/xian-vm-core" }
 xian-tech-py = { path = "../xian-py", editable = true }

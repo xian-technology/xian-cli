@@ -87,6 +87,8 @@ Resolution policy:
 - node-local overrides such as extra P2P seeds, snapshot URL overrides, and
   genesis overrides belong in the node profile
 - `network create` may write a colocated `genesis.json` beside the manifest
+- Generated V2 genesis state uses the node's wire encoding, including
+  `__fixed__` for decimals and `__big_int__` for integers outside the safe JSON range.
 - `network join --init-node` should immediately hand the new profile into the
   same node initialization path used by `node init`
 

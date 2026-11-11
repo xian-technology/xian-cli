@@ -7,7 +7,7 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
 from xian_runtime_types.decimal import ContractingDecimal
-from xian_runtime_types.encoding import encode
+from xian_runtime_types.encoding import normalize_wire_numbers
 from xian_runtime_types.time import Datetime
 
 from xian_cli.secret_files import secure_write_text
@@ -1425,25 +1425,12 @@ class ExampleStarterFlow:
         return asdict(self)
 
 
-def _normalize_json_value(value, *, preserve_runtime_types: bool = False):
+def _normalize_json_value(value):
     if isinstance(value, dict):
-        return {
-            str(key): _normalize_json_value(nested, preserve_runtime_types=preserve_runtime_types)
-            for key, nested in value.items()
-        }
-    if isinstance(value, list):
-        return [
-            _normalize_json_value(item, preserve_runtime_types=preserve_runtime_types)
-            for item in value
-        ]
-    if isinstance(value, tuple):
-        return [
-            _normalize_json_value(item, preserve_runtime_types=preserve_runtime_types)
-            for item in value
-        ]
+        return {str(key): _normalize_json_value(nested) for key, nested in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_normalize_json_value(item) for item in value]
     if isinstance(value, (ContractingDecimal, decimal.Decimal, Datetime)):
-        if preserve_runtime_types:
-            return json.loads(encode(value))
         return str(value)
     if isinstance(value, bytes):
         try:
@@ -1461,7 +1448,11 @@ def write_json(
     preserve_runtime_types: bool = False,
     private: bool = False,
 ) -> None:
-    normalized = _normalize_json_value(payload, preserve_runtime_types=preserve_runtime_types)
+    normalized = (
+        normalize_wire_numbers(payload)
+        if preserve_runtime_types
+        else _normalize_json_value(payload)
+    )
     content = json.dumps(normalized, indent=2) + "\n"
     if private:
         secure_write_text(path, content, force=force)
