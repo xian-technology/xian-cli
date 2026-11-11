@@ -8,12 +8,18 @@ from xian_cli.abci_bridge import (
     get_genesis_builder_module,
     get_node_admin_module,
 )
+from xian_cli.commands.common import _stack_runtime_profile_kwargs
 from xian_cli.config_repo import (
     resolve_configs_dir,
     resolve_network_manifest_path,
 )
 from xian_cli.models import read_json, read_network_manifest, read_node_profile
-from xian_cli.runtime import default_home_for_backend, fetch_json
+from xian_cli.runtime import (
+    default_home_for_backend,
+    fetch_json,
+    get_xian_stack_node_status,
+    resolve_stack_dir,
+)
 
 
 def _resolve_path(
@@ -115,6 +121,12 @@ def _resolve_effective_genesis_payload(
 
     if genesis.get("kind") == "bundle":
         genesis_bundle = genesis["bundle"]
+        if not genesis.get("genesis_time"):
+            # Sampling the time here would give every node a different genesis.
+            raise ValueError(
+                f"bundle genesis {genesis_bundle!r} must pin genesis_time so every "
+                "node builds the same genesis; add it to the network manifest"
+            )
         return (
             _build_bundle_genesis_payload(
                 base_dir=base_dir,
@@ -258,6 +270,22 @@ def _resolve_effective_snapshot_signing_keys(
     return []
 
 
+def _require_stopped_node(*, stack_dir: Path, home: Path, profile: dict, network: dict) -> None:
+    """Refuse to replace node data while the stack runtime may still use it."""
+    status = get_xian_stack_node_status(
+        stack_dir=stack_dir,
+        cometbft_home=home,
+        **_stack_runtime_profile_kwargs(profile, network),
+    )
+    # A running container counts even when its processes crash-loop: it
+    # restarts into whatever data the restore leaves behind.
+    if status.get("runtime_services_running") or status.get("backend_running"):
+        raise RuntimeError(
+            f"node {profile['name']} is running; stop it with "
+            f"`xian node stop {profile['name']}` before restoring a snapshot"
+        )
+
+
 def _restore_snapshot(
     *,
     base_dir: Path,
@@ -295,6 +323,13 @@ def _restore_snapshot(
             "no snapshot source configured; "
             "set snapshot_url in the network manifest or node profile"
         )
+
+    _require_stopped_node(
+        stack_dir=resolve_stack_dir(base_dir, explicit=stack_dir),
+        home=home,
+        profile=profile,
+        network=network,
+    )
 
     node_admin = get_node_admin_module()
     snapshot_archive_name = node_admin.apply_snapshot_archive(

@@ -4187,9 +4187,15 @@ class NodeInitTests(unittest.TestCase):
                 {"apply_snapshot_archive": staticmethod(snapshot_mock)},
             )()
             stdout = io.StringIO()
-            with patch(
-                "xian_cli.commands.node_context.get_node_admin_module",
-                return_value=node_admin,
+            with (
+                patch(
+                    "xian_cli.commands.node_context.get_node_admin_module",
+                    return_value=node_admin,
+                ),
+                patch(
+                    "xian_cli.commands.node_context.get_xian_stack_node_status",
+                    return_value={"runtime_services_running": False, "backend_running": False},
+                ),
             ):
                 with redirect_stdout(stdout):
                     exit_code = main(
@@ -5249,9 +5255,15 @@ class SnapshotCommandTests(unittest.TestCase):
                 {"apply_snapshot_archive": staticmethod(snapshot_mock)},
             )()
             stdout = io.StringIO()
-            with patch(
-                "xian_cli.commands.node_context.get_node_admin_module",
-                return_value=node_admin,
+            with (
+                patch(
+                    "xian_cli.commands.node_context.get_node_admin_module",
+                    return_value=node_admin,
+                ),
+                patch(
+                    "xian_cli.commands.node_context.get_xian_stack_node_status",
+                    return_value={"runtime_services_running": False, "backend_running": False},
+                ),
             ):
                 with redirect_stdout(stdout):
                     exit_code = main(

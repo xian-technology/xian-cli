@@ -152,6 +152,11 @@ explicit and stable:
 2. node profile `snapshot_url`
 3. network manifest `snapshot_url`
 
+`snapshot restore` and `node init --restore-snapshot` ask the `xian-stack`
+backend for the node's runtime state first and refuse to run while its runtime
+containers are up, even if the node processes are crash-looping. Stop the node
+with `xian node stop <name>` before restoring.
+
 `recovery apply` backs up the complete node home before restoring unless
 `--skip-backup` is set. Backups contain private validator and node keys: on POSIX
 systems the backup directory uses mode `0700` and each archive uses mode `0600`.
@@ -272,6 +277,8 @@ Rules:
 - `network create` without generated or external genesis records a bundle
   genesis with the creation time as its fixed `genesis_time`, so every node
   that joins the manifest materializes the same genesis
+- `node init` refuses a bundle genesis without `genesis_time` instead of
+  sampling the current time on each node
 - templates may provide defaults for tracing, bootstrap validator names, BDS,
   dashboard exposure, monitoring,
   `xian-intentkit` exposure, `xian-dex-automation` exposure, and pruning, but

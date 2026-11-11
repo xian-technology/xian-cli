@@ -6,6 +6,8 @@ from contextlib import redirect_stdout
 from datetime import datetime
 from pathlib import Path
 
+import pytest
+
 from xian_cli.cli import main
 
 WORKSPACE_ROOT = Path(__file__).resolve().parents[2]
@@ -48,3 +50,28 @@ def test_nodes_joining_a_created_bundle_network_share_one_genesis(tmp_path):
     genesis_a = (tmp_path / "node-a/config/genesis.json").read_bytes()
     genesis_b = (tmp_path / "node-b/config/genesis.json").read_bytes()
     assert genesis_a == genesis_b
+
+
+def test_node_init_rejects_bundle_genesis_without_fixed_time(tmp_path):
+    run_cli("network", "create", "shared", "--base-dir", str(tmp_path), "--chain-id", "shared-1")
+    manifest_path = tmp_path / "networks/shared/manifest.json"
+    manifest = json.loads(manifest_path.read_text())
+    del manifest["genesis"]["genesis_time"]
+    manifest_path.write_text(json.dumps(manifest))
+    run_cli(
+        "network",
+        "join",
+        "node-a",
+        "--base-dir",
+        str(tmp_path),
+        "--network",
+        "shared",
+        "--generate-validator-key",
+        "--home",
+        str(tmp_path / "node-a"),
+    )
+
+    with pytest.raises(ValueError, match="genesis_time"):
+        main(["node", "init", "node-a", "--base-dir", str(tmp_path)])
+
+    assert not (tmp_path / "node-a/config/genesis.json").exists()
