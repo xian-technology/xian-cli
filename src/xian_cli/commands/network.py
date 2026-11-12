@@ -942,6 +942,116 @@ PY
 """
 
 
+_SEED_PLACEHOLDER = "REPLACE_WITH_<node_id>@<public-host>:26656"
+_OPERATOR_BUNDLE_FILES = (
+    "manifest.json",
+    "genesis.json",
+    "bootstrap-seed.txt",
+    "README.md",
+    "SMOKE-CHECKLIST.md",
+    "participant-join.sh",
+    "participant-bds-node.sh",
+)
+
+
+def _operator_bundle_output_dir(
+    args: argparse.Namespace, *, base_dir: Path, network_name: str
+) -> Path:
+    output_dir = args.output or (base_dir / "dist" / f"{network_name}-operator-bundle")
+    if not output_dir.is_absolute():
+        output_dir = (base_dir / output_dir).resolve()
+    if output_dir.exists() and not output_dir.is_dir():
+        raise FileExistsError(f"bundle output is not a directory: {output_dir}")
+    output_dir.mkdir(parents=True, exist_ok=True)
+    return output_dir
+
+
+def _bundled_operator_manifest(network: dict, *, bootstrap_seed: str | None) -> dict:
+    """The shared manifest points at the materialized genesis, which carries the fee policy."""
+    bundled_manifest = dict(network)
+    bundled_manifest["genesis"] = {"kind": "source", "source": "./genesis.json"}
+    bundled_manifest["fee_policy"] = None
+    if bootstrap_seed:
+        p2p = dict(bundled_manifest.get("p2p") or {})
+        p2p_seeds = list(p2p.get("seeds") or [])
+        if bootstrap_seed not in p2p_seeds:
+            p2p_seeds.append(bootstrap_seed)
+        p2p["seeds"] = p2p_seeds
+        p2p.setdefault("persistent_peers", [])
+        bundled_manifest["p2p"] = p2p
+    return bundled_manifest
+
+
+def _operator_bundle_bootstrap_seed(explicit_seed: str | None, bundled_manifest: dict) -> str:
+    if explicit_seed is not None:
+        return explicit_seed
+    p2p = bundled_manifest.get("p2p") or {}
+    p2p_seeds = p2p.get("seeds") if isinstance(p2p, dict) else []
+    return p2p_seeds[0] if p2p_seeds else _SEED_PLACEHOLDER
+
+
+def _copy_operator_privacy_catalog(
+    bundled_manifest: dict, *, manifest_path: Path, output_dir: Path, force: bool
+) -> str | None:
+    privacy_catalog = bundled_manifest.get("privacy_artifact_catalog")
+    if not (isinstance(privacy_catalog, dict) and privacy_catalog.get("path")):
+        return None
+    _copy_optional_network_asset(
+        manifest_path=manifest_path,
+        bundle_dir=output_dir,
+        ref=str(privacy_catalog["path"]),
+        force=force,
+    )
+    return str(privacy_catalog["path"])
+
+
+def _write_operator_bundle_docs(
+    output_dir: Path,
+    *,
+    network: dict,
+    bootstrap_seed: str,
+    privacy_catalog: str | None,
+    force: bool,
+) -> None:
+    _write_text_file(output_dir / "bootstrap-seed.txt", f"{bootstrap_seed}\n", force=force)
+    _write_text_file(
+        output_dir / "README.md",
+        _operator_bundle_readme(
+            network_name=network["name"],
+            chain_id=network["chain_id"],
+            includes_privacy_catalog=privacy_catalog is not None,
+        ),
+        force=force,
+    )
+    _write_text_file(
+        output_dir / "SMOKE-CHECKLIST.md",
+        _operator_bundle_smoke_checklist(chain_id=network["chain_id"]),
+        force=force,
+    )
+    for script_name, bds_enabled in (
+        ("participant-join.sh", False),
+        ("participant-bds-node.sh", True),
+    ):
+        _write_text_file(
+            output_dir / script_name,
+            _operator_join_script(network_name=network["name"], bds_enabled=bds_enabled),
+            force=force,
+            executable=True,
+        )
+
+
+def _archive_operator_bundle(output_dir: Path, *, force: bool) -> str:
+    candidate = output_dir.with_suffix(output_dir.suffix + ".tar.gz")
+    if candidate.exists() and not force:
+        raise FileExistsError(f"{candidate} already exists; pass --force to overwrite")
+    return shutil.make_archive(
+        str(output_dir),
+        "gztar",
+        root_dir=output_dir.parent,
+        base_dir=output_dir.name,
+    )
+
+
 def _handle_network_package_operator_bundle(args: argparse.Namespace) -> int:
     base_dir = args.base_dir.resolve()
     manifest_path = resolve_network_manifest_path(
@@ -951,12 +1061,7 @@ def _handle_network_package_operator_bundle(args: argparse.Namespace) -> int:
         configs_dir=args.configs_dir,
     )
     network = read_network_manifest(manifest_path)
-    output_dir = args.output or (base_dir / "dist" / f"{network['name']}-operator-bundle")
-    if not output_dir.is_absolute():
-        output_dir = (base_dir / output_dir).resolve()
-    if output_dir.exists() and not output_dir.is_dir():
-        raise FileExistsError(f"bundle output is not a directory: {output_dir}")
-    output_dir.mkdir(parents=True, exist_ok=True)
+    output_dir = _operator_bundle_output_dir(args, base_dir=base_dir, network_name=network["name"])
 
     genesis, genesis_ref = _resolve_effective_genesis_payload(
         profile={},
@@ -965,20 +1070,7 @@ def _handle_network_package_operator_bundle(args: argparse.Namespace) -> int:
         manifest_path=manifest_path,
         configs_dir=args.configs_dir,
     )
-
-    bundled_manifest = dict(network)
-    bundled_manifest["genesis"] = {"kind": "source", "source": "./genesis.json"}
-    # The materialized genesis now carries the fee policy.
-    bundled_manifest["fee_policy"] = None
-    if args.bootstrap_seed:
-        p2p = dict(bundled_manifest.get("p2p") or {})
-        p2p_seeds = list(p2p.get("seeds") or [])
-        if args.bootstrap_seed not in p2p_seeds:
-            p2p_seeds.append(args.bootstrap_seed)
-        p2p["seeds"] = p2p_seeds
-        p2p.setdefault("persistent_peers", [])
-        bundled_manifest["p2p"] = p2p
-
+    bundled_manifest = _bundled_operator_manifest(network, bootstrap_seed=args.bootstrap_seed)
     write_json(output_dir / "manifest.json", bundled_manifest, force=args.force)
     write_json(
         output_dir / "genesis.json",
@@ -986,91 +1078,35 @@ def _handle_network_package_operator_bundle(args: argparse.Namespace) -> int:
         force=args.force,
         preserve_runtime_types=network["genesis"]["kind"] == "bundle",
     )
-
-    privacy_catalog = bundled_manifest.get("privacy_artifact_catalog")
-    includes_privacy_catalog = False
-    if isinstance(privacy_catalog, dict) and privacy_catalog.get("path"):
-        _copy_optional_network_asset(
-            manifest_path=manifest_path,
-            bundle_dir=output_dir,
-            ref=str(privacy_catalog["path"]),
-            force=args.force,
-        )
-        includes_privacy_catalog = True
-
-    bootstrap_seed = args.bootstrap_seed
-    if bootstrap_seed is None:
-        p2p = bundled_manifest.get("p2p") or {}
-        p2p_seeds = p2p.get("seeds") if isinstance(p2p, dict) else []
-        bootstrap_seed = p2p_seeds[0] if p2p_seeds else "REPLACE_WITH_<node_id>@<public-host>:26656"
-    _write_text_file(
-        output_dir / "bootstrap-seed.txt",
-        f"{bootstrap_seed}\n",
+    privacy_catalog = _copy_operator_privacy_catalog(
+        bundled_manifest, manifest_path=manifest_path, output_dir=output_dir, force=args.force
+    )
+    bootstrap_seed = _operator_bundle_bootstrap_seed(args.bootstrap_seed, bundled_manifest)
+    _write_operator_bundle_docs(
+        output_dir,
+        network=network,
+        bootstrap_seed=bootstrap_seed,
+        privacy_catalog=privacy_catalog,
         force=args.force,
     )
-    _write_text_file(
-        output_dir / "README.md",
-        _operator_bundle_readme(
-            network_name=network["name"],
-            chain_id=network["chain_id"],
-            includes_privacy_catalog=includes_privacy_catalog,
-        ),
-        force=args.force,
-    )
-    _write_text_file(
-        output_dir / "SMOKE-CHECKLIST.md",
-        _operator_bundle_smoke_checklist(chain_id=network["chain_id"]),
-        force=args.force,
-    )
-    _write_text_file(
-        output_dir / "participant-join.sh",
-        _operator_join_script(network_name=network["name"], bds_enabled=False),
-        force=args.force,
-        executable=True,
-    )
-    _write_text_file(
-        output_dir / "participant-bds-node.sh",
-        _operator_join_script(network_name=network["name"], bds_enabled=True),
-        force=args.force,
-        executable=True,
-    )
-    bundle_metadata = {
-        "schema": "xian.operator_bundle.v1",
-        "schema_version": 1,
-        "network": network["name"],
-        "chain_id": network["chain_id"],
-        "source_manifest": str(manifest_path),
-        "source_genesis": genesis_ref,
-        "bootstrap_seed": bootstrap_seed,
-        "files": [
-            "manifest.json",
-            "genesis.json",
-            "bootstrap-seed.txt",
-            "README.md",
-            "SMOKE-CHECKLIST.md",
-            "participant-join.sh",
-            "participant-bds-node.sh",
-        ],
-    }
-    if includes_privacy_catalog:
-        bundle_metadata["files"].append(str(privacy_catalog["path"]))
+    files = list(_OPERATOR_BUNDLE_FILES)
+    if privacy_catalog is not None:
+        files.append(privacy_catalog)
     write_json(
         output_dir / "operator-bundle.json",
-        bundle_metadata,
+        {
+            "schema": "xian.operator_bundle.v1",
+            "schema_version": 1,
+            "network": network["name"],
+            "chain_id": network["chain_id"],
+            "source_manifest": str(manifest_path),
+            "source_genesis": genesis_ref,
+            "bootstrap_seed": bootstrap_seed,
+            "files": files,
+        },
         force=args.force,
     )
-
-    archive_path = None
-    if args.archive:
-        candidate = output_dir.with_suffix(output_dir.suffix + ".tar.gz")
-        if candidate.exists() and not args.force:
-            raise FileExistsError(f"{candidate} already exists; pass --force to overwrite")
-        archive_path = shutil.make_archive(
-            str(output_dir),
-            "gztar",
-            root_dir=output_dir.parent,
-            base_dir=output_dir.name,
-        )
+    archive_path = _archive_operator_bundle(output_dir, force=args.force) if args.archive else None
 
     result = {
         "bundle_dir": str(output_dir),
