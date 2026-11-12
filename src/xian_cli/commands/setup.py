@@ -508,62 +508,70 @@ def _resolve_key_mode(args: argparse.Namespace, *, prompt: bool) -> str:
     return key_mode
 
 
-def _resolve_plan(args: argparse.Namespace) -> SetupNodePlan:
-    _require_confirmation_path(args)
-    prompt = _should_prompt(args)
-    base_dir = args.base_dir.resolve()
+def _resolve_setup_mode(args: argparse.Namespace, *, prompt: bool) -> str:
+    if args.mode is not None:
+        return args.mode
+    if not prompt:
+        return "join"
+    _prompt_note(
+        "Join uses a network manifest. Local creates a private single-node development network."
+    )
+    return _prompt_choice(
+        "Setup path",
+        [
+            ("join", "join a manifest-backed network such as testnet"),
+            ("local", "create a fresh single-node network for local development"),
+        ],
+        default="join",
+    )
 
-    mode = args.mode
-    if mode is None:
-        if prompt:
-            _prompt_note(
-                "Join uses a network manifest. Local creates a private single-node "
-                "development network."
-            )
-        mode = (
-            _prompt_choice(
-                "Setup path",
-                [
-                    ("join", "join a manifest-backed network such as testnet"),
-                    ("local", "create a fresh single-node network for local development"),
-                ],
-                default="join",
-            )
-            if prompt
-            else "join"
-        )
 
-    if mode == "local" and args.network_manifest is not None:
+def _validate_local_mode_args(args: argparse.Namespace) -> None:
+    if args.network_manifest is not None:
         raise ValueError("--network-manifest is only valid when --mode join")
-    if mode == "local" and (args.restore_snapshot or args.bootstrap_mode == "snapshot"):
+    if args.restore_snapshot or args.bootstrap_mode == "snapshot":
         raise ValueError("snapshot restore is only valid when --mode join")
-    if mode == "join" and args.validator_selection_mode is not None:
-        raise ValueError("--validator-selection-mode is only valid with --mode local")
-    if mode == "local" and args.validator_selection_mode is not None and args.genesis_source:
+    if args.validator_selection_mode is not None and args.genesis_source:
         raise ValueError("--validator-selection-mode only applies when generating a local genesis")
+
+
+def _validate_setup_mode_args(args: argparse.Namespace, *, mode: str) -> None:
+    if mode == "local":
+        _validate_local_mode_args(args)
+    elif mode == "join" and args.validator_selection_mode is not None:
+        raise ValueError("--validator-selection-mode is only valid with --mode local")
     if args.restore_snapshot and args.bootstrap_mode == "genesis":
         raise ValueError("pass either --bootstrap-mode genesis or --restore-snapshot, not both")
 
+
+def _flag_or_prompt_text(value: str | None, label: str, *, default: str, prompt: bool) -> str:
+    if value:
+        return value
+    return _prompt_text(label, default=default) if prompt else default
+
+
+def _resolve_setup_identity(
+    args: argparse.Namespace, *, mode: str, prompt: bool
+) -> tuple[str, str, str | None]:
     default_network = "local-dev" if mode == "local" else "testnet"
-    network = args.network or (
-        _prompt_text("Network name", default=default_network) if prompt else default_network
+    network = _flag_or_prompt_text(
+        args.network, "Network name", default=default_network, prompt=prompt
     )
-    default_name = "validator-1"
-    name = args.name or (
-        _prompt_text("Node name", default=default_name) if prompt else default_name
-    )
+    name = _flag_or_prompt_text(args.name, "Node name", default="validator-1", prompt=prompt)
     chain_id = args.chain_id
     if mode == "local" and chain_id is None:
-        default_chain_id = _default_chain_id(network)
-        chain_id = (
-            _prompt_text("Chain ID", default=default_chain_id) if prompt else default_chain_id
+        chain_id = _flag_or_prompt_text(
+            None, "Chain ID", default=_default_chain_id(network), prompt=prompt
         )
+    return network, name, chain_id
 
+
+def _resolve_setup_template(args: argparse.Namespace, *, mode: str, prompt: bool) -> str:
     default_preset = "basic" if mode == "local" else "indexed"
-    if prompt and args.preset is None:
+    preset = args.preset
+    if preset is None and prompt:
         _prompt_note("The preset controls optional services written into the node profile.")
-    preset = args.preset or (
-        _prompt_choice(
+        preset = _prompt_choice(
             "Runtime preset",
             [
                 ("basic", "minimal sidecars; fastest local or development setup"),
@@ -571,47 +579,49 @@ def _resolve_plan(args: argparse.Namespace) -> SetupNodePlan:
             ],
             default=default_preset,
         )
-        if prompt
-        else default_preset
+    return args.template or _template_for_preset(preset or default_preset)
+
+
+def _resolve_validator_key_ref(
+    args: argparse.Namespace, *, key_mode: str, name: str, prompt: bool
+) -> Path | None:
+    if key_mode != "existing" or args.validator_key_ref is not None:
+        return args.validator_key_ref
+    if not prompt:
+        raise ValueError("--key-mode existing requires --validator-key-ref")
+    return Path(
+        _prompt_text("Validator key file", default=f"./keys/{name}/validator_key_info.json")
     )
-    template = args.template or _template_for_preset(preset)
-    key_mode = _resolve_key_mode(args, prompt=prompt)
 
-    validator_key_ref = args.validator_key_ref
-    if key_mode == "existing" and validator_key_ref is None:
-        if prompt:
-            validator_key_ref = Path(
-                _prompt_text(
-                    "Validator key file",
-                    default=f"./keys/{name}/validator_key_info.json",
-                )
-            )
-        else:
-            raise ValueError("--key-mode existing requires --validator-key-ref")
 
-    restore_snapshot = False
-    if mode == "join":
-        if args.restore_snapshot:
-            restore_snapshot = True
-        elif args.bootstrap_mode is not None:
-            restore_snapshot = args.bootstrap_mode == "snapshot"
-        elif prompt:
-            _prompt_note(
-                "Snapshots can speed up joining, but only use snapshots from a trusted "
-                "manifest or operator."
-            )
-            restore_snapshot = _prompt_bool("Restore configured snapshot after init", default=False)
+def _resolve_restore_snapshot(args: argparse.Namespace, *, mode: str, prompt: bool) -> bool:
+    if mode != "join":
+        return False
+    if args.restore_snapshot:
+        return True
+    if args.bootstrap_mode is not None:
+        return args.bootstrap_mode == "snapshot"
+    if not prompt:
+        return False
+    _prompt_note(
+        "Snapshots can speed up joining, but only use snapshots from a trusted "
+        "manifest or operator."
+    )
+    return _prompt_bool("Restore configured snapshot after init", default=False)
 
-    if args.start is None:
-        if prompt:
-            _prompt_note(
-                "Starting now runs the node lifecycle command and a local RPC health check "
-                "after setup."
-            )
-        start = _prompt_bool("Start the node after setup", default=True) if prompt else False
-    else:
-        start = bool(args.start)
 
+def _resolve_start(args: argparse.Namespace, *, prompt: bool) -> bool:
+    if args.start is not None:
+        return bool(args.start)
+    if not prompt:
+        return False
+    _prompt_note(
+        "Starting now runs the node lifecycle command and a local RPC health check after setup."
+    )
+    return _prompt_bool("Start the node after setup", default=True)
+
+
+def _setup_runtime_args(args: argparse.Namespace, *, mode: str) -> dict:
     runtime_args = {
         key: value
         for key in RUNTIME_ARG_DEFAULTS
@@ -623,6 +633,24 @@ def _resolve_plan(args: argparse.Namespace) -> SetupNodePlan:
             f"{', '.join(genesis_fee_args)} choose the chain fee policy at genesis; "
             "use them only with --mode local"
         )
+    return runtime_args
+
+
+def _resolve_plan(args: argparse.Namespace) -> SetupNodePlan:
+    _require_confirmation_path(args)
+    prompt = _should_prompt(args)
+    base_dir = args.base_dir.resolve()
+    mode = _resolve_setup_mode(args, prompt=prompt)
+    _validate_setup_mode_args(args, mode=mode)
+    network, name, chain_id = _resolve_setup_identity(args, mode=mode, prompt=prompt)
+    template = _resolve_setup_template(args, mode=mode, prompt=prompt)
+    key_mode = _resolve_key_mode(args, prompt=prompt)
+    validator_key_ref = _resolve_validator_key_ref(
+        args, key_mode=key_mode, name=name, prompt=prompt
+    )
+    restore_snapshot = _resolve_restore_snapshot(args, mode=mode, prompt=prompt)
+    start = _resolve_start(args, prompt=prompt)
+    runtime_args = _setup_runtime_args(args, mode=mode)
     block_policy_mode, block_policy_interval, block_policy_source = _resolve_block_policy(
         args=args,
         base_dir=base_dir,
