@@ -8,6 +8,7 @@ import threading
 import time
 from collections import deque
 from collections.abc import Mapping
+from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 from urllib.error import URLError
@@ -45,39 +46,11 @@ BACKEND_OPTION_KEYS = (
     ("check_disk", "check_disk"),
 )
 
-RUNTIME_COMMAND_KWARG_NAMES = (
-    "cometbft_home",
-    "node_image_mode",
-    "node_integrated_image",
-    "node_split_image",
-    "bds_enabled",
-    "dashboard_enabled",
-    "monitoring_enabled",
-    "dashboard_host",
-    "dashboard_port",
-    "intentkit_enabled",
-    "intentkit_network_id",
-    "intentkit_host",
-    "intentkit_port",
-    "intentkit_api_port",
-    "dex_automation_enabled",
-    "dex_automation_host",
-    "dex_automation_port",
-    "dex_automation_config",
-    "shielded_relayer_enabled",
-    "shielded_relayer_host",
-    "shielded_relayer_port",
-)
-
 
 def _backend_options(values: Mapping[str, Any]) -> dict[str, Any]:
     return drop_none(
         {option_key: values.get(argument_name) for argument_name, option_key in BACKEND_OPTION_KEYS}
     )
-
-
-def _runtime_command_kwargs(values: Mapping[str, Any]) -> dict[str, Any]:
-    return {name: values[name] for name in RUNTIME_COMMAND_KWARG_NAMES if name in values}
 
 
 def resolve_stack_dir(base_dir: Path, explicit: Path | None = None) -> Path:
@@ -255,6 +228,7 @@ def run_backend_command(
     shielded_relayer_enabled: bool = False,
     shielded_relayer_host: str | None = None,
     shielded_relayer_port: int | None = None,
+    app_metrics_port: int | None = None,
     wait_for_health: bool | None = None,
     rpc_timeout_seconds: float | None = None,
     rpc_url: str | None = None,
@@ -275,6 +249,12 @@ def run_backend_command(
         env = {
             **os.environ,
             **({"XIAN_COMETBFT_HOME": str(cometbft_home)} if cometbft_home is not None else {}),
+            # The stack publishes this host port to the node's fixed container port.
+            **(
+                {"XIAN_APP_METRICS_PORT": str(app_metrics_port)}
+                if app_metrics_port is not None
+                else {}
+            ),
         }
         if stream_stderr:
             result = _run_backend_command_with_streamed_stderr(
@@ -302,38 +282,53 @@ def run_backend_command(
         raise ValueError(f"xian-stack backend command returned invalid JSON: {command}") from exc
 
 
+@dataclass(frozen=True)
+class StackRuntimeOptions:
+    """Profile-derived options that every xian-stack runtime command takes."""
+
+    bds_enabled: bool
+    cometbft_home: Path | None = None
+    node_image_mode: str = "local_build"
+    node_integrated_image: str | None = None
+    node_split_image: str | None = None
+    dashboard_enabled: bool = False
+    monitoring_enabled: bool = False
+    dashboard_host: str = "127.0.0.1"
+    dashboard_port: int = 8080
+    intentkit_enabled: bool = False
+    intentkit_network_id: str | None = None
+    intentkit_host: str = "127.0.0.1"
+    intentkit_port: int = 38000
+    intentkit_api_port: int = 38080
+    dex_automation_enabled: bool = False
+    dex_automation_host: str = "127.0.0.1"
+    dex_automation_port: int = 38280
+    dex_automation_config: str | None = None
+    shielded_relayer_enabled: bool = False
+    shielded_relayer_host: str = "127.0.0.1"
+    shielded_relayer_port: int = 38180
+    # Published host port for the node's app metrics; None keeps the stack default.
+    app_metrics_port: int | None = None
+
+
+def _run_runtime_command(
+    stack_dir: Path, command: str, options: Mapping[str, Any], **extra: Any
+) -> dict:
+    runtime = StackRuntimeOptions(**options)
+    return run_backend_command(stack_dir, command, **asdict(runtime), **extra)
+
+
 def start_xian_stack_node(
     *,
     stack_dir: Path,
-    cometbft_home: Path | None = None,
-    node_image_mode: str = "local_build",
-    node_integrated_image: str | None = None,
-    node_split_image: str | None = None,
-    bds_enabled: bool,
-    dashboard_enabled: bool = False,
-    monitoring_enabled: bool = False,
-    dashboard_host: str = "127.0.0.1",
-    dashboard_port: int = 8080,
-    intentkit_enabled: bool = False,
-    intentkit_network_id: str | None = None,
-    intentkit_host: str = "127.0.0.1",
-    intentkit_port: int = 38000,
-    intentkit_api_port: int = 38080,
-    dex_automation_enabled: bool = False,
-    dex_automation_host: str = "127.0.0.1",
-    dex_automation_port: int = 38280,
-    dex_automation_config: str | None = None,
-    shielded_relayer_enabled: bool = False,
-    shielded_relayer_host: str = "127.0.0.1",
-    shielded_relayer_port: int = 38180,
     wait_for_rpc: bool = True,
     rpc_timeout_seconds: float = DEFAULT_RPC_TIMEOUT_SECONDS,
+    **options: Any,
 ) -> dict:
-    runtime_options = _runtime_command_kwargs(locals())
-    return run_backend_command(
+    return _run_runtime_command(
         stack_dir,
         "start",
-        **runtime_options,
+        options,
         stream_stderr=True,
         wait_for_health=wait_for_rpc,
         rpc_timeout_seconds=rpc_timeout_seconds,
@@ -341,137 +336,25 @@ def start_xian_stack_node(
     )
 
 
-def stop_xian_stack_node(
-    *,
-    stack_dir: Path,
-    cometbft_home: Path | None = None,
-    node_image_mode: str = "local_build",
-    node_integrated_image: str | None = None,
-    node_split_image: str | None = None,
-    bds_enabled: bool,
-    dashboard_enabled: bool = False,
-    monitoring_enabled: bool = False,
-    dashboard_host: str = "127.0.0.1",
-    dashboard_port: int = 8080,
-    intentkit_enabled: bool = False,
-    intentkit_network_id: str | None = None,
-    intentkit_host: str = "127.0.0.1",
-    intentkit_port: int = 38000,
-    intentkit_api_port: int = 38080,
-    dex_automation_enabled: bool = False,
-    dex_automation_host: str = "127.0.0.1",
-    dex_automation_port: int = 38280,
-    dex_automation_config: str | None = None,
-    shielded_relayer_enabled: bool = False,
-    shielded_relayer_host: str = "127.0.0.1",
-    shielded_relayer_port: int = 38180,
-) -> dict:
-    runtime_options = _runtime_command_kwargs(locals())
-    return run_backend_command(
-        stack_dir,
-        "stop",
-        **runtime_options,
-    )
+def stop_xian_stack_node(*, stack_dir: Path, **options: Any) -> dict:
+    return _run_runtime_command(stack_dir, "stop", options)
 
 
-def get_xian_stack_node_status(
-    *,
-    stack_dir: Path,
-    cometbft_home: Path | None = None,
-    node_image_mode: str = "local_build",
-    node_integrated_image: str | None = None,
-    node_split_image: str | None = None,
-    bds_enabled: bool,
-    dashboard_enabled: bool = False,
-    monitoring_enabled: bool = False,
-    dashboard_host: str = "127.0.0.1",
-    dashboard_port: int = 8080,
-    intentkit_enabled: bool = False,
-    intentkit_network_id: str | None = None,
-    intentkit_host: str = "127.0.0.1",
-    intentkit_port: int = 38000,
-    intentkit_api_port: int = 38080,
-    dex_automation_enabled: bool = False,
-    dex_automation_host: str = "127.0.0.1",
-    dex_automation_port: int = 38280,
-    dex_automation_config: str | None = None,
-    shielded_relayer_enabled: bool = False,
-    shielded_relayer_host: str = "127.0.0.1",
-    shielded_relayer_port: int = 38180,
-) -> dict:
-    runtime_options = _runtime_command_kwargs(locals())
-    return run_backend_command(
-        stack_dir,
-        "status",
-        **runtime_options,
-    )
+def get_xian_stack_node_status(*, stack_dir: Path, **options: Any) -> dict:
+    return _run_runtime_command(stack_dir, "status", options)
 
 
-def get_xian_stack_node_endpoints(
-    *,
-    stack_dir: Path,
-    cometbft_home: Path | None = None,
-    node_image_mode: str = "local_build",
-    node_integrated_image: str | None = None,
-    node_split_image: str | None = None,
-    bds_enabled: bool,
-    dashboard_enabled: bool = False,
-    monitoring_enabled: bool = False,
-    dashboard_host: str = "127.0.0.1",
-    dashboard_port: int = 8080,
-    intentkit_enabled: bool = False,
-    intentkit_network_id: str | None = None,
-    intentkit_host: str = "127.0.0.1",
-    intentkit_port: int = 38000,
-    intentkit_api_port: int = 38080,
-    dex_automation_enabled: bool = False,
-    dex_automation_host: str = "127.0.0.1",
-    dex_automation_port: int = 38280,
-    dex_automation_config: str | None = None,
-    shielded_relayer_enabled: bool = False,
-    shielded_relayer_host: str = "127.0.0.1",
-    shielded_relayer_port: int = 38180,
-) -> dict:
-    runtime_options = _runtime_command_kwargs(locals())
-    return run_backend_command(
-        stack_dir,
-        "endpoints",
-        **runtime_options,
-    )
+def get_xian_stack_node_endpoints(*, stack_dir: Path, **options: Any) -> dict:
+    return _run_runtime_command(stack_dir, "endpoints", options)
 
 
 def get_xian_stack_node_health(
     *,
     stack_dir: Path,
-    cometbft_home: Path | None = None,
-    node_image_mode: str = "local_build",
-    node_integrated_image: str | None = None,
-    node_split_image: str | None = None,
-    bds_enabled: bool,
-    dashboard_enabled: bool = False,
-    monitoring_enabled: bool = False,
-    dashboard_host: str = "127.0.0.1",
-    dashboard_port: int = 8080,
-    intentkit_enabled: bool = False,
-    intentkit_network_id: str | None = None,
-    intentkit_host: str = "127.0.0.1",
-    intentkit_port: int = 38000,
-    intentkit_api_port: int = 38080,
-    dex_automation_enabled: bool = False,
-    dex_automation_host: str = "127.0.0.1",
-    dex_automation_port: int = 38280,
-    dex_automation_config: str | None = None,
-    shielded_relayer_enabled: bool = False,
-    shielded_relayer_host: str = "127.0.0.1",
-    shielded_relayer_port: int = 38180,
     rpc_url: str = "http://127.0.0.1:26657/status",
     check_disk: bool = True,
+    **options: Any,
 ) -> dict:
-    runtime_options = _runtime_command_kwargs(locals())
-    return run_backend_command(
-        stack_dir,
-        "health",
-        **runtime_options,
-        rpc_url=rpc_url,
-        check_disk=check_disk,
+    return _run_runtime_command(
+        stack_dir, "health", options, rpc_url=rpc_url, check_disk=check_disk
     )

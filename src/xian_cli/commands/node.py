@@ -25,7 +25,7 @@ from xian_cli.commands.node_context import (
     _resolve_stack_dir_from_profile,
     _restore_snapshot,
 )
-from xian_cli.commands.node_options import node_config_options
+from xian_cli.commands.node_options import app_metrics_host_port, node_config_options
 from xian_cli.commands.node_options import service_config as _service_config
 from xian_cli.commands.node_status import profile_service_summary as _profile_service_summary
 from xian_cli.commands.node_status import summarize_node_status
@@ -377,7 +377,7 @@ def _fallback_node_endpoints(
         ),
         "xian_metrics": _replace_url_port(
             base_url,
-            port=9108,
+            port=app_metrics_host_port(profile),
             suffix="/metrics",
         ),
     }

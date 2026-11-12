@@ -177,7 +177,7 @@
     "metrics": {
       "enabled": false,
       "host": "127.0.0.2",
-      "port": 9234,
+      "port": 9108,
       "bds_refresh_seconds": 2.5
     },
     "app_logging": {

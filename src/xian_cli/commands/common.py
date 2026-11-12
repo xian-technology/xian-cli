@@ -4,6 +4,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from xian_cli.abci_bridge import get_node_setup_module
+from xian_cli.commands.node_options import app_metrics_host_port
 from xian_cli.models import SUPPORTED_NODE_IMAGE_MODES, write_json
 from xian_cli.secret_files import ensure_secret_dir
 
@@ -182,6 +183,7 @@ def _stack_runtime_profile_kwargs(
         "shielded_relayer_enabled": bool(shielded_relayer.get("enabled")),
         "shielded_relayer_host": str(shielded_relayer.get("host", "127.0.0.1")),
         "shielded_relayer_port": int(shielded_relayer.get("port", 38180)),
+        "app_metrics_port": app_metrics_host_port(profile),
     }
 
 

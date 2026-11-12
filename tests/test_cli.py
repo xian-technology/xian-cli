@@ -5656,6 +5656,7 @@ class RuntimeHelperTests(unittest.TestCase):
             shielded_relayer_enabled=False,
             shielded_relayer_host="127.0.0.1",
             shielded_relayer_port=38180,
+            app_metrics_port=None,
             stream_stderr=True,
             wait_for_health=True,
             rpc_timeout_seconds=12.5,
@@ -5701,6 +5702,7 @@ class RuntimeHelperTests(unittest.TestCase):
             shielded_relayer_enabled=False,
             shielded_relayer_host="127.0.0.1",
             shielded_relayer_port=38180,
+            app_metrics_port=None,
             stream_stderr=True,
             wait_for_health=False,
             rpc_timeout_seconds=90.0,
@@ -5747,6 +5749,7 @@ class RuntimeHelperTests(unittest.TestCase):
             shielded_relayer_enabled=False,
             shielded_relayer_host="127.0.0.1",
             shielded_relayer_port=38180,
+            app_metrics_port=None,
         )
         self.assertEqual(result["container_target"], "abci-down")
 
@@ -5794,6 +5797,7 @@ class RuntimeHelperTests(unittest.TestCase):
             shielded_relayer_enabled=False,
             shielded_relayer_host="127.0.0.1",
             shielded_relayer_port=38180,
+            app_metrics_port=None,
         )
 
     def test_get_xian_stack_node_endpoints_uses_backend_command(self) -> None:
@@ -5839,6 +5843,7 @@ class RuntimeHelperTests(unittest.TestCase):
             shielded_relayer_enabled=False,
             shielded_relayer_host="127.0.0.1",
             shielded_relayer_port=38180,
+            app_metrics_port=None,
         )
 
     def test_get_xian_stack_node_health_uses_backend_command(self) -> None:
@@ -5883,6 +5888,7 @@ class RuntimeHelperTests(unittest.TestCase):
             shielded_relayer_enabled=False,
             shielded_relayer_host="127.0.0.1",
             shielded_relayer_port=38180,
+            app_metrics_port=None,
             rpc_url="http://127.0.0.1:26657/status",
             check_disk=False,
         )

@@ -21,6 +21,11 @@ if TYPE_CHECKING:
     )
 
 
+# xian-stack publishes the profile's advanced.metrics.port on the host
+# (XIAN_APP_METRICS_PORT) to this container port, so the node always listens here.
+APP_METRICS_CONTAINER_PORT = 9108
+
+
 def profile_config(profile: dict, section: str, name: str) -> dict:
     values = profile.get(section)
     if not isinstance(values, dict):
@@ -50,12 +55,18 @@ def state_sync_options(node_setup: ModuleType, profile: dict) -> StateSyncOption
     )
 
 
+def app_metrics_host_port(profile: dict) -> int:
+    """The host port the stack publishes the node's app metrics on."""
+    settings = profile_config(profile, "advanced", "metrics")
+    return int(settings.get("port", APP_METRICS_CONTAINER_PORT))
+
+
 def metrics_options(node_setup: ModuleType, profile: dict) -> MetricsOptions:
     settings = profile_config(profile, "advanced", "metrics")
     return node_setup.MetricsOptions(
         enabled=bool(settings.get("enabled", True)),
         host=str(settings.get("host", "0.0.0.0")),
-        port=int(settings.get("port", 9108)),
+        port=APP_METRICS_CONTAINER_PORT,
         bds_refresh_seconds=float(settings.get("bds_refresh_seconds", 5.0)),
     )
 
