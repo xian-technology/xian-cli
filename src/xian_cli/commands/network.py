@@ -177,147 +177,175 @@ def _created_genesis_time() -> str:
     return datetime.now(UTC).isoformat(timespec="microseconds").replace("+00:00", "Z")
 
 
-def _handle_network_create(args: argparse.Namespace) -> int:
-    base_dir = args.base_dir.resolve()
-    _validate_founder_private_key_sources(args)
-    template = _load_template(
-        base_dir=base_dir,
-        template_name=args.template,
-        configs_dir=args.configs_dir,
-    )
-    target = _resolve_output_path(
-        base_dir=base_dir,
-        explicit_output=args.output,
-        default_path=_default_network_manifest_path(base_dir, args.name),
-    )
-    network_dir = target.parent
-    validator_constructor_overrides = _validator_constructor_overrides(args)
+_SELECTION_MODE_NEEDS_GENERATED_GENESIS = (
+    "--validator-selection-mode requires generated local genesis; pass "
+    "--generate-validator-key with --bootstrap-node"
+)
 
+
+def _validate_validator_key_args(args: argparse.Namespace) -> None:
     if args.generate_validator_key and args.validator_key_ref is not None:
         raise ValueError("pass either --validator-key-ref or --generate-validator-key, not both")
     if args.validator_key_dir is not None and not args.generate_validator_key:
         raise ValueError("--validator-key-dir requires --generate-validator-key")
+
+
+def _validate_network_create_args(
+    args: argparse.Namespace,
+    *,
+    template: dict | None,
+    validator_constructor_overrides: dict[str, object] | None,
+) -> None:
+    _validate_validator_key_args(args)
     if validator_constructor_overrides is not None and args.genesis_source is not None:
         raise ValueError("--validator-selection-mode only applies when generating a local genesis")
     if args.init_node and args.bootstrap_node is None:
         if template is None or template.get("bootstrap_node_name") is None:
             raise ValueError("--init-node requires --bootstrap-node")
-    bootstrap_name, validator_names = _collect_creation_validator_names(
-        args,
-        template=template,
-    )
+
+
+def _validate_selection_mode_has_keys(
+    args: argparse.Namespace,
+    *,
+    validator_names: list[str],
+    validator_constructor_overrides: dict[str, object] | None,
+) -> None:
     if validator_constructor_overrides is not None and (
         not validator_names or (not args.generate_validator_key and args.validator_key_ref is None)
     ):
-        raise ValueError(
-            "--validator-selection-mode requires generated local genesis; pass "
-            "--generate-validator-key with --bootstrap-node"
-        )
+        raise ValueError(_SELECTION_MODE_NEEDS_GENERATED_GENESIS)
+
+
+def _network_fee_policy(args: argparse.Namespace, template: dict | None) -> dict:
     if args.genesis_source is not None and explicit_fee_policy_args(args):
         raise ValueError(
             "fee policy options shape a generated or bundle genesis; an external "
             "--genesis-source already carries its fee policy"
         )
-    fee_policy = build_genesis_fee_policy(args=args, template=template)
-    if getattr(args, "dry_run", False):
-        # All argument validation has passed; summarize the planned layout
-        # without writing files or generating keys. If the user then drops
-        # the --dry-run flag, the same inputs will run the real flow.
-        dry_plan: dict[str, object] = {
-            "dry_run": True,
-            "name": args.name,
-            "template": template["name"] if template else None,
-            "manifest_path": str(target),
-            "network_dir": str(network_dir),
-            "bootstrap_node": bootstrap_name,
-            "generate_validator_key": bool(args.generate_validator_key),
-            "init_node": bool(args.init_node),
-            "genesis": (
-                {"kind": "source", "source": args.genesis_source}
-                if args.genesis_source
-                else {"kind": "bundle", "bundle": args.genesis_bundle}
-            ),
-        }
-        if validator_constructor_overrides is not None:
-            dry_plan["validator_policy"] = dict(validator_constructor_overrides)
-        if args.genesis_source is None:
-            dry_plan["fee_policy"] = fee_policy
-        print(json.dumps(dry_plan, indent=2))
-        return 0
-    if args.init_node and bootstrap_name is None:
-        raise ValueError("--init-node requires --bootstrap-node")
-    validators = _collect_creation_validators(
-        args=args,
-        base_dir=base_dir,
-        bootstrap_name=bootstrap_name,
-        validator_names=validator_names,
-    )
+    return build_genesis_fee_policy(args=args, template=template)
 
-    genesis = (
-        {"kind": "source", "source": args.genesis_source}
-        if args.genesis_source is not None
-        else None
+
+def _network_create_dry_plan(
+    args: argparse.Namespace,
+    *,
+    template: dict | None,
+    target: Path,
+    bootstrap_name: str | None,
+    validator_constructor_overrides: dict[str, object] | None,
+    fee_policy: dict,
+) -> dict[str, object]:
+    """Summarize the planned layout; the same inputs without --dry-run run the real flow."""
+    dry_plan: dict[str, object] = {
+        "dry_run": True,
+        "name": args.name,
+        "template": template["name"] if template else None,
+        "manifest_path": str(target),
+        "network_dir": str(target.parent),
+        "bootstrap_node": bootstrap_name,
+        "generate_validator_key": bool(args.generate_validator_key),
+        "init_node": bool(args.init_node),
+        "genesis": (
+            {"kind": "source", "source": args.genesis_source}
+            if args.genesis_source
+            else {"kind": "bundle", "bundle": args.genesis_bundle}
+        ),
+    }
+    if validator_constructor_overrides is not None:
+        dry_plan["validator_policy"] = dict(validator_constructor_overrides)
+    if args.genesis_source is None:
+        dry_plan["fee_policy"] = fee_policy
+    return dry_plan
+
+
+def _generate_creation_genesis(
+    args: argparse.Namespace,
+    *,
+    network_dir: Path,
+    validators: list[dict[str, object]],
+    validator_constructor_overrides: dict[str, object] | None,
+    fee_policy: dict,
+) -> tuple[dict, dict[str, object], Path]:
+    """Write a local genesis signed by the founder; return its manifest reference."""
+    founder_private_key = _load_founder_private_key(args) or _extract_validator_private_key_hex(
+        validators[0]["validator_key_payload"]
     )
-    genesis_build: dict[str, object] | None = None
-    generated_genesis_path: Path | None = None
-    if genesis is None:
-        if not validators or any(
-            validator["validator_key_payload"] is None for validator in validators
-        ):
-            if bootstrap_name is not None or validator_names:
-                raise ValueError(
-                    "local network creation without --genesis-source "
-                    "requires validator key material; pass "
-                    "--generate-validator-key or --validator-key-ref"
-                )
-        else:
-            founder_private_key = _load_founder_private_key(
-                args
-            ) or _extract_validator_private_key_hex(validators[0]["validator_key_payload"])
-            generated_genesis_path = network_dir / "genesis.json"
-            genesis = _build_creation_genesis(
-                chain_id=args.chain_id,
-                founder_private_key=founder_private_key,
-                validators=validators,
-                genesis_bundle=args.genesis_bundle,
-                validator_constructor_overrides=validator_constructor_overrides,
-                fee_policy=fee_policy,
-            )
-            write_json(
-                generated_genesis_path,
-                genesis,
-                force=args.force,
-                preserve_runtime_types=True,
-            )
-            genesis = {"kind": "source", "source": "./genesis.json"}
-            genesis_build = {
+    generated_genesis_path = network_dir / "genesis.json"
+    genesis = _build_creation_genesis(
+        chain_id=args.chain_id,
+        founder_private_key=founder_private_key,
+        validators=validators,
+        genesis_bundle=args.genesis_bundle,
+        validator_constructor_overrides=validator_constructor_overrides,
+        fee_policy=fee_policy,
+    )
+    write_json(
+        generated_genesis_path,
+        genesis,
+        force=args.force,
+        preserve_runtime_types=True,
+    )
+    genesis_build: dict[str, object] = {
+        "bundle": args.genesis_bundle,
+        "generated_by": "xian network create",
+    }
+    if validator_constructor_overrides is not None:
+        genesis_build["validator_policy"] = dict(validator_constructor_overrides)
+    return {"kind": "source", "source": "./genesis.json"}, genesis_build, generated_genesis_path
+
+
+def _resolve_creation_genesis(
+    args: argparse.Namespace,
+    *,
+    network_dir: Path,
+    validators: list[dict[str, object]],
+    has_validator_names: bool,
+    validator_constructor_overrides: dict[str, object] | None,
+    fee_policy: dict,
+) -> tuple[dict, dict[str, object] | None, Path | None]:
+    """Pick the network genesis: external source, generated local, or bundle."""
+    if args.genesis_source is not None:
+        genesis, genesis_build, generated_path = (
+            {"kind": "source", "source": args.genesis_source},
+            None,
+            None,
+        )
+    elif validators and all(v["validator_key_payload"] is not None for v in validators):
+        genesis, genesis_build, generated_path = _generate_creation_genesis(
+            args,
+            network_dir=network_dir,
+            validators=validators,
+            validator_constructor_overrides=validator_constructor_overrides,
+            fee_policy=fee_policy,
+        )
+    elif has_validator_names:
+        raise ValueError(
+            "local network creation without --genesis-source "
+            "requires validator key material; pass "
+            "--generate-validator-key or --validator-key-ref"
+        )
+    else:
+        genesis, genesis_build, generated_path = (
+            {
+                "kind": "bundle",
                 "bundle": args.genesis_bundle,
-                "generated_by": "xian network create",
-            }
-            if validator_constructor_overrides is not None:
-                genesis_build["validator_policy"] = dict(validator_constructor_overrides)
-    if validator_constructor_overrides is not None and generated_genesis_path is None:
-        raise ValueError(
-            "--validator-selection-mode requires generated local genesis; pass "
-            "--generate-validator-key with --bootstrap-node"
+                "genesis_time": _created_genesis_time(),
+            },
+            None,
+            None,
         )
-    if genesis is None:
-        genesis = {
-            "kind": "bundle",
-            "bundle": args.genesis_bundle,
-            "genesis_time": _created_genesis_time(),
-        }
-    if bootstrap_name is not None and genesis is None and not validators:
-        raise ValueError(
-            "--bootstrap-node requires either --genesis-source or local "
-            "genesis generation via validator key material"
-        )
-    if validators and any(validator["validator_key_ref"] is None for validator in validators):
-        raise ValueError(
-            "initial validator profiles require validator key material; "
-            "pass --generate-validator-key"
-        )
+    if validator_constructor_overrides is not None and generated_path is None:
+        raise ValueError(_SELECTION_MODE_NEEDS_GENERATED_GENESIS)
+    return genesis, genesis_build, generated_path
 
+
+def _network_manifest(
+    args: argparse.Namespace,
+    *,
+    template: dict | None,
+    genesis: dict,
+    genesis_build: dict[str, object] | None,
+    fee_policy: dict,
+) -> NetworkManifest:
     node_image_mode, node_integrated_image, node_split_image = _resolve_node_image_settings(
         node_image_mode=_pick_template_value(
             args.node_image_mode,
@@ -327,8 +355,7 @@ def _handle_network_create(args: argparse.Namespace) -> int:
         node_integrated_image=args.node_integrated_image,
         node_split_image=args.node_split_image,
     )
-
-    manifest = NetworkManifest(
+    return NetworkManifest(
         name=args.name,
         chain_id=args.chain_id,
         genesis=genesis,
@@ -352,6 +379,177 @@ def _handle_network_create(args: argparse.Namespace) -> int:
         node_split_image=node_split_image,
         node_release_manifest=None,
     )
+
+
+def _creation_validator_profile(
+    args: argparse.Namespace,
+    *,
+    template: dict | None,
+    manifest: NetworkManifest,
+    validator: dict[str, object],
+) -> NodeProfile:
+    """Only the bootstrap validator inherits node-local paths and snapshot settings."""
+    is_bootstrap = bool(validator["is_bootstrap"])
+    return NodeProfile(
+        name=validator["name"],
+        network=args.name,
+        moniker=validator["moniker"],
+        validator_key_ref=validator["validator_key_ref"],
+        node_image_mode=manifest.node_image_mode,
+        node_integrated_image=manifest.node_integrated_image,
+        node_split_image=manifest.node_split_image,
+        node_release_manifest=manifest.node_release_manifest,
+        stack_dir=(str(args.stack_dir) if is_bootstrap and args.stack_dir is not None else None),
+        p2p={"seeds": [], "persistent_peers": []},
+        genesis=None,
+        snapshot_url=(args.snapshot_url if is_bootstrap else None),
+        snapshot_signing_keys=(list(args.snapshot_signing_key or []) if is_bootstrap else []),
+        home=(str(args.home) if is_bootstrap and args.home is not None else None),
+        block_policy_mode=manifest.block_policy_mode,
+        block_policy_interval=manifest.block_policy_interval,
+        **build_profile_runtime_fields(
+            args=args,
+            template=template,
+            runtime_services=is_bootstrap,
+            intentkit_network_id_default="xian-localnet",
+        ),
+    )
+
+
+def _write_creation_validator_profiles(
+    args: argparse.Namespace,
+    *,
+    base_dir: Path,
+    template: dict | None,
+    manifest: NetworkManifest,
+    validators: list[dict[str, object]],
+    result: dict[str, object],
+) -> None:
+    result["validators"] = []
+    for validator in validators:
+        profile_path = _resolve_output_path(
+            base_dir=base_dir,
+            explicit_output=(args.node_output if validator["is_bootstrap"] else None),
+            default_path=base_dir / "nodes" / f"{validator['name']}.json",
+        )
+        profile = _creation_validator_profile(
+            args, template=template, manifest=manifest, validator=validator
+        )
+        write_json(profile_path, profile.to_dict(), force=args.force)
+        result["validators"].append(
+            {
+                "name": validator["name"],
+                "moniker": validator["moniker"],
+                "validator_key_ref": validator["validator_key_ref"],
+                "profile_path": str(profile_path),
+            }
+        )
+        if validator["is_bootstrap"]:
+            result["profile_path"] = str(profile_path)
+            if validator["validator_key_ref"] is not None:
+                result["validator_key_ref"] = validator["validator_key_ref"]
+
+
+def _finish_bootstrap_node(
+    args: argparse.Namespace,
+    *,
+    base_dir: Path,
+    target: Path,
+    bootstrap_name: str,
+    validators: list[dict[str, object]],
+    result: dict[str, object],
+) -> None:
+    bootstrap_validator = next(
+        (validator for validator in validators if validator["name"] == bootstrap_name),
+        None,
+    )
+    if bootstrap_validator is None or bootstrap_validator["validator_key_ref"] is None:
+        raise ValueError(
+            "--bootstrap-node requires validator key material; "
+            "pass --generate-validator-key or --validator-key-ref"
+        )
+    if not args.init_node:
+        return
+    init_args = argparse.Namespace(
+        name=bootstrap_name,
+        base_dir=base_dir,
+        profile=Path(result["profile_path"]),
+        network=target,
+        validator_key=None,
+        stack_dir=args.stack_dir,
+        configs_dir=args.configs_dir,
+        home=args.home,
+        force=args.force,
+        restore_snapshot=False,
+        snapshot_url=None,
+    )
+    result["node_initialized"] = True
+    result["node_init"] = _initialize_node_from_args(init_args)
+
+
+def _handle_network_create(args: argparse.Namespace) -> int:
+    base_dir = args.base_dir.resolve()
+    _validate_founder_private_key_sources(args)
+    template = _load_template(
+        base_dir=base_dir,
+        template_name=args.template,
+        configs_dir=args.configs_dir,
+    )
+    target = _resolve_output_path(
+        base_dir=base_dir,
+        explicit_output=args.output,
+        default_path=_default_network_manifest_path(base_dir, args.name),
+    )
+    overrides = _validator_constructor_overrides(args)
+    _validate_network_create_args(
+        args, template=template, validator_constructor_overrides=overrides
+    )
+    bootstrap_name, validator_names = _collect_creation_validator_names(args, template=template)
+    _validate_selection_mode_has_keys(
+        args, validator_names=validator_names, validator_constructor_overrides=overrides
+    )
+    fee_policy = _network_fee_policy(args, template)
+    if getattr(args, "dry_run", False):
+        # All argument validation has passed; nothing is written and no keys are generated.
+        dry_plan = _network_create_dry_plan(
+            args,
+            template=template,
+            target=target,
+            bootstrap_name=bootstrap_name,
+            validator_constructor_overrides=overrides,
+            fee_policy=fee_policy,
+        )
+        print(json.dumps(dry_plan, indent=2))
+        return 0
+    if args.init_node and bootstrap_name is None:
+        raise ValueError("--init-node requires --bootstrap-node")
+    validators = _collect_creation_validators(
+        args=args,
+        base_dir=base_dir,
+        bootstrap_name=bootstrap_name,
+        validator_names=validator_names,
+    )
+    genesis, genesis_build, generated_genesis_path = _resolve_creation_genesis(
+        args,
+        network_dir=target.parent,
+        validators=validators,
+        has_validator_names=bool(validator_names),
+        validator_constructor_overrides=overrides,
+        fee_policy=fee_policy,
+    )
+    if any(validator["validator_key_ref"] is None for validator in validators):
+        raise ValueError(
+            "initial validator profiles require validator key material; "
+            "pass --generate-validator-key"
+        )
+
+    manifest = _network_manifest(
+        args,
+        template=template,
+        genesis=genesis,
+        genesis_build=genesis_build,
+        fee_policy=fee_policy,
+    )
     write_json(target, manifest.to_dict(), force=args.force)
 
     result: dict[str, object] = {
@@ -361,88 +559,25 @@ def _handle_network_create(args: argparse.Namespace) -> int:
     }
     if generated_genesis_path is not None:
         result["generated_genesis_path"] = str(generated_genesis_path)
-    if validator_constructor_overrides is not None:
-        result["validator_policy"] = dict(validator_constructor_overrides)
-    result["validators"] = []
-
-    for validator in validators:
-        validator_result: dict[str, object] = {
-            "name": validator["name"],
-            "moniker": validator["moniker"],
-            "validator_key_ref": validator["validator_key_ref"],
-        }
-        profile_path = _resolve_output_path(
-            base_dir=base_dir,
-            explicit_output=(args.node_output if validator["is_bootstrap"] else None),
-            default_path=base_dir / "nodes" / f"{validator['name']}.json",
-        )
-        profile = NodeProfile(
-            name=validator["name"],
-            network=args.name,
-            moniker=validator["moniker"],
-            validator_key_ref=validator["validator_key_ref"],
-            node_image_mode=manifest.node_image_mode,
-            node_integrated_image=manifest.node_integrated_image,
-            node_split_image=manifest.node_split_image,
-            node_release_manifest=manifest.node_release_manifest,
-            stack_dir=(
-                str(args.stack_dir)
-                if validator["is_bootstrap"] and args.stack_dir is not None
-                else None
-            ),
-            p2p={"seeds": [], "persistent_peers": []},
-            genesis=None,
-            snapshot_url=(args.snapshot_url if validator["is_bootstrap"] else None),
-            snapshot_signing_keys=(
-                list(args.snapshot_signing_key or []) if validator["is_bootstrap"] else []
-            ),
-            home=(str(args.home) if validator["is_bootstrap"] and args.home is not None else None),
-            block_policy_mode=manifest.block_policy_mode,
-            block_policy_interval=manifest.block_policy_interval,
-            **build_profile_runtime_fields(
-                args=args,
-                template=template,
-                runtime_services=bool(validator["is_bootstrap"]),
-                intentkit_network_id_default="xian-localnet",
-            ),
-        )
-        write_json(profile_path, profile.to_dict(), force=args.force)
-        validator_result["profile_path"] = str(profile_path)
-        result["validators"].append(validator_result)
-
-        if validator["is_bootstrap"]:
-            result["profile_path"] = str(profile_path)
-            if validator["validator_key_ref"] is not None:
-                result["validator_key_ref"] = validator["validator_key_ref"]
-
+    if overrides is not None:
+        result["validator_policy"] = dict(overrides)
+    _write_creation_validator_profiles(
+        args,
+        base_dir=base_dir,
+        template=template,
+        manifest=manifest,
+        validators=validators,
+        result=result,
+    )
     if bootstrap_name is not None:
-        bootstrap_validator = next(
-            (validator for validator in validators if validator["name"] == bootstrap_name),
-            None,
+        _finish_bootstrap_node(
+            args,
+            base_dir=base_dir,
+            target=target,
+            bootstrap_name=bootstrap_name,
+            validators=validators,
+            result=result,
         )
-        if bootstrap_validator is None or bootstrap_validator["validator_key_ref"] is None:
-            raise ValueError(
-                "--bootstrap-node requires validator key material; "
-                "pass --generate-validator-key or --validator-key-ref"
-            )
-
-        if args.init_node:
-            bootstrap_profile_path = Path(result["profile_path"])
-            init_args = argparse.Namespace(
-                name=bootstrap_name,
-                base_dir=base_dir,
-                profile=bootstrap_profile_path,
-                network=target,
-                validator_key=None,
-                stack_dir=args.stack_dir,
-                configs_dir=args.configs_dir,
-                home=args.home,
-                force=args.force,
-                restore_snapshot=False,
-                snapshot_url=None,
-            )
-            result["node_initialized"] = True
-            result["node_init"] = _initialize_node_from_args(init_args)
 
     print(json.dumps(result, indent=2))
     return 0
