@@ -202,6 +202,11 @@ def _run_backend_command_with_streamed_stderr(
     return subprocess.CompletedProcess(cmd, returncode, stdout=stdout, stderr=stderr)
 
 
+def _app_metrics_env(host: str | None, port: int | None) -> dict[str, str]:
+    published = {"XIAN_APP_METRICS_HOST": host, "XIAN_APP_METRICS_PORT": port}
+    return {name: str(value) for name, value in published.items() if value is not None}
+
+
 def run_backend_command(
     stack_dir: Path,
     command: str,
@@ -228,6 +233,7 @@ def run_backend_command(
     shielded_relayer_enabled: bool = False,
     shielded_relayer_host: str | None = None,
     shielded_relayer_port: int | None = None,
+    app_metrics_host: str | None = None,
     app_metrics_port: int | None = None,
     wait_for_health: bool | None = None,
     rpc_timeout_seconds: float | None = None,
@@ -249,12 +255,9 @@ def run_backend_command(
         env = {
             **os.environ,
             **({"XIAN_COMETBFT_HOME": str(cometbft_home)} if cometbft_home is not None else {}),
-            # The stack publishes this host port to the node's fixed container port.
-            **(
-                {"XIAN_APP_METRICS_PORT": str(app_metrics_port)}
-                if app_metrics_port is not None
-                else {}
-            ),
+            # The stack publishes this host address and port to the node's fixed
+            # container address.
+            **_app_metrics_env(app_metrics_host, app_metrics_port),
         }
         if stream_stderr:
             result = _run_backend_command_with_streamed_stderr(
@@ -307,7 +310,9 @@ class StackRuntimeOptions:
     shielded_relayer_enabled: bool = False
     shielded_relayer_host: str = "127.0.0.1"
     shielded_relayer_port: int = 38180
-    # Published host port for the node's app metrics; None keeps the stack default.
+    # Published host address and port for the node's app metrics; None keeps the
+    # stack default (127.0.0.1:9108).
+    app_metrics_host: str | None = None
     app_metrics_port: int | None = None
 
 

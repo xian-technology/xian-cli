@@ -21,9 +21,13 @@ if TYPE_CHECKING:
     )
 
 
-# xian-stack publishes the profile's advanced.metrics.port on the host
-# (XIAN_APP_METRICS_PORT) to this container port, so the node always listens here.
+# xian-stack publishes the profile's advanced.metrics host and port on the host
+# (XIAN_APP_METRICS_HOST:XIAN_APP_METRICS_PORT) to this container address, so the
+# node always listens here.
+APP_METRICS_CONTAINER_HOST = "0.0.0.0"
 APP_METRICS_CONTAINER_PORT = 9108
+# Publishing stays local-only unless a profile names another host address.
+DEFAULT_APP_METRICS_HOST = "127.0.0.1"
 
 
 def profile_config(profile: dict, section: str, name: str) -> dict:
@@ -61,11 +65,17 @@ def app_metrics_host_port(profile: dict) -> int:
     return int(settings.get("port", APP_METRICS_CONTAINER_PORT))
 
 
+def app_metrics_host_address(profile: dict) -> str:
+    """The host address the stack binds the node's published app metrics to."""
+    settings = profile_config(profile, "advanced", "metrics")
+    return str(settings.get("host", DEFAULT_APP_METRICS_HOST))
+
+
 def metrics_options(node_setup: ModuleType, profile: dict) -> MetricsOptions:
     settings = profile_config(profile, "advanced", "metrics")
     return node_setup.MetricsOptions(
         enabled=bool(settings.get("enabled", True)),
-        host=str(settings.get("host", "0.0.0.0")),
+        host=APP_METRICS_CONTAINER_HOST,
         port=APP_METRICS_CONTAINER_PORT,
         bds_refresh_seconds=float(settings.get("bds_refresh_seconds", 5.0)),
     )

@@ -3082,7 +3082,7 @@ class NetworkManifestTests(unittest.TestCase):
                 "keys/validator-1/validator_key_info.json",
             )
             self.assertNotIn("[xian]", config_toml)
-            self.assertIn('metrics_host = "127.0.0.1"', xian_toml)
+            self.assertIn('metrics_host = "0.0.0.0"', xian_toml)
 
     def test_network_create_can_bootstrap_local_network(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -5656,6 +5656,7 @@ class RuntimeHelperTests(unittest.TestCase):
             shielded_relayer_enabled=False,
             shielded_relayer_host="127.0.0.1",
             shielded_relayer_port=38180,
+            app_metrics_host=None,
             app_metrics_port=None,
             stream_stderr=True,
             wait_for_health=True,
@@ -5702,6 +5703,7 @@ class RuntimeHelperTests(unittest.TestCase):
             shielded_relayer_enabled=False,
             shielded_relayer_host="127.0.0.1",
             shielded_relayer_port=38180,
+            app_metrics_host=None,
             app_metrics_port=None,
             stream_stderr=True,
             wait_for_health=False,
@@ -5749,6 +5751,7 @@ class RuntimeHelperTests(unittest.TestCase):
             shielded_relayer_enabled=False,
             shielded_relayer_host="127.0.0.1",
             shielded_relayer_port=38180,
+            app_metrics_host=None,
             app_metrics_port=None,
         )
         self.assertEqual(result["container_target"], "abci-down")
@@ -5797,6 +5800,7 @@ class RuntimeHelperTests(unittest.TestCase):
             shielded_relayer_enabled=False,
             shielded_relayer_host="127.0.0.1",
             shielded_relayer_port=38180,
+            app_metrics_host=None,
             app_metrics_port=None,
         )
 
@@ -5843,6 +5847,7 @@ class RuntimeHelperTests(unittest.TestCase):
             shielded_relayer_enabled=False,
             shielded_relayer_host="127.0.0.1",
             shielded_relayer_port=38180,
+            app_metrics_host=None,
             app_metrics_port=None,
         )
 
@@ -5888,6 +5893,7 @@ class RuntimeHelperTests(unittest.TestCase):
             shielded_relayer_enabled=False,
             shielded_relayer_host="127.0.0.1",
             shielded_relayer_port=38180,
+            app_metrics_host=None,
             app_metrics_port=None,
             rpc_url="http://127.0.0.1:26657/status",
             check_disk=False,

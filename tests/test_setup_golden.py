@@ -60,7 +60,7 @@ class GoldenSetupPlanTests(unittest.TestCase):
             self.assertEqual(cometbft_config["moniker"], "node-0")
             self.assertEqual(cometbft_config["p2p"]["seeds"], "")
             self.assertNotIn("tracer_mode", xian_config)
-            self.assertEqual(xian_config["metrics_host"], "127.0.0.1")
+            self.assertEqual(xian_config["metrics_host"], "0.0.0.0")
             self.assertEqual(profile["app_log_max_file_mb"], 12)
             self.assertEqual(profile["app_log_max_total_mb"], 36)
             self.assertEqual(xian_config["app_log_max_file_mb"], 12)

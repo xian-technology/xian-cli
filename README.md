@@ -84,10 +84,11 @@ dashboard, Prometheus, and Grafana. Host-facing endpoints stay on loopback;
 inspect their effective URLs with `xian node endpoints local-dev`. Periodic
 five-second blocks keep contract time advancing while the node is idle.
 
-A profile's `advanced.metrics.port` is the host port the stack publishes the
-node's app metrics on (`XIAN_APP_METRICS_PORT`, default 9108); inside the
-container the node always listens on 9108, and `advanced.metrics.host` is that
-in-container listen address.
+A profile's `advanced.metrics.host` and `advanced.metrics.port` are the host
+address and port the stack publishes the node's app metrics on
+(`XIAN_APP_METRICS_HOST`/`XIAN_APP_METRICS_PORT`, default `127.0.0.1:9108`, so
+local only). Inside the container the node always listens on `0.0.0.0:9108`. A
+non-loopback host needs the stack's public-metrics opt-in.
 
 The transaction fee policy is chain state chosen at genesis, not node
 configuration. Every fee mode carries hard chi caps: `--max-tx-chi` (default
