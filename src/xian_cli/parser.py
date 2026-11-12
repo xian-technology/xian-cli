@@ -35,14 +35,14 @@ def add_genesis_fee_policy_args(parser: argparse.ArgumentParser) -> None:
         ),
     )
     parser.add_argument(
-        "--free-tx-max-chi",
+        "--max-tx-chi",
         type=int,
-        help="genesis limit on submitted chi per transaction for free_metered networks",
+        help="genesis limit on submitted chi per transaction, in every fee mode",
     )
     parser.add_argument(
-        "--free-block-max-chi",
+        "--max-block-chi",
         type=int,
-        help="genesis limit on total submitted chi per block for free_metered networks",
+        help="genesis limit on total submitted chi per block, in every fee mode",
     )
 
 

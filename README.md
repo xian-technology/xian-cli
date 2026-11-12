@@ -85,9 +85,11 @@ inspect their effective URLs with `xian node endpoints local-dev`. Periodic
 five-second blocks keep contract time advancing while the node is idle.
 
 The transaction fee policy is chain state chosen at genesis, not node
-configuration. For a metered 0-fee local network, pass `--tx-fee-mode
-free_metered` with explicit `--free-tx-max-chi` and `--free-block-max-chi`
-caps to `network create` or `setup node --mode local`. A bundle network records
+configuration. Every fee mode carries hard chi caps: `--max-tx-chi` (default
+200,000) bounds `chi_supplied` per transaction and `--max-block-chi` (default
+500,000) bounds the block's total. For a metered 0-fee local network, pass
+`--tx-fee-mode free_metered` to `network create` or `setup node --mode local`;
+the cap flags work the same in both modes. A bundle network records
 the policy as `fee_policy` in its manifest and every `node init` builds it into
 genesis; a generated genesis carries it directly. Joining nodes cannot choose
 it, and node profiles or `xian.toml` that set fee keys are rejected.

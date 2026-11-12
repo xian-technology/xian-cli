@@ -64,8 +64,6 @@ SUPPORTED_TX_FEE_MODES = {
     "free_metered",
 }
 DEFAULT_TX_FEE_MODE = "paid_metered"
-DEFAULT_FREE_TX_MAX_CHI = 1_000_000
-DEFAULT_FREE_BLOCK_MAX_CHI = 20_000_000
 SUPPORTED_RECOVERY_ARTIFACT_KINDS = {"snapshot_url"}
 SUPPORTED_RUNTIME_FEATURES = {"zk"}
 
@@ -205,34 +203,17 @@ def _require_tx_fee_mode(payload: dict, key: str) -> str:
     )
 
 
-def _validate_free_fee_caps(*, tx_max_chi: int, block_max_chi: int) -> None:
-    if block_max_chi < tx_max_chi:
-        raise ValueError("free_block_max_chi must be greater than or equal to free_tx_max_chi")
-
-
-FEE_POLICY_FIELDS = ("tx_fee_mode", "free_tx_max_chi", "free_block_max_chi")
+FEE_POLICY_FIELDS = ("tx_fee_mode", "max_tx_chi", "max_block_chi")
+CHI_CAP_FIELDS = ("max_tx_chi", "max_block_chi")
 
 
 def canonical_fee_policy(settings: dict) -> dict:
-    """Return the genesis ``__fee_policy`` form; free limits apply only to free_metered."""
-    unknown = sorted(set(settings) - set(FEE_POLICY_FIELDS))
-    if unknown:
-        raise ValueError(f"unknown fee_policy settings: {', '.join(unknown)}")
-    mode = _require_tx_fee_mode(settings, "tx_fee_mode")
-    if mode != "free_metered":
-        if set(settings) - {"tx_fee_mode"}:
-            raise ValueError("free_tx_max_chi and free_block_max_chi require free_metered")
-        return {"tx_fee_mode": mode}
-    tx_max_chi = _require_positive_int(settings, "free_tx_max_chi", default=DEFAULT_FREE_TX_MAX_CHI)
-    block_max_chi = _require_positive_int(
-        settings, "free_block_max_chi", default=DEFAULT_FREE_BLOCK_MAX_CHI
-    )
-    _validate_free_fee_caps(tx_max_chi=tx_max_chi, block_max_chi=block_max_chi)
-    return {
-        "tx_fee_mode": mode,
-        "free_tx_max_chi": tx_max_chi,
-        "free_block_max_chi": block_max_chi,
-    }
+    """Return the genesis ``__fee_policy`` form, with the node's defaults and bounds."""
+    # The node runtime owns the fee policy rules (default caps, bounds, the VM
+    # ceiling); importing it lazily keeps CLI help free of runtime imports.
+    from xian.fee_policy import fee_policy_state
+
+    return fee_policy_state(settings)
 
 
 def _normalize_manifest_fee_policy(payload: dict, genesis: dict) -> dict | None:
@@ -325,6 +306,12 @@ def _require_positive_int_no_default(payload: dict, key: str) -> int:
     if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
         raise ValueError(f"{key} must be a positive integer")
     return value
+
+
+def _require_optional_positive_int(payload: dict, key: str) -> int | None:
+    if payload.get(key) is None:
+        return None
+    return _require_positive_int_no_default(payload, key)
 
 
 def _require_str_list(payload: dict, key: str) -> list[str]:
@@ -1171,8 +1158,8 @@ def normalize_network_template(payload: dict) -> dict:
             "simulation_timeout_ms",
             "simulation_max_chi",
             "tx_fee_mode",
-            "free_tx_max_chi",
-            "free_block_max_chi",
+            "max_tx_chi",
+            "max_block_chi",
             "parallel_execution_enabled",
             "parallel_execution_workers",
             "parallel_execution_min_transactions",
@@ -1194,20 +1181,6 @@ def normalize_network_template(payload: dict) -> dict:
     _validate_parallel_enabled_workers(
         enabled=parallel_execution_enabled,
         workers=parallel_execution_workers,
-    )
-    free_tx_max_chi = _require_positive_int(
-        payload,
-        "free_tx_max_chi",
-        default=DEFAULT_FREE_TX_MAX_CHI,
-    )
-    free_block_max_chi = _require_positive_int(
-        payload,
-        "free_block_max_chi",
-        default=DEFAULT_FREE_BLOCK_MAX_CHI,
-    )
-    _validate_free_fee_caps(
-        tx_max_chi=free_tx_max_chi,
-        block_max_chi=free_block_max_chi,
     )
 
     return {
@@ -1240,8 +1213,8 @@ def normalize_network_template(payload: dict) -> dict:
             payload, "simulation_max_chi", default=1_000_000
         ),
         "tx_fee_mode": _require_tx_fee_mode(payload, "tx_fee_mode"),
-        "free_tx_max_chi": free_tx_max_chi,
-        "free_block_max_chi": free_block_max_chi,
+        # Unset caps fall back to the chain defaults when genesis is built.
+        **{name: _require_optional_positive_int(payload, name) for name in CHI_CAP_FIELDS},
         "parallel_execution_enabled": parallel_execution_enabled,
         "parallel_execution_workers": parallel_execution_workers,
         "parallel_execution_min_transactions": _require_positive_int(
@@ -1418,8 +1391,8 @@ class NetworkTemplate:
     simulation_timeout_ms: int = 3000
     simulation_max_chi: int = 1_000_000
     tx_fee_mode: str = DEFAULT_TX_FEE_MODE
-    free_tx_max_chi: int = DEFAULT_FREE_TX_MAX_CHI
-    free_block_max_chi: int = DEFAULT_FREE_BLOCK_MAX_CHI
+    max_tx_chi: int | None = None
+    max_block_chi: int | None = None
     parallel_execution_enabled: bool = False
     parallel_execution_workers: int = 4
     parallel_execution_min_transactions: int = 8

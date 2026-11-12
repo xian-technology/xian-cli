@@ -279,10 +279,12 @@ Rules:
   that joins the manifest materializes the same genesis
 - `node init` refuses a bundle genesis without `genesis_time` instead of
   sampling the current time on each node
-- the fee policy (`tx_fee_mode`, `free_tx_max_chi`, `free_block_max_chi`) is
-  genesis state: `network create` records it as the bundle manifest's
-  `fee_policy` (canonical form: only `tx_fee_mode` for `paid_metered`) or
-  writes it into a generated genesis; `node init` passes the manifest
+- the fee policy (`tx_fee_mode`, `max_tx_chi`, `max_block_chi`) is genesis
+  state: `network create` resolves each field from its flag, then the
+  template, then the node's default (paid_metered, 200,000, 500,000), checks it
+  with the node's rules (`max_tx_chi <= max_block_chi <= 10,000,000`), and
+  records the canonical form, which always carries both caps, as the bundle
+  manifest's `fee_policy` or writes it into a generated genesis; `node init` passes the manifest
   `fee_policy` to the bundle genesis builder. A `source` genesis manifest must
   not carry `fee_policy`, and node profiles must not set fee keys
 - templates may provide defaults for tracing, bootstrap validator names, BDS,

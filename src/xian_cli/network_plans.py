@@ -8,7 +8,6 @@ from typing import Any
 from xian_cli.models import (
     DEFAULT_ADVANCED_RUNTIME,
     DEFAULT_SERVICES,
-    DEFAULT_TX_FEE_MODE,
     FEE_POLICY_FIELDS,
     canonical_fee_policy,
 )
@@ -484,20 +483,16 @@ def build_genesis_fee_policy(
     args: argparse.Namespace,
     template: Mapping[str, Any] | None,
 ) -> dict[str, Any]:
-    """Resolve the chain fee policy for a new genesis: flags, then template, then paid."""
-    explicit = {
-        name: value
-        for name in FEE_POLICY_FIELDS
-        if (value := getattr(args, name, None)) is not None
-    }
-    if "tx_fee_mode" not in explicit and template is not None:
-        mode = template.get("tx_fee_mode", DEFAULT_TX_FEE_MODE)
-        explicit["tx_fee_mode"] = mode
-        if mode == "free_metered":
-            for name in ("free_tx_max_chi", "free_block_max_chi"):
-                explicit.setdefault(name, template.get(name))
-            explicit = {name: value for name, value in explicit.items() if value is not None}
-    return canonical_fee_policy(explicit)
+    """Resolve each fee policy field for a new genesis: flag, then template, then default."""
+    template = template or {}
+    chosen = {}
+    for name in FEE_POLICY_FIELDS:
+        value = getattr(args, name, None)
+        if value is None:
+            value = template.get(name)
+        if value is not None:
+            chosen[name] = value
+    return canonical_fee_policy(chosen)
 
 
 def explicit_fee_policy_args(args: argparse.Namespace) -> list[str]:
