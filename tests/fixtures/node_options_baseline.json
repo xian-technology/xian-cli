@@ -35,7 +35,7 @@
       "enabled": true,
       "max_concurrency": 2,
       "timeout_ms": 3000,
-      "max_chi": 1000000
+      "max_chi": null
     },
     "pending_nonce_reservation_ttl_seconds": 60.0,
     "max_pending_nonces_per_sender": 128,
@@ -99,7 +99,7 @@
       "enabled": true,
       "max_concurrency": 2,
       "timeout_ms": 3000,
-      "max_chi": 1000000
+      "max_chi": null
     },
     "pending_nonce_reservation_ttl_seconds": 60.0,
     "max_pending_nonces_per_sender": 128,

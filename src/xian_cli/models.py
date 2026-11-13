@@ -64,9 +64,6 @@ SUPPORTED_TX_FEE_MODES = {
     "free_metered",
 }
 DEFAULT_TX_FEE_MODE = "paid_metered"
-# Operator cap on one readonly simulation (the VM ceiling). The node never
-# simulates with more than the chain's max_tx_chi, so this only ever lowers it.
-DEFAULT_SIMULATION_MAX_CHI = 1_000_000
 SUPPORTED_RECOVERY_ARTIFACT_KINDS = {"snapshot_url"}
 SUPPORTED_RUNTIME_FEATURES = {"zk"}
 
@@ -1079,9 +1076,9 @@ def normalize_node_profile(payload: dict) -> dict:
         "simulation_timeout_ms": _require_positive_int(
             payload, "simulation_timeout_ms", default=3000
         ),
-        "simulation_max_chi": _require_positive_int(
-            payload, "simulation_max_chi", default=DEFAULT_SIMULATION_MAX_CHI
-        ),
+        # Optional operator cap on one readonly simulation. Unset, the node
+        # simulates with the chain's max_tx_chi; a value only ever lowers it.
+        "simulation_max_chi": _require_optional_positive_int(payload, "simulation_max_chi"),
         "operator_profile": _require_optional_choice(
             payload,
             "operator_profile",
@@ -1166,9 +1163,9 @@ def normalize_network_template(payload: dict) -> dict:
         "simulation_timeout_ms": _require_positive_int(
             payload, "simulation_timeout_ms", default=3000
         ),
-        "simulation_max_chi": _require_positive_int(
-            payload, "simulation_max_chi", default=DEFAULT_SIMULATION_MAX_CHI
-        ),
+        # Optional operator cap on one readonly simulation. Unset, the node
+        # simulates with the chain's max_tx_chi; a value only ever lowers it.
+        "simulation_max_chi": _require_optional_positive_int(payload, "simulation_max_chi"),
         "tx_fee_mode": _require_tx_fee_mode(payload, "tx_fee_mode"),
         # Unset caps fall back to the chain defaults when genesis is built.
         **{name: _require_optional_positive_int(payload, name) for name in CHI_CAP_FIELDS},
@@ -1310,7 +1307,7 @@ class NodeProfile:
     simulation_enabled: bool = True
     simulation_max_concurrency: int = 2
     simulation_timeout_ms: int = 3000
-    simulation_max_chi: int = DEFAULT_SIMULATION_MAX_CHI
+    simulation_max_chi: int | None = None
     operator_profile: str | None = None
     monitoring_profile: str | None = None
     services: dict = field(default_factory=lambda: deepcopy(DEFAULT_SERVICES))
@@ -1338,7 +1335,7 @@ class NetworkTemplate:
     simulation_enabled: bool = True
     simulation_max_concurrency: int = 2
     simulation_timeout_ms: int = 3000
-    simulation_max_chi: int = DEFAULT_SIMULATION_MAX_CHI
+    simulation_max_chi: int | None = None
     tx_fee_mode: str = DEFAULT_TX_FEE_MODE
     max_tx_chi: int | None = None
     max_block_chi: int | None = None

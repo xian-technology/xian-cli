@@ -9,8 +9,6 @@ from __future__ import annotations
 from types import ModuleType
 from typing import TYPE_CHECKING
 
-from xian_cli.models import DEFAULT_SIMULATION_MAX_CHI
-
 if TYPE_CHECKING:
     from xian.node_setup import (
         AppLoggingOptions,
@@ -98,7 +96,7 @@ def simulation_options(node_setup: ModuleType, profile: dict) -> SimulationOptio
         enabled=bool(profile.get("simulation_enabled", True)),
         max_concurrency=int(profile.get("simulation_max_concurrency", 2)),
         timeout_ms=int(profile.get("simulation_timeout_ms", 3000)),
-        max_chi=int(profile.get("simulation_max_chi", DEFAULT_SIMULATION_MAX_CHI)),
+        max_chi=profile.get("simulation_max_chi"),
     )
 
 

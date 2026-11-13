@@ -144,7 +144,7 @@ def add_node_profile_runtime_args(
         type=int,
         help=(
             f"operator cap on the chi one readonly simulation may spend in {subject}; "
-            "the chain's max_tx_chi always applies on top"
+            "unset, the chain's max_tx_chi applies, and a cap only lowers it"
         ),
     )
     parser.add_argument(

@@ -8,7 +8,6 @@ from typing import Any
 from xian_cli.models import (
     DEFAULT_ADVANCED_RUNTIME,
     DEFAULT_SERVICES,
-    DEFAULT_SIMULATION_MAX_CHI,
     FEE_POLICY_FIELDS,
     canonical_fee_policy,
 )
@@ -33,6 +32,10 @@ def validate_positive_int(name: str, value: Any) -> int:
     if normalized <= 0:
         raise ValueError(f"{name} must be a positive integer")
     return normalized
+
+
+def validate_optional_positive_int(name: str, value: Any) -> int | None:
+    return None if value is None else validate_positive_int(name, value)
 
 
 def validate_non_negative_int(name: str, value: Any) -> int:
@@ -237,9 +240,9 @@ def build_profile_runtime_fields(
             "simulation_max_chi",
             "simulation_max_chi",
             "simulation_max_chi",
-            DEFAULT_SIMULATION_MAX_CHI,
+            None,
             False,
-            validate_positive_int,
+            validate_optional_positive_int,
         ),
         ("operator_profile", None, "operator_profile", None, False, None),
         ("monitoring_profile", None, "monitoring_profile", None, False, None),
