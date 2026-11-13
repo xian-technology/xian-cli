@@ -9,6 +9,9 @@ import pytest
 
 from xian_cli.cli import main
 
+# The chain fee policy a network gets when none is chosen (chi caps included).
+DEFAULT_FEE_POLICY = {"tx_fee_mode": "paid_metered", "max_tx_chi": 200000, "max_block_chi": 500000}
+
 
 def create(tmp_path: Path, *extra: str) -> dict:
     stdout = io.StringIO()
@@ -81,7 +84,7 @@ def test_dry_run_reports_the_validator_policy_and_fee_policy_without_writing(tmp
     )
 
     assert plan["validator_policy"] == {"selection_mode": "auto_top_n"}
-    assert plan["fee_policy"] == {"tx_fee_mode": "paid_metered"}
+    assert plan["fee_policy"] == DEFAULT_FEE_POLICY
     assert plan["genesis"] == {"kind": "bundle", "bundle": "local"}
     assert plan["bootstrap_node"] == "validator-1"
     assert plan["generate_validator_key"] is True
@@ -138,7 +141,7 @@ def test_bundle_network_without_validators_pins_a_genesis_time(tmp_path):
     assert result["genesis"]["kind"] == "bundle"
     assert result["genesis"]["genesis_time"].endswith("Z")
     assert manifest["genesis"] == result["genesis"]
-    assert manifest["fee_policy"] == {"tx_fee_mode": "paid_metered"}
+    assert manifest["fee_policy"] == DEFAULT_FEE_POLICY
     assert manifest["genesis_build"] is None
     assert result["validators"] == []
     assert "profile_path" not in result
