@@ -8,6 +8,7 @@ from typing import Any
 from xian_cli.models import (
     DEFAULT_ADVANCED_RUNTIME,
     DEFAULT_SERVICES,
+    DEFAULT_SIMULATION_MAX_CHI,
     FEE_POLICY_FIELDS,
     canonical_fee_policy,
 )
@@ -236,7 +237,7 @@ def build_profile_runtime_fields(
             "simulation_max_chi",
             "simulation_max_chi",
             "simulation_max_chi",
-            1_000_000,
+            DEFAULT_SIMULATION_MAX_CHI,
             False,
             validate_positive_int,
         ),

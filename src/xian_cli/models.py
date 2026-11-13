@@ -64,6 +64,9 @@ SUPPORTED_TX_FEE_MODES = {
     "free_metered",
 }
 DEFAULT_TX_FEE_MODE = "paid_metered"
+# Operator cap on one readonly simulation (the VM ceiling). The node never
+# simulates with more than the chain's max_tx_chi, so this only ever lowers it.
+DEFAULT_SIMULATION_MAX_CHI = 1_000_000
 SUPPORTED_RECOVERY_ARTIFACT_KINDS = {"snapshot_url"}
 SUPPORTED_RUNTIME_FEATURES = {"zk"}
 
@@ -1107,7 +1110,7 @@ def normalize_node_profile(payload: dict) -> dict:
             payload, "simulation_timeout_ms", default=3000
         ),
         "simulation_max_chi": _require_positive_int(
-            payload, "simulation_max_chi", default=1_000_000
+            payload, "simulation_max_chi", default=DEFAULT_SIMULATION_MAX_CHI
         ),
         "parallel_execution_enabled": parallel_execution_enabled,
         "parallel_execution_workers": parallel_execution_workers,
@@ -1210,7 +1213,7 @@ def normalize_network_template(payload: dict) -> dict:
             payload, "simulation_timeout_ms", default=3000
         ),
         "simulation_max_chi": _require_positive_int(
-            payload, "simulation_max_chi", default=1_000_000
+            payload, "simulation_max_chi", default=DEFAULT_SIMULATION_MAX_CHI
         ),
         "tx_fee_mode": _require_tx_fee_mode(payload, "tx_fee_mode"),
         # Unset caps fall back to the chain defaults when genesis is built.
@@ -1358,7 +1361,7 @@ class NodeProfile:
     simulation_enabled: bool = True
     simulation_max_concurrency: int = 2
     simulation_timeout_ms: int = 3000
-    simulation_max_chi: int = 1_000_000
+    simulation_max_chi: int = DEFAULT_SIMULATION_MAX_CHI
     parallel_execution_enabled: bool = False
     parallel_execution_workers: int = 4
     parallel_execution_min_transactions: int = 8
@@ -1389,7 +1392,7 @@ class NetworkTemplate:
     simulation_enabled: bool = True
     simulation_max_concurrency: int = 2
     simulation_timeout_ms: int = 3000
-    simulation_max_chi: int = 1_000_000
+    simulation_max_chi: int = DEFAULT_SIMULATION_MAX_CHI
     tx_fee_mode: str = DEFAULT_TX_FEE_MODE
     max_tx_chi: int | None = None
     max_block_chi: int | None = None

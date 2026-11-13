@@ -142,7 +142,10 @@ def add_node_profile_runtime_args(
     parser.add_argument(
         "--simulation-max-chi",
         type=int,
-        help=f"chi budget cap used for readonly simulation in {subject}",
+        help=(
+            f"operator cap on the chi one readonly simulation may spend in {subject}; "
+            "the chain's max_tx_chi always applies on top"
+        ),
     )
     parser.add_argument(
         "--parallel-execution-enabled",
