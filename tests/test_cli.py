@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import importlib
+import inspect
 import io
 import json
 import os
@@ -19,7 +20,7 @@ from unittest.mock import AsyncMock, patch
 from urllib.error import URLError
 
 from xian_accounts import Ed25519Account
-from xian_py import XianClientConfig
+from xian_py import XianAsync, XianClientConfig
 from xian_py.models import IndexedBlock, IndexedTransaction, TransactionReceipt
 from xian_runtime_types.decimal import ContractingDecimal
 from xian_runtime_types.time import Datetime
@@ -1595,6 +1596,41 @@ class ClientCommandTests(unittest.TestCase):
         self.assertTrue(call["wait_for_tx"])
         self.assertEqual(call["timeout_seconds"], 5.0)
         self.assertEqual(call["chi"], 123)
+
+    def test_client_tx_send_forwards_only_options_the_sdk_accepts(self) -> None:
+        # Automatic chi supplies exactly the simulated chi; the SDK has no
+        # headroom options, so the CLI must not forward any.
+        fake_client = _FakeContextClient(send_tx={"submitted": True, "tx_hash": "ABC123"})
+        with (
+            patch("xian_cli.client.handlers._make_client", return_value=fake_client),
+            patch("xian_cli.client.handlers._build_wallet", return_value=object()),
+            redirect_stdout(io.StringIO()),
+        ):
+            exit_code = main(
+                [
+                    "client",
+                    "tx",
+                    "send",
+                    "--node-url",
+                    "http://node.example",
+                    "currency",
+                    "approve",
+                    "--kwargs-json",
+                    '{"to":"bob","amount":7}',
+                ]
+            )
+
+        self.assertEqual(exit_code, 0)
+        accepted = inspect.signature(XianAsync.send_tx).parameters
+        self.assertLessEqual(set(fake_client.send_tx_calls[0]), set(accepted))
+        self.assertIsNone(fake_client.send_tx_calls[0]["chi"])
+
+    def test_client_tx_rejects_removed_chi_headroom_flags(self) -> None:
+        for flag, value in (("--chi-margin", "0.5"), ("--min-chi-headroom", "100")):
+            with self.subTest(flag=flag), redirect_stderr(io.StringIO()):
+                with self.assertRaises(SystemExit) as raised:
+                    main(["client", "tx", "send", "currency", "approve", flag, value])
+                self.assertEqual(raised.exception.code, 2)
 
     def test_client_tx_submit_source_infers_module_name(self) -> None:
         fake_client = _FakeContextClient(

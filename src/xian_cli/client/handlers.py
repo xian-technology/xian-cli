@@ -100,8 +100,6 @@ def _submission_kwargs(args: argparse.Namespace) -> dict[str, Any]:
         "wait_for_tx": getattr(args, "wait_for_tx", None),
         "timeout_seconds": getattr(args, "timeout_seconds", None),
         "poll_interval_seconds": getattr(args, "poll_interval_seconds", None),
-        "chi_margin": getattr(args, "chi_margin", None),
-        "min_chi_headroom": getattr(args, "min_chi_headroom", None),
     }
 
 

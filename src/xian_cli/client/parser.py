@@ -36,7 +36,7 @@ def _add_submission_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--chi",
         type=int,
-        help="explicit chi to supply; omit to use SDK estimation",
+        help="explicit chi to supply; omit to supply exactly the simulated chi",
     )
     parser.add_argument(
         "--nonce",
@@ -63,16 +63,6 @@ def _add_submission_args(parser: argparse.ArgumentParser) -> None:
         "--poll-interval-seconds",
         type=float,
         help="receipt poll interval in seconds",
-    )
-    parser.add_argument(
-        "--chi-margin",
-        type=float,
-        help="chi estimation margin override",
-    )
-    parser.add_argument(
-        "--min-chi-headroom",
-        type=int,
-        help="minimum chi headroom override",
     )
 
 
