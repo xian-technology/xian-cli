@@ -241,30 +241,6 @@ def build_profile_runtime_fields(
             False,
             validate_positive_int,
         ),
-        (
-            "parallel_execution_enabled",
-            "parallel_execution_enabled",
-            "parallel_execution_enabled",
-            False,
-            False,
-            None,
-        ),
-        (
-            "parallel_execution_workers",
-            "parallel_execution_workers",
-            "parallel_execution_workers",
-            4,
-            False,
-            validate_non_negative_int,
-        ),
-        (
-            "parallel_execution_min_transactions",
-            "parallel_execution_min_transactions",
-            "parallel_execution_min_transactions",
-            8,
-            False,
-            validate_positive_int,
-        ),
         ("operator_profile", None, "operator_profile", None, False, None),
         ("monitoring_profile", None, "monitoring_profile", None, False, None),
     )
@@ -471,11 +447,6 @@ def build_profile_runtime_fields(
     if template is not None and isinstance(template.get("advanced"), Mapping):
         advanced = _merge_mapping_defaults(advanced, template["advanced"])
     fields["advanced"] = advanced
-    if fields["parallel_execution_enabled"] and fields["parallel_execution_workers"] <= 0:
-        raise ValueError(
-            "parallel_execution_workers must be greater than zero when "
-            "parallel_execution_enabled is true"
-        )
     return fields
 
 

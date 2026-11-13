@@ -37,16 +37,6 @@
       "timeout_ms": 3000,
       "max_chi": 1000000
     },
-    "parallel_execution": {
-      "enabled": false,
-      "workers": 4,
-      "min_transactions": 8,
-      "max_speculative_waves": 4,
-      "min_wave_acceptance_ratio": 0.25,
-      "low_acceptance_min_wave_size": 8,
-      "warm_workers": true,
-      "access_estimates_enabled": true
-    },
     "pending_nonce_reservation_ttl_seconds": 60.0,
     "max_pending_nonces_per_sender": 128,
     "bds": {
@@ -110,16 +100,6 @@
       "max_concurrency": 2,
       "timeout_ms": 3000,
       "max_chi": 1000000
-    },
-    "parallel_execution": {
-      "enabled": false,
-      "workers": 4,
-      "min_transactions": 8,
-      "max_speculative_waves": 4,
-      "min_wave_acceptance_ratio": 0.25,
-      "low_acceptance_min_wave_size": 8,
-      "warm_workers": true,
-      "access_estimates_enabled": true
     },
     "pending_nonce_reservation_ttl_seconds": 60.0,
     "max_pending_nonces_per_sender": 128,
@@ -193,16 +173,6 @@
       "max_concurrency": 4,
       "timeout_ms": 1010,
       "max_chi": 333333
-    },
-    "parallel_execution": {
-      "enabled": true,
-      "workers": 3,
-      "min_transactions": 2,
-      "max_speculative_waves": 9,
-      "min_wave_acceptance_ratio": 0.7,
-      "low_acceptance_min_wave_size": 3,
-      "warm_workers": false,
-      "access_estimates_enabled": false
     },
     "pending_nonce_reservation_ttl_seconds": 12.5,
     "max_pending_nonces_per_sender": 7,

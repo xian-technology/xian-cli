@@ -48,9 +48,6 @@ def initialization_profile(case):
             simulation_max_concurrency=4,
             simulation_timeout_ms=1010,
             simulation_max_chi=333333,
-            parallel_execution_enabled=True,
-            parallel_execution_workers=3,
-            parallel_execution_min_transactions=2,
             advanced={
                 "cometbft": {
                     "allow_cors": False,
@@ -71,13 +68,6 @@ def initialization_profile(case):
                     "bds_refresh_seconds": 2.5,
                 },
                 "pending_nonce": {"reservation_ttl_seconds": 12.5, "max_per_sender": 7},
-                "parallel_execution": {
-                    "max_speculative_waves": 9,
-                    "min_wave_acceptance_ratio": 0.7,
-                    "low_acceptance_min_wave_size": 3,
-                    "warm_workers": False,
-                    "access_estimates_enabled": False,
-                },
             },
             services={
                 "bds": {

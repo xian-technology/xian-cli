@@ -94,6 +94,15 @@ class ParserUxTests(unittest.TestCase):
         self.assertIn("--max-tx-chi", help_text)
         self.assertIn("--max-block-chi", help_text)
 
+    def test_node_profile_commands_have_no_parallel_execution_flags(self) -> None:
+        for command in (["network", "create"], ["network", "join"], ["setup", "node"]):
+            stdout = io.StringIO()
+            with self.subTest(command=command), redirect_stdout(stdout):
+                with self.assertRaises(SystemExit) as exc:
+                    main([*command, "--help"])
+                self.assertEqual(exc.exception.code, 0)
+                self.assertNotIn("--parallel-execution", stdout.getvalue())
+
 
 def _normalized_release_manifest(manifest: dict) -> dict:
     build = manifest["build"]
@@ -2101,9 +2110,6 @@ class NetworkManifestTests(unittest.TestCase):
                         "tx_fee_mode": "free_metered",
                         "max_tx_chi": 150000,
                         "max_block_chi": 1000000,
-                        "parallel_execution_enabled": True,
-                        "parallel_execution_workers": 4,
-                        "parallel_execution_min_transactions": 12,
                         "operator_profile": "indexed_development",
                         "monitoring_profile": "local_stack",
                         "bootstrap_node_name": "validator-1",
@@ -2172,9 +2178,6 @@ class NetworkManifestTests(unittest.TestCase):
             # The external genesis source already fixes the chain fee policy.
             self.assertFalse({"tx_fee_mode", "max_tx_chi"} & set(profile))
             self.assertIsNone(manifest["fee_policy"])
-            self.assertTrue(profile["parallel_execution_enabled"])
-            self.assertEqual(profile["parallel_execution_workers"], 4)
-            self.assertEqual(profile["parallel_execution_min_transactions"], 12)
             self.assertEqual(profile["operator_profile"], "indexed_development")
             self.assertEqual(profile["monitoring_profile"], "local_stack")
             self.assertTrue(profile["services"]["dashboard"]["enabled"])
@@ -2183,10 +2186,6 @@ class NetworkManifestTests(unittest.TestCase):
             self.assertEqual(profile["services"]["dashboard"]["port"], 18080)
             self.assertEqual(profile["advanced"]["metrics"]["host"], "0.0.0.0")
             self.assertEqual(profile["advanced"]["metrics"]["bds_refresh_seconds"], 5.0)
-            self.assertEqual(
-                profile["advanced"]["parallel_execution"]["max_speculative_waves"],
-                4,
-            )
 
     def test_network_package_operator_bundle_materializes_shareable_files(
         self,
@@ -2276,7 +2275,7 @@ class NetworkManifestTests(unittest.TestCase):
                 (bundle_dir / "bootstrap-seed.txt").read_text(encoding="utf-8"),
                 f"{bootstrap_seed}\n",
             )
-            self.assertIn("--parallel-execution-enabled", join_script)
+            self.assertNotIn("--parallel-execution", join_script)
             self.assertNotIn("--tracer-mode", join_script)
             self.assertNotIn("--runtime-backend", join_script)
             self.assertTrue(os.access(bundle_dir / "participant-join.sh", os.X_OK))
@@ -2572,9 +2571,6 @@ class NetworkManifestTests(unittest.TestCase):
                         "simulation_max_concurrency": 4,
                         "simulation_timeout_ms": 4000,
                         "simulation_max_chi": 800000,
-                        "parallel_execution_enabled": True,
-                        "parallel_execution_workers": 3,
-                        "parallel_execution_min_transactions": 9,
                         "operator_profile": "indexed_development",
                         "monitoring_profile": "local_stack",
                         "bootstrap_node_name": "validator-1",
@@ -2625,9 +2621,6 @@ class NetworkManifestTests(unittest.TestCase):
             self.assertEqual(profile["simulation_max_concurrency"], 4)
             self.assertEqual(profile["simulation_timeout_ms"], 4000)
             self.assertEqual(profile["simulation_max_chi"], 800000)
-            self.assertTrue(profile["parallel_execution_enabled"])
-            self.assertEqual(profile["parallel_execution_workers"], 3)
-            self.assertEqual(profile["parallel_execution_min_transactions"], 9)
             self.assertEqual(profile["operator_profile"], "indexed_development")
             self.assertEqual(profile["monitoring_profile"], "local_stack")
             self.assertTrue(profile["services"]["monitoring"]["enabled"])
@@ -2729,11 +2722,6 @@ class NetworkManifestTests(unittest.TestCase):
                             "3500",
                             "--simulation-max-chi",
                             "900000",
-                            "--parallel-execution-enabled",
-                            "--parallel-execution-workers",
-                            "6",
-                            "--parallel-execution-min-transactions",
-                            "14",
                             "--output",
                             str(output_path),
                         ]
@@ -2753,9 +2741,6 @@ class NetworkManifestTests(unittest.TestCase):
             self.assertEqual(profile["simulation_max_concurrency"], 5)
             self.assertEqual(profile["simulation_timeout_ms"], 3500)
             self.assertEqual(profile["simulation_max_chi"], 900000)
-            self.assertTrue(profile["parallel_execution_enabled"])
-            self.assertEqual(profile["parallel_execution_workers"], 6)
-            self.assertEqual(profile["parallel_execution_min_transactions"], 14)
 
     def test_network_join_allows_node_local_overrides(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -2802,37 +2787,6 @@ class NetworkManifestTests(unittest.TestCase):
                 "https://example.invalid/node-snapshot",
             )
             self.assertNotIn("tracer_mode", profile)
-
-    def test_network_join_rejects_negative_parallel_settings(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            base_dir = Path(tmp_dir)
-            configs_dir = base_dir / "xian-configs"
-            network_dir = configs_dir / "networks" / "canonical"
-            network_dir.mkdir(parents=True)
-            (network_dir / "manifest.json").write_text(
-                json.dumps(_manifest_payload()),
-                encoding="utf-8",
-            )
-
-            with self.assertRaisesRegex(
-                ValueError,
-                "parallel_execution_workers must be a non-negative integer",
-            ):
-                main(
-                    [
-                        "network",
-                        "join",
-                        "validator-1",
-                        "--base-dir",
-                        str(base_dir),
-                        "--configs-dir",
-                        str(configs_dir),
-                        "--network",
-                        "canonical",
-                        "--parallel-execution-workers",
-                        "-1",
-                    ]
-                )
 
     def test_network_join_rejects_non_positive_simulation_settings(
         self,
@@ -2888,37 +2842,6 @@ class NetworkManifestTests(unittest.TestCase):
                         "1000",
                         "--max-block-chi",
                         "999",
-                    ]
-                )
-
-    def test_network_join_rejects_zero_parallel_execution_min_transactions(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            base_dir = Path(tmp_dir)
-            configs_dir = base_dir / "xian-configs"
-            network_dir = configs_dir / "networks" / "canonical"
-            network_dir.mkdir(parents=True)
-            (network_dir / "manifest.json").write_text(
-                json.dumps(_manifest_payload()),
-                encoding="utf-8",
-            )
-
-            with self.assertRaisesRegex(
-                ValueError,
-                "parallel_execution_min_transactions must be a positive integer",
-            ):
-                main(
-                    [
-                        "network",
-                        "join",
-                        "validator-1",
-                        "--base-dir",
-                        str(base_dir),
-                        "--configs-dir",
-                        str(configs_dir),
-                        "--network",
-                        "canonical",
-                        "--parallel-execution-min-transactions",
-                        "0",
                     ]
                 )
 
@@ -3057,11 +2980,6 @@ class NetworkManifestTests(unittest.TestCase):
                         str(base_dir / ".cometbft"),
                         "--output",
                         str(base_dir / "nodes" / "validator-1.json"),
-                        "--parallel-execution-enabled",
-                        "--parallel-execution-workers",
-                        "5",
-                        "--parallel-execution-min-transactions",
-                        "11",
                     ]
                 )
 
@@ -3588,11 +3506,6 @@ class NodeInitTests(unittest.TestCase):
                         "3200",
                         "--simulation-max-chi",
                         "700000",
-                        "--parallel-execution-enabled",
-                        "--parallel-execution-workers",
-                        "5",
-                        "--parallel-execution-min-transactions",
-                        "11",
                         "--output",
                         str(base_dir / "nodes" / "validator-1.json"),
                     ]
@@ -3625,7 +3538,6 @@ class NodeInitTests(unittest.TestCase):
                 }
             )
             profile["advanced"]["metrics"]["bds_refresh_seconds"] = 7.5
-            profile["advanced"]["parallel_execution"]["max_speculative_waves"] = 6
             profile_path.write_text(json.dumps(profile), encoding="utf-8")
 
             stdout = io.StringIO()
@@ -3661,12 +3573,6 @@ class NodeInitTests(unittest.TestCase):
             self.assertIn("simulation_max_concurrency = 4", xian_toml)
             self.assertIn("simulation_timeout_ms = 3200", xian_toml)
             self.assertIn("simulation_max_chi = 700000", xian_toml)
-            self.assertIn("parallel_execution_enabled = true", xian_toml)
-            self.assertIn("parallel_execution_workers = 5", xian_toml)
-            self.assertIn(
-                "parallel_execution_min_transactions = 11",
-                xian_toml,
-            )
             rendered_config = tomllib.loads(config_toml)
             rendered_xian = tomllib.loads(xian_toml)
             self.assertEqual(
@@ -3677,7 +3583,6 @@ class NodeInitTests(unittest.TestCase):
             self.assertEqual(rendered_xian["metrics_bds_refresh_seconds"], 7.5)
             # The fee policy is genesis state, never node-local configuration.
             self.assertFalse({"tx_fee_mode", "max_tx_chi", "max_block_chi"} & set(rendered_xian))
-            self.assertEqual(rendered_xian["parallel_execution_max_speculative_waves"], 6)
             self.assertEqual(rendered_xian["bds"]["host"], "postgres")
             self.assertEqual(rendered_xian["bds"]["port"], 5544)
             self.assertEqual(rendered_xian["bds"]["database"], "xian_index")
@@ -4308,7 +4213,6 @@ class NodeRuntimeTests(unittest.TestCase):
                         blocks_to_keep=100000,
                         block_policy_mode="on_demand",
                         block_policy_interval="0s",
-                        parallel_execution_workers=4,
                     )
                 ),
                 encoding="utf-8",
@@ -4383,7 +4287,6 @@ class NodeRuntimeTests(unittest.TestCase):
                         blocks_to_keep=100000,
                         block_policy_mode="on_demand",
                         block_policy_interval="0s",
-                        parallel_execution_workers=4,
                     )
                 ),
                 encoding="utf-8",
@@ -6165,39 +6068,10 @@ class ConfigRepoTests(unittest.TestCase):
         self.assertFalse(profile["services"]["dex_automation"]["enabled"])
         self.assertFalse(profile["services"]["shielded_relayer"]["enabled"])
         self.assertFalse({"tx_fee_mode", "max_tx_chi", "max_block_chi"} & set(profile))
-        self.assertEqual(profile["parallel_execution_workers"], 4)
         self.assertEqual(
             profile["advanced"]["metrics"]["host"],
             "127.0.0.1",
         )
-        self.assertEqual(
-            profile["advanced"]["parallel_execution"]["max_speculative_waves"],
-            4,
-        )
-
-    def test_read_node_profile_rejects_parallel_enabled_with_zero_workers(
-        self,
-    ) -> None:
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            profile_path = Path(tmp_dir) / "profile.json"
-            profile_path.write_text(
-                json.dumps(
-                    _profile_payload(
-                        parallel_execution_enabled=True,
-                        parallel_execution_workers=0,
-                    )
-                ),
-                encoding="utf-8",
-            )
-
-            with self.assertRaisesRegex(
-                ValueError,
-                (
-                    "parallel_execution_workers must be greater than zero "
-                    "when parallel_execution_enabled is true"
-                ),
-            ):
-                read_node_profile(profile_path)
 
     def test_read_network_manifest_rejects_invalid_free_fee_caps(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -6284,6 +6158,18 @@ class ConfigRepoTests(unittest.TestCase):
                 "advanced.metrics has unknown field\\(s\\): interval",
             ),
             (
+                "profile.json",
+                _profile_payload(parallel_execution_enabled=False),
+                read_node_profile,
+                "node profile has unknown field\\(s\\): parallel_execution_enabled",
+            ),
+            (
+                "profile.json",
+                _profile_payload(advanced={"parallel_execution": {"warm_workers": True}}),
+                read_node_profile,
+                "advanced has unknown field\\(s\\): parallel_execution",
+            ),
+            (
                 "template.json",
                 {
                     "schema_version": 1,
@@ -6294,6 +6180,18 @@ class ConfigRepoTests(unittest.TestCase):
                 },
                 read_network_template,
                 "network template has unknown field\\(s\\): service_node",
+            ),
+            (
+                "template.json",
+                {
+                    "schema_version": 1,
+                    "name": "single-node-dev",
+                    "display_name": "Single Node Dev",
+                    "description": "Local dev",
+                    "parallel_execution_workers": 4,
+                },
+                read_network_template,
+                "network template has unknown field\\(s\\): parallel_execution_workers",
             ),
         ]
         for filename, payload, reader, pattern in cases:

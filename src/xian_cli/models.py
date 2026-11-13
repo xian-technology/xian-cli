@@ -149,13 +149,6 @@ DEFAULT_ADVANCED_RUNTIME = {
         "reservation_ttl_seconds": 60.0,
         "max_per_sender": 128,
     },
-    "parallel_execution": {
-        "max_speculative_waves": 4,
-        "min_wave_acceptance_ratio": 0.25,
-        "low_acceptance_min_wave_size": 8,
-        "warm_workers": True,
-        "access_estimates_enabled": True,
-    },
 }
 
 
@@ -842,10 +835,6 @@ def _normalize_advanced_runtime(payload: dict) -> dict:
     pending_nonce = _merge_defaults(
         DEFAULT_ADVANCED_RUNTIME["pending_nonce"], raw.get("pending_nonce")
     )
-    parallel_execution = _merge_defaults(
-        DEFAULT_ADVANCED_RUNTIME["parallel_execution"],
-        raw.get("parallel_execution"),
-    )
     metrics_refresh = _require_float(metrics, "bds_refresh_seconds", default=5.0)
     if metrics_refresh <= 0:
         raise ValueError("advanced.metrics.bds_refresh_seconds must be greater than zero")
@@ -867,13 +856,6 @@ def _normalize_advanced_runtime(payload: dict) -> dict:
             )
         if not statesync_trust_hash:
             raise ValueError("advanced.statesync.trust_hash is required when state sync is enabled")
-    min_wave_acceptance_ratio = _require_float(
-        parallel_execution, "min_wave_acceptance_ratio", default=0.25
-    )
-    if not 0.0 <= min_wave_acceptance_ratio <= 1.0:
-        raise ValueError(
-            "advanced.parallel_execution.min_wave_acceptance_ratio must be between 0.0 and 1.0"
-        )
     pending_nonce_ttl = _require_float(pending_nonce, "reservation_ttl_seconds", default=60.0)
     if pending_nonce_ttl < 0:
         raise ValueError("advanced.pending_nonce.reservation_ttl_seconds must be non-negative")
@@ -900,28 +882,7 @@ def _normalize_advanced_runtime(payload: dict) -> dict:
             "reservation_ttl_seconds": pending_nonce_ttl,
             "max_per_sender": _require_positive_int(pending_nonce, "max_per_sender", default=128),
         },
-        "parallel_execution": {
-            "max_speculative_waves": _require_non_negative_int(
-                parallel_execution, "max_speculative_waves", default=4
-            ),
-            "min_wave_acceptance_ratio": min_wave_acceptance_ratio,
-            "low_acceptance_min_wave_size": _require_positive_int(
-                parallel_execution, "low_acceptance_min_wave_size", default=8
-            ),
-            "warm_workers": _require_bool(parallel_execution, "warm_workers", default=True),
-            "access_estimates_enabled": _require_bool(
-                parallel_execution, "access_estimates_enabled", default=True
-            ),
-        },
     }
-
-
-def _validate_parallel_enabled_workers(*, enabled: bool, workers: int) -> None:
-    if enabled and workers <= 0:
-        raise ValueError(
-            "parallel_execution_workers must be greater than zero when "
-            "parallel_execution_enabled is true"
-        )
 
 
 def normalize_network_manifest(payload: dict) -> dict:
@@ -1039,9 +1000,6 @@ def normalize_node_profile(payload: dict) -> dict:
             "simulation_max_concurrency",
             "simulation_timeout_ms",
             "simulation_max_chi",
-            "parallel_execution_enabled",
-            "parallel_execution_workers",
-            "parallel_execution_min_transactions",
             "operator_profile",
             "monitoring_profile",
             "services",
@@ -1054,14 +1012,6 @@ def normalize_node_profile(payload: dict) -> dict:
         mode=_require_optional_node_image_mode(payload, "node_image_mode"),
         integrated_image=_require_optional_str(payload, "node_integrated_image"),
         split_image=_require_optional_str(payload, "node_split_image"),
-    )
-    parallel_execution_enabled = _require_bool(payload, "parallel_execution_enabled", default=False)
-    parallel_execution_workers = _require_non_negative_int(
-        payload, "parallel_execution_workers", default=4
-    )
-    _validate_parallel_enabled_workers(
-        enabled=parallel_execution_enabled,
-        workers=parallel_execution_workers,
     )
 
     return {
@@ -1112,11 +1062,6 @@ def normalize_node_profile(payload: dict) -> dict:
         "simulation_max_chi": _require_positive_int(
             payload, "simulation_max_chi", default=DEFAULT_SIMULATION_MAX_CHI
         ),
-        "parallel_execution_enabled": parallel_execution_enabled,
-        "parallel_execution_workers": parallel_execution_workers,
-        "parallel_execution_min_transactions": _require_positive_int(
-            payload, "parallel_execution_min_transactions", default=8
-        ),
         "operator_profile": _require_optional_choice(
             payload,
             "operator_profile",
@@ -1163,9 +1108,6 @@ def normalize_network_template(payload: dict) -> dict:
             "tx_fee_mode",
             "max_tx_chi",
             "max_block_chi",
-            "parallel_execution_enabled",
-            "parallel_execution_workers",
-            "parallel_execution_min_transactions",
             "operator_profile",
             "monitoring_profile",
             "bootstrap_node_name",
@@ -1176,14 +1118,6 @@ def normalize_network_template(payload: dict) -> dict:
             "blocks_to_keep",
         },
         label="network template",
-    )
-    parallel_execution_enabled = _require_bool(payload, "parallel_execution_enabled", default=False)
-    parallel_execution_workers = _require_non_negative_int(
-        payload, "parallel_execution_workers", default=4
-    )
-    _validate_parallel_enabled_workers(
-        enabled=parallel_execution_enabled,
-        workers=parallel_execution_workers,
     )
 
     return {
@@ -1218,11 +1152,6 @@ def normalize_network_template(payload: dict) -> dict:
         "tx_fee_mode": _require_tx_fee_mode(payload, "tx_fee_mode"),
         # Unset caps fall back to the chain defaults when genesis is built.
         **{name: _require_optional_positive_int(payload, name) for name in CHI_CAP_FIELDS},
-        "parallel_execution_enabled": parallel_execution_enabled,
-        "parallel_execution_workers": parallel_execution_workers,
-        "parallel_execution_min_transactions": _require_positive_int(
-            payload, "parallel_execution_min_transactions", default=8
-        ),
         "operator_profile": _require_optional_choice(
             payload,
             "operator_profile",
@@ -1362,9 +1291,6 @@ class NodeProfile:
     simulation_max_concurrency: int = 2
     simulation_timeout_ms: int = 3000
     simulation_max_chi: int = DEFAULT_SIMULATION_MAX_CHI
-    parallel_execution_enabled: bool = False
-    parallel_execution_workers: int = 4
-    parallel_execution_min_transactions: int = 8
     operator_profile: str | None = None
     monitoring_profile: str | None = None
     services: dict = field(default_factory=lambda: deepcopy(DEFAULT_SERVICES))
@@ -1396,9 +1322,6 @@ class NetworkTemplate:
     tx_fee_mode: str = DEFAULT_TX_FEE_MODE
     max_tx_chi: int | None = None
     max_block_chi: int | None = None
-    parallel_execution_enabled: bool = False
-    parallel_execution_workers: int = 4
-    parallel_execution_min_transactions: int = 8
     operator_profile: str | None = None
     monitoring_profile: str | None = None
     bootstrap_node_name: str | None = None

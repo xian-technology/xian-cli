@@ -17,7 +17,6 @@ if TYPE_CHECKING:
         BdsOptions,
         MetricsOptions,
         NodeConfigOptions,
-        ParallelExecutionOptions,
         SimulationOptions,
         StateSyncOptions,
     )
@@ -103,20 +102,6 @@ def simulation_options(node_setup: ModuleType, profile: dict) -> SimulationOptio
     )
 
 
-def parallel_options(node_setup: ModuleType, profile: dict) -> ParallelExecutionOptions:
-    settings = profile_config(profile, "advanced", "parallel_execution")
-    return node_setup.ParallelExecutionOptions(
-        enabled=bool(profile.get("parallel_execution_enabled", False)),
-        workers=int(profile.get("parallel_execution_workers", 4)),
-        min_transactions=int(profile.get("parallel_execution_min_transactions", 8)),
-        max_speculative_waves=int(settings.get("max_speculative_waves", 4)),
-        min_wave_acceptance_ratio=float(settings.get("min_wave_acceptance_ratio", 0.25)),
-        low_acceptance_min_wave_size=int(settings.get("low_acceptance_min_wave_size", 8)),
-        warm_workers=bool(settings.get("warm_workers", True)),
-        access_estimates_enabled=bool(settings.get("access_estimates_enabled", True)),
-    )
-
-
 def bds_options(node_setup: ModuleType, profile: dict) -> BdsOptions:
     settings = profile_config(profile, "services", "bds")
     return node_setup.BdsOptions(
@@ -172,7 +157,6 @@ def node_config_options(
         metrics=metrics_options(node_setup, profile),
         app_logging=app_logging_options(node_setup, profile),
         simulation=simulation_options(node_setup, profile),
-        parallel_execution=parallel_options(node_setup, profile),
         pending_nonce_reservation_ttl_seconds=float(
             advanced_pending_nonce.get("reservation_ttl_seconds", 60.0)
         ),

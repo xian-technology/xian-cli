@@ -10,7 +10,6 @@ NUMERIC_OPTIONS = [
     ("services", "bds", "catchup_poll_seconds"),
     ("advanced", "metrics", "bds_refresh_seconds"),
     ("advanced", "pending_nonce", "reservation_ttl_seconds"),
-    ("advanced", "parallel_execution", "min_wave_acceptance_ratio"),
 ]
 
 

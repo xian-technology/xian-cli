@@ -148,22 +148,6 @@ def add_node_profile_runtime_args(
         ),
     )
     parser.add_argument(
-        "--parallel-execution-enabled",
-        action=argparse.BooleanOptionalAction,
-        default=None,
-        help=f"enable speculative parallel block execution in {subject}",
-    )
-    parser.add_argument(
-        "--parallel-execution-workers",
-        type=int,
-        help=f"speculative execution worker count for {subject}",
-    )
-    parser.add_argument(
-        "--parallel-execution-min-transactions",
-        type=int,
-        help=(f"minimum transactions in a block before parallel execution is used in {subject}"),
-    )
-    parser.add_argument(
         "--enable-dashboard",
         action=argparse.BooleanOptionalAction,
         default=None,

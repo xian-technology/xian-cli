@@ -809,8 +809,6 @@ NODE_NAME="${{NODE_NAME:?set NODE_NAME}}"
 if [[ -z "${{BOOTSTRAP_SEED:-}}" ]]; then
   BOOTSTRAP_SEED="$(tr -d '\\n' < "${{BUNDLE_DIR}}/bootstrap-seed.txt")"
 fi
-PARALLEL_EXECUTION_WORKERS="${{PARALLEL_EXECUTION_WORKERS:-8}}"
-PARALLEL_MIN_TXS="${{PARALLEL_EXECUTION_MIN_TRANSACTIONS:-8}}"
 
 if [[ "${{BOOTSTRAP_SEED}}" == REPLACE_WITH_* ]]; then
   echo "set BOOTSTRAP_SEED or update bootstrap-seed.txt before joining" >&2
@@ -825,9 +823,6 @@ args=(
   --generate-validator-key
   --seed "${{BOOTSTRAP_SEED}}"
   --simulation-enabled
-  --parallel-execution-enabled
-  --parallel-execution-workers "${{PARALLEL_EXECUTION_WORKERS}}"
-  --parallel-execution-min-transactions "${{PARALLEL_MIN_TXS}}"
 {service_args}  --init-node
 )
 
@@ -900,8 +895,6 @@ Optional environment variables:
 - `CONFIGS_DIR` - explicit `xian-configs` checkout
 - `NODE_IMAGE_MODE` - override manifest image mode, for example `local_build`
 - `DASHBOARD_HOST` / `DASHBOARD_PORT` - dashboard bind settings
-- `PARALLEL_EXECUTION_WORKERS` - defaults to `8`
-- `PARALLEL_EXECUTION_MIN_TRANSACTIONS` - defaults to `8`
 
 Keep RPC, GraphQL, Prometheus, and Grafana private unless you intentionally
 operate them as public services.
