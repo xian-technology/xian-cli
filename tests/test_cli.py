@@ -6193,6 +6193,18 @@ class ConfigRepoTests(unittest.TestCase):
                 read_network_template,
                 "network template has unknown field\\(s\\): parallel_execution_workers",
             ),
+            (
+                "template.json",
+                {
+                    "schema_version": 1,
+                    "name": "single-node-dev",
+                    "display_name": "Single Node Dev",
+                    "description": "Local dev",
+                    "services": {"bds": {"enabled": True, "pool_max_size": 20}},
+                },
+                read_network_template,
+                "network template services.bds has unknown field\\(s\\): pool_max_size",
+            ),
         ]
         for filename, payload, reader, pattern in cases:
             with self.subTest(filename=filename, pattern=pattern):

@@ -126,6 +126,13 @@ DEFAULT_SERVICES = {
     },
 }
 
+# Templates choose which services run; BDS connection and tuning settings are
+# node-specific and live only in node profiles.
+DEFAULT_TEMPLATE_SERVICES = {
+    **DEFAULT_SERVICES,
+    "bds": {"enabled": False},
+}
+
 DEFAULT_ADVANCED_RUNTIME = {
     "cometbft": {
         "allow_cors": True,
@@ -812,6 +819,19 @@ def _normalize_services(
     }
 
 
+def _normalize_template_services(payload: dict) -> dict:
+    services_input = payload.get("services")
+    if isinstance(services_input, dict):
+        _reject_unknown_object_fields(
+            services_input.get("bds"),
+            allowed=set(DEFAULT_TEMPLATE_SERVICES["bds"]),
+            label="network template services.bds",
+        )
+    services = _normalize_services(payload)
+    services["bds"] = {"enabled": services["bds"]["enabled"]}
+    return services
+
+
 def _normalize_advanced_runtime(payload: dict) -> dict:
     advanced_input = payload.get("advanced")
     _reject_unknown_object_fields(
@@ -1164,7 +1184,7 @@ def normalize_network_template(payload: dict) -> dict:
         ),
         "bootstrap_node_name": _require_optional_str(payload, "bootstrap_node_name"),
         "additional_validator_names": _require_str_list(payload, "additional_validator_names"),
-        "services": _normalize_services(payload),
+        "services": _normalize_template_services(payload),
         "advanced": _normalize_advanced_runtime(payload),
         "pruning_enabled": _require_bool(payload, "pruning_enabled", default=False),
         "blocks_to_keep": _require_positive_int(payload, "blocks_to_keep", default=100000),
@@ -1326,7 +1346,7 @@ class NetworkTemplate:
     monitoring_profile: str | None = None
     bootstrap_node_name: str | None = None
     additional_validator_names: list[str] = field(default_factory=list)
-    services: dict = field(default_factory=lambda: deepcopy(DEFAULT_SERVICES))
+    services: dict = field(default_factory=lambda: deepcopy(DEFAULT_TEMPLATE_SERVICES))
     advanced: dict = field(default_factory=lambda: deepcopy(DEFAULT_ADVANCED_RUNTIME))
     pruning_enabled: bool = False
     blocks_to_keep: int = 100000
