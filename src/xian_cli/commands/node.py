@@ -445,7 +445,6 @@ def _collect_node_endpoints(args: argparse.Namespace) -> dict[str, object]:
         "node_integrated_image": node_integrated_image,
         "node_split_image": node_split_image,
         "operator_profile": profile.get("operator_profile"),
-        "monitoring_profile": profile.get("monitoring_profile"),
         **_profile_service_summary(profile),
     }
     if stack_dir is not None:
@@ -521,7 +520,6 @@ def _initial_node_status(context: dict, *, name: str, check_rpc: bool) -> dict:
             "node_split_image": node_split_image,
             "node_release_manifest": node_release_manifest,
             "operator_profile": profile.get("operator_profile"),
-            "monitoring_profile": profile.get("monitoring_profile"),
             "services": profile.get("services"),
             **_profile_service_summary(profile),
         },
@@ -665,7 +663,6 @@ def _collect_node_health(args: argparse.Namespace) -> dict[str, object]:
         "node_split_image": node_split_image,
         "home": str(home),
         "operator_profile": profile.get("operator_profile"),
-        "monitoring_profile": profile.get("monitoring_profile"),
         **_profile_service_summary(profile),
         "effective_snapshot_url": _resolve_effective_snapshot_url(
             profile=profile,

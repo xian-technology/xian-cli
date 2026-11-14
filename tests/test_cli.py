@@ -570,7 +570,7 @@ class SetupNodeCommandTests(unittest.TestCase):
             self.assertEqual(profile["services"]["dashboard"]["host"], "127.0.0.1")
             self.assertTrue(profile["services"]["dashboard"]["enabled"])
             self.assertTrue(profile["services"]["monitoring"]["enabled"])
-            self.assertEqual(profile["monitoring_profile"], "local_stack")
+            self.assertNotIn("monitoring_profile", profile)
             self.assertEqual(profile["operator_profile"], "local_development")
             self.assertEqual(profile["block_policy_mode"], "periodic")
             self.assertEqual(profile["block_policy_interval"], "5s")
@@ -1884,7 +1884,6 @@ class NetworkManifestTests(unittest.TestCase):
                         "block_policy_mode": "on_demand",
                         "block_policy_interval": "0s",
                         "operator_profile": "local_development",
-                        "monitoring_profile": "none",
                         "bootstrap_node_name": "validator-1",
                         "additional_validator_names": [],
                         "services": _template_services(
@@ -2147,7 +2146,6 @@ class NetworkManifestTests(unittest.TestCase):
                         "max_tx_chi": 150000,
                         "max_block_chi": 1000000,
                         "operator_profile": "indexed_development",
-                        "monitoring_profile": "local_stack",
                         "bootstrap_node_name": "validator-1",
                         "additional_validator_names": [],
                         "services": _template_services(
@@ -2215,7 +2213,7 @@ class NetworkManifestTests(unittest.TestCase):
             self.assertFalse({"tx_fee_mode", "max_tx_chi"} & set(profile))
             self.assertIsNone(manifest["fee_policy"])
             self.assertEqual(profile["operator_profile"], "indexed_development")
-            self.assertEqual(profile["monitoring_profile"], "local_stack")
+            self.assertNotIn("monitoring_profile", profile)
             self.assertTrue(profile["services"]["dashboard"]["enabled"])
             self.assertTrue(profile["services"]["monitoring"]["enabled"])
             self.assertEqual(profile["services"]["dashboard"]["host"], "0.0.0.0")
@@ -2608,7 +2606,6 @@ class NetworkManifestTests(unittest.TestCase):
                         "simulation_timeout_ms": 4000,
                         "simulation_max_chi": 800000,
                         "operator_profile": "indexed_development",
-                        "monitoring_profile": "local_stack",
                         "bootstrap_node_name": "validator-1",
                         "additional_validator_names": [],
                         "services": _template_services(
@@ -2658,7 +2655,7 @@ class NetworkManifestTests(unittest.TestCase):
             self.assertEqual(profile["simulation_timeout_ms"], 4000)
             self.assertEqual(profile["simulation_max_chi"], 800000)
             self.assertEqual(profile["operator_profile"], "indexed_development")
-            self.assertEqual(profile["monitoring_profile"], "local_stack")
+            self.assertNotIn("monitoring_profile", profile)
             self.assertTrue(profile["services"]["monitoring"]["enabled"])
             self.assertFalse(profile["services"]["dashboard"]["enabled"])
             self.assertNotIn("tracer_mode", profile)
@@ -3248,7 +3245,6 @@ class NetworkManifestTests(unittest.TestCase):
                         "block_policy_mode": "idle_interval",
                         "block_policy_interval": "10s",
                         "operator_profile": "shared_network",
-                        "monitoring_profile": "bds",
                         "bootstrap_node_name": "validator-1",
                         "additional_validator_names": ["validator-2"],
                         "services": _template_services(
@@ -3323,7 +3319,7 @@ class NetworkManifestTests(unittest.TestCase):
                 "keys/validator-2/validator_key_info.json",
             )
             self.assertEqual(validator_two_profile["operator_profile"], "shared_network")
-            self.assertEqual(validator_two_profile["monitoring_profile"], "bds")
+            self.assertNotIn("monitoring_profile", validator_two_profile)
             self.assertTrue(validator_two_profile["pruning_enabled"])
             self.assertEqual(validator_two_profile["blocks_to_keep"], 12345)
             self.assertTrue(validator_two_profile["services"]["bds"]["enabled"])
@@ -4805,7 +4801,7 @@ trust_period = "336h0m0s"
             self.assertEqual(exit_code, 0)
             result = json.loads(stdout.getvalue())
             self.assertIsNone(result["operator_profile"])
-            self.assertIsNone(result["monitoring_profile"])
+            self.assertNotIn("monitoring_profile", result)
             self.assertEqual(result["health"]["state"], "healthy")
             self.assertEqual(result["statesync"]["state"], "configured")
             self.assertTrue(result["statesync"]["ready"])
@@ -6183,6 +6179,12 @@ class ConfigRepoTests(unittest.TestCase):
             ),
             (
                 "profile.json",
+                _profile_payload(monitoring_profile="none"),
+                read_node_profile,
+                "node profile has unknown field\\(s\\): monitoring_profile",
+            ),
+            (
+                "profile.json",
                 _profile_payload(services={"bds": {"enabled": True, "worker_count": 8}}),
                 read_node_profile,
                 "services.bds has unknown field\\(s\\): worker_count",
@@ -6216,6 +6218,18 @@ class ConfigRepoTests(unittest.TestCase):
                 },
                 read_network_template,
                 "network template has unknown field\\(s\\): service_node",
+            ),
+            (
+                "template.json",
+                {
+                    "schema_version": 1,
+                    "name": "single-node-dev",
+                    "display_name": "Single Node Dev",
+                    "description": "Local dev",
+                    "monitoring_profile": "local_stack",
+                },
+                read_network_template,
+                "network template has unknown field\\(s\\): monitoring_profile",
             ),
             (
                 "template.json",

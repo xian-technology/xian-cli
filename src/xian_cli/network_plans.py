@@ -245,7 +245,6 @@ def build_profile_runtime_fields(
             validate_optional_positive_int,
         ),
         ("operator_profile", None, "operator_profile", None, False, None),
-        ("monitoring_profile", None, "monitoring_profile", None, False, None),
     )
 
     fields = {

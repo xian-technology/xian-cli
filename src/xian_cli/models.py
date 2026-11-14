@@ -22,11 +22,6 @@ SUPPORTED_OPERATOR_PROFILES = {
     "indexed_development",
     "shared_network",
 }
-SUPPORTED_MONITORING_PROFILES = {
-    "none",
-    "local_stack",
-    "bds",
-}
 SUPPORTED_INTENTKIT_NETWORK_IDS = {
     "xian-mainnet",
     "xian-testnet",
@@ -1018,7 +1013,6 @@ def normalize_node_profile(payload: dict) -> dict:
             "simulation_timeout_ms",
             "simulation_max_chi",
             "operator_profile",
-            "monitoring_profile",
             "services",
             "advanced",
         },
@@ -1085,12 +1079,6 @@ def normalize_node_profile(payload: dict) -> dict:
             supported=SUPPORTED_OPERATOR_PROFILES,
             default=None,
         ),
-        "monitoring_profile": _require_optional_choice(
-            payload,
-            "monitoring_profile",
-            supported=SUPPORTED_MONITORING_PROFILES,
-            default=None,
-        ),
         "services": _normalize_services(
             payload,
             intentkit_network_id_default=None,
@@ -1126,7 +1114,6 @@ def normalize_network_template(payload: dict) -> dict:
             "max_tx_chi",
             "max_block_chi",
             "operator_profile",
-            "monitoring_profile",
             "bootstrap_node_name",
             "additional_validator_names",
             "services",
@@ -1173,11 +1160,6 @@ def normalize_network_template(payload: dict) -> dict:
             payload,
             "operator_profile",
             supported=SUPPORTED_OPERATOR_PROFILES,
-        ),
-        "monitoring_profile": _require_optional_choice(
-            payload,
-            "monitoring_profile",
-            supported=SUPPORTED_MONITORING_PROFILES,
         ),
         "bootstrap_node_name": _require_optional_str(payload, "bootstrap_node_name"),
         "additional_validator_names": _require_str_list(payload, "additional_validator_names"),
@@ -1309,7 +1291,6 @@ class NodeProfile:
     simulation_timeout_ms: int = 3000
     simulation_max_chi: int | None = None
     operator_profile: str | None = None
-    monitoring_profile: str | None = None
     services: dict = field(default_factory=lambda: deepcopy(DEFAULT_SERVICES))
     advanced: dict = field(default_factory=lambda: deepcopy(DEFAULT_ADVANCED_RUNTIME))
     schema_version: int = SCHEMA_VERSION
@@ -1340,7 +1321,6 @@ class NetworkTemplate:
     max_tx_chi: int | None = None
     max_block_chi: int | None = None
     operator_profile: str | None = None
-    monitoring_profile: str | None = None
     bootstrap_node_name: str | None = None
     additional_validator_names: list[str] = field(default_factory=list)
     services: dict = field(default_factory=lambda: deepcopy(DEFAULT_TEMPLATE_SERVICES))

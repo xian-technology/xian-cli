@@ -128,7 +128,6 @@ def summarize_node_status(result: dict, *, block_age_seconds: Callable) -> dict:
         "state": _node_state(result),
         "initialized": bool(result.get("initialized")),
         "operator_profile": profile.get("operator_profile"),
-        "monitoring_profile": profile.get("monitoring_profile"),
         **services,
         "backend_running": result.get("backend_running"),
         "rpc_reachable": result.get("rpc_reachable"),
