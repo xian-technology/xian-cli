@@ -102,13 +102,18 @@ def simulation_options(node_setup: ModuleType, profile: dict) -> SimulationOptio
 
 def bds_options(node_setup: ModuleType, profile: dict) -> BdsOptions:
     settings = profile_config(profile, "services", "bds")
+    # An unset host, user or catch-up RPC URL leaves the backend's default in
+    # place: the xian-stack Postgres service and the node's own RPC. The
+    # password is never a profile value; the node reads the secret file the
+    # stack mounts (BdsOptions.password_file).
+    connection = {
+        key: str(settings[key]) for key in ("host", "user", "rpc_url") if settings.get(key)
+    }
     return node_setup.BdsOptions(
         dsn=str(settings.get("dsn", "")),
-        host=str(settings.get("host", "")),
         port=int(settings.get("port", 5432)),
         database=str(settings.get("database", "xian")),
-        user=str(settings.get("user", "")),
-        password=str(settings.get("password", "")),
+        **connection,
         pool_min_size=int(settings.get("pool_min_size", 1)),
         pool_max_size=int(settings.get("pool_max_size", 10)),
         statement_timeout_ms=int(settings.get("statement_timeout_ms", 0)),
@@ -117,7 +122,6 @@ def bds_options(node_setup: ModuleType, profile: dict) -> BdsOptions:
         queue_max_size=int(settings.get("queue_max_size", 128)),
         catchup_enabled=bool(settings.get("catchup_enabled", True)),
         catchup_poll_seconds=float(settings.get("catchup_poll_seconds", 1.0)),
-        rpc_url=str(settings.get("rpc_url") or ""),
         spool_dir=str(settings.get("spool_dir", "")),
         spool_warn_entries=int(settings.get("spool_warn_entries", 256)),
         spool_warn_bytes=int(settings.get("spool_warn_bytes", 536_870_912)),

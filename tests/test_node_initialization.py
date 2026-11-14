@@ -72,12 +72,11 @@ def initialization_profile(case):
             services={
                 "bds": {
                     "enabled": True,
-                    "dsn": "postgresql://user:pw@localhost:5432/db",
+                    "dsn": "postgresql://user@localhost:5432/db",
                     "host": "postgres",
                     "port": 5555,
                     "database": "testdb",
                     "user": "user",
-                    "password": "pw",
                     "pool_min_size": 2,
                     "pool_max_size": 3,
                     "statement_timeout_ms": 12,

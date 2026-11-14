@@ -524,6 +524,20 @@ class SetupNodeCommandTests(unittest.TestCase):
             self.assertTrue(profile["services"]["bds"]["enabled"])
             self.assertEqual(profile["services"]["dashboard"]["host"], "127.0.0.1")
             self.assertEqual(profile["operator_profile"], "indexed_development")
+            # The stack runs the node against its Postgres service; the
+            # password is the mounted secret, never a value in xian.toml.
+            bds = tomllib.loads((home / "config" / "xian.toml").read_text(encoding="utf-8"))["bds"]
+            self.assertEqual(
+                {key: bds[key] for key in ("host", "port", "database", "user", "password_file")},
+                {
+                    "host": "postgres",
+                    "port": 5432,
+                    "database": "xian",
+                    "user": "xian",
+                    "password_file": "/run/secrets/xian_bds_password",
+                },
+            )
+            self.assertNotIn("password", bds)
             self.assertEqual(payload["next_steps"][0][:4], ["xian", "node", "start", "validator-1"])
 
     def test_setup_node_local_initializes_node_without_starting(self) -> None:
@@ -3553,7 +3567,6 @@ class NodeInitTests(unittest.TestCase):
                     "port": 5544,
                     "database": "xian_index",
                     "user": "indexer",
-                    "password": "secret",
                     "pool_min_size": 2,
                     "pool_max_size": 6,
                     "statement_timeout_ms": 5000,
@@ -3619,7 +3632,10 @@ class NodeInitTests(unittest.TestCase):
             self.assertEqual(rendered_xian["bds"]["port"], 5544)
             self.assertEqual(rendered_xian["bds"]["database"], "xian_index")
             self.assertEqual(rendered_xian["bds"]["user"], "indexer")
-            self.assertEqual(rendered_xian["bds"]["password"], "secret")
+            self.assertEqual(
+                rendered_xian["bds"]["password_file"], "/run/secrets/xian_bds_password"
+            )
+            self.assertNotIn("password", rendered_xian["bds"])
             self.assertEqual(rendered_xian["bds"]["pool_min_size"], 2)
             self.assertEqual(rendered_xian["bds"]["pool_max_size"], 6)
             self.assertEqual(rendered_xian["bds"]["statement_timeout_ms"], 5000)
@@ -6184,6 +6200,12 @@ class ConfigRepoTests(unittest.TestCase):
                 _profile_payload(monitoring_profile="none"),
                 read_node_profile,
                 "node profile has unknown field\\(s\\): monitoring_profile",
+            ),
+            (
+                "profile.json",
+                _profile_payload(services={"bds": {"enabled": True, "password": "secret"}}),
+                read_node_profile,
+                "services.bds has unknown field\\(s\\): password",
             ),
             (
                 "profile.json",
