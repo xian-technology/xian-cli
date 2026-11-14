@@ -549,11 +549,10 @@ requires-dist = [
     { name = "xian-tech-accounts", editable = "../xian-contracting/packages/xian-accounts" },
     { name = "xian-tech-contracting", editable = "../xian-contracting" },
     { name = "xian-tech-contracting", extras = ["zk"], marker = "extra == 'zk'", editable = "../xian-contracting" },
-    { name = "xian-tech-fastpath-core", marker = "extra == 'native'", editable = "../xian-contracting/packages/xian-fastpath-core" },
     { name = "xian-tech-runtime-types", editable = "../xian-contracting/packages/xian-runtime-types" },
-    { name = "xian-tech-vm-core", marker = "extra == 'vm'", directory = "../xian-contracting/packages/xian-vm-core" },
+    { name = "xian-tech-vm-core", directory = "../xian-contracting/packages/xian-vm-core" },
 ]
-provides-extras = ["native", "vm", "zk"]
+provides-extras = ["zk"]
 
 [package.metadata.requires-dev]
 dev = [
@@ -632,12 +631,11 @@ requires-dist = [
     { name = "cachetools", specifier = ">=7.0.6,<9" },
     { name = "pynacl", specifier = ">=1.5.0,<2" },
     { name = "xian-tech-compiler-core", directory = "../xian-contracting/packages/xian-compiler-core" },
-    { name = "xian-tech-fastpath-core", marker = "extra == 'native'", editable = "../xian-contracting/packages/xian-fastpath-core" },
     { name = "xian-tech-runtime-types", editable = "../xian-contracting/packages/xian-runtime-types" },
     { name = "xian-tech-vm-core", directory = "../xian-contracting/packages/xian-vm-core" },
     { name = "xian-tech-zk", marker = "extra == 'zk'", editable = "../xian-contracting/packages/xian-zk" },
 ]
-provides-extras = ["v2", "native", "zk"]
+provides-extras = ["v2", "zk"]
 
 [package.metadata.requires-dev]
 dev = [
