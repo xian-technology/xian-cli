@@ -4786,7 +4786,7 @@ trust_period = "336h0m0s"
                         "xian_metrics": "http://127.0.0.1:9108/metrics",
                     },
                 },
-            ):
+            ) as node_health:
                 with redirect_stdout(stdout):
                     exit_code = main(
                         [
@@ -4802,6 +4802,8 @@ trust_period = "336h0m0s"
             result = json.loads(stdout.getvalue())
             self.assertIsNone(result["operator_profile"])
             self.assertNotIn("monitoring_profile", result)
+            # Without --skip-disk-check the health probe checks the disk.
+            self.assertIs(node_health.call_args.kwargs["check_disk"], True)
             self.assertEqual(result["health"]["state"], "healthy")
             self.assertEqual(result["statesync"]["state"], "configured")
             self.assertTrue(result["statesync"]["ready"])
@@ -6264,6 +6266,35 @@ class ConfigRepoTests(unittest.TestCase):
 
                     with self.assertRaisesRegex(ValueError, pattern):
                         reader(path)
+
+    def test_read_configs_fill_unset_optional_switches_with_defaults(self) -> None:
+        defaults = {
+            "pruning_enabled": False,
+            "transaction_trace_logging": False,
+            "app_log_json": False,
+            "simulation_enabled": True,
+        }
+        minimal_template = {
+            "schema_version": 1,
+            "name": "single-node-dev",
+            "display_name": "Single Node Dev",
+            "description": "Local dev",
+        }
+        minimal_profile = {
+            key: value for key, value in _profile_payload().items() if key not in defaults
+        }
+        for filename, payload, reader in (
+            ("profile.json", minimal_profile, read_node_profile),
+            ("template.json", minimal_template, read_network_template),
+        ):
+            with self.subTest(filename=filename):
+                with tempfile.TemporaryDirectory() as tmp_dir:
+                    path = Path(tmp_dir) / filename
+                    path.write_text(json.dumps(payload), encoding="utf-8")
+
+                    loaded = reader(path)
+
+                self.assertEqual({key: loaded[key] for key in defaults}, defaults)
 
     def test_read_network_template_requires_explicit_schema_version(
         self,
