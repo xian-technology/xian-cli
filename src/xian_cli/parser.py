@@ -366,11 +366,6 @@ def build_parser() -> argparse.ArgumentParser:
         help="write artifact JSON to this path instead of stdout",
     )
     contract_build_artifacts_parser.add_argument(
-        "--no-lint",
-        action="store_true",
-        help="accepted for compatibility; the compiler always applies its lint rules",
-    )
-    contract_build_artifacts_parser.add_argument(
         "--force",
         action="store_true",
         help="overwrite --output when it already exists",

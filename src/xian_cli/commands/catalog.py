@@ -79,12 +79,7 @@ def _handle_contract_build_artifacts(args: argparse.Namespace) -> int:
         source = source_path.read_text(encoding="utf-8")
         module_name = args.name or _infer_contract_module_name(source_path)
 
-    artifacts = compile_contract_artifact(
-        module_name,
-        source,
-        lint=not args.no_lint,
-        vm_profile=args.vm_profile,
-    )
+    artifacts = compile_contract_artifact(module_name, source, vm_profile=args.vm_profile)
     if args.output is None:
         print(json.dumps(artifacts, indent=2, sort_keys=True))
     else:

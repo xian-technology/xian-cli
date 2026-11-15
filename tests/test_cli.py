@@ -6529,6 +6529,14 @@ class ConfigRepoTests(unittest.TestCase):
         )
         subprocess.run([sys.executable, "-c", script], check=True)
 
+    def test_contract_build_artifacts_has_no_lint_switch(self) -> None:
+        stderr = io.StringIO()
+        with redirect_stderr(stderr), self.assertRaises(SystemExit) as raised:
+            main(["contract", "build-artifacts", "-", "--name", "con_ping", "--no-lint"])
+
+        self.assertEqual(raised.exception.code, 2)
+        self.assertIn("--no-lint", stderr.getvalue())
+
     def test_resolve_configs_dir_uses_workspace_fallback(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             resolved = resolve_configs_dir(Path(tmp_dir))
