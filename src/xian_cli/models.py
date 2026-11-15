@@ -129,6 +129,8 @@ DEFAULT_ADVANCED_RUNTIME = {
         "allow_cors": True,
         "prometheus": True,
         "proxy_app": "unix:///tmp/abci.sock",
+        # host:port peers dial (CometBFT p2p.external_address); "" = unset.
+        "external_address": "",
     },
     "statesync": {
         "enabled": False,
@@ -154,6 +156,13 @@ def _require_str(payload: dict, key: str) -> str:
     value = payload.get(key)
     if not isinstance(value, str) or not value:
         raise ValueError(f"{key} must be a non-empty string")
+    return value
+
+
+def _require_text(payload: dict, key: str) -> str:
+    value = payload.get(key)
+    if not isinstance(value, str):
+        raise ValueError(f"{key} must be a string")
     return value
 
 
@@ -822,6 +831,43 @@ def _normalize_template_services(payload: dict) -> dict:
     return services
 
 
+def _normalize_advanced_cometbft(cometbft: dict) -> dict:
+    return {
+        "allow_cors": _require_bool(cometbft, "allow_cors", default=True),
+        "prometheus": _require_bool(cometbft, "prometheus", default=True),
+        "proxy_app": _require_str(cometbft, "proxy_app"),
+        "external_address": _require_text(cometbft, "external_address"),
+    }
+
+
+def _normalize_advanced_statesync(statesync: dict) -> dict:
+    statesync_enabled = _require_bool(statesync, "enabled", default=False)
+    statesync_servers = _require_str_list(statesync, "rpc_servers")
+    statesync_trust_height = _require_non_negative_int(statesync, "trust_height", default=0)
+    statesync_trust_hash = _require_optional_str(statesync, "trust_hash") or ""
+    statesync_trust_period = _require_str(statesync, "trust_period")
+    if statesync_enabled:
+        if len(statesync_servers) < 2:
+            raise ValueError(
+                "advanced.statesync.rpc_servers must include at least two "
+                "servers when state sync is enabled"
+            )
+        if statesync_trust_height <= 0:
+            raise ValueError(
+                "advanced.statesync.trust_height must be greater than zero "
+                "when state sync is enabled"
+            )
+        if not statesync_trust_hash:
+            raise ValueError("advanced.statesync.trust_hash is required when state sync is enabled")
+    return {
+        "enabled": statesync_enabled,
+        "rpc_servers": statesync_servers,
+        "trust_height": statesync_trust_height,
+        "trust_hash": statesync_trust_hash,
+        "trust_period": statesync_trust_period,
+    }
+
+
 def _normalize_advanced_runtime(payload: dict) -> dict:
     advanced_input = payload.get("advanced")
     _reject_unknown_object_fields(
@@ -848,40 +894,12 @@ def _normalize_advanced_runtime(payload: dict) -> dict:
     metrics_refresh = _require_float(metrics, "bds_refresh_seconds", default=5.0)
     if metrics_refresh <= 0:
         raise ValueError("advanced.metrics.bds_refresh_seconds must be greater than zero")
-    statesync_enabled = _require_bool(statesync, "enabled", default=False)
-    statesync_servers = _require_str_list(statesync, "rpc_servers")
-    statesync_trust_height = _require_non_negative_int(statesync, "trust_height", default=0)
-    statesync_trust_hash = _require_optional_str(statesync, "trust_hash") or ""
-    statesync_trust_period = _require_str(statesync, "trust_period")
-    if statesync_enabled:
-        if len(statesync_servers) < 2:
-            raise ValueError(
-                "advanced.statesync.rpc_servers must include at least two "
-                "servers when state sync is enabled"
-            )
-        if statesync_trust_height <= 0:
-            raise ValueError(
-                "advanced.statesync.trust_height must be greater than zero "
-                "when state sync is enabled"
-            )
-        if not statesync_trust_hash:
-            raise ValueError("advanced.statesync.trust_hash is required when state sync is enabled")
     pending_nonce_ttl = _require_float(pending_nonce, "reservation_ttl_seconds", default=60.0)
     if pending_nonce_ttl < 0:
         raise ValueError("advanced.pending_nonce.reservation_ttl_seconds must be non-negative")
     return {
-        "cometbft": {
-            "allow_cors": _require_bool(cometbft, "allow_cors", default=True),
-            "prometheus": _require_bool(cometbft, "prometheus", default=True),
-            "proxy_app": _require_str(cometbft, "proxy_app"),
-        },
-        "statesync": {
-            "enabled": statesync_enabled,
-            "rpc_servers": statesync_servers,
-            "trust_height": statesync_trust_height,
-            "trust_hash": statesync_trust_hash,
-            "trust_period": statesync_trust_period,
-        },
+        "cometbft": _normalize_advanced_cometbft(cometbft),
+        "statesync": _normalize_advanced_statesync(statesync),
         "metrics": {
             "enabled": _require_bool(metrics, "enabled", default=True),
             "host": _require_str(metrics, "host"),

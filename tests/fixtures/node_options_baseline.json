@@ -3,6 +3,7 @@
     "moniker": "validator",
     "p2p_seeds": [],
     "p2p_persistent_peers": [],
+    "p2p_external_address": "",
     "allow_cors": true,
     "bds_enabled": false,
     "enable_pruning": false,
@@ -67,6 +68,7 @@
     "moniker": "validator",
     "p2p_seeds": [],
     "p2p_persistent_peers": [],
+    "p2p_external_address": "",
     "allow_cors": true,
     "bds_enabled": false,
     "enable_pruning": false,
@@ -137,6 +139,7 @@
       "peer-network@127.0.0.1:26656",
       "peer-local@127.0.0.1:26656"
     ],
+    "p2p_external_address": "",
     "allow_cors": false,
     "bds_enabled": true,
     "enable_pruning": true,

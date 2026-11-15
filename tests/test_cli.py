@@ -2425,9 +2425,7 @@ class NetworkManifestTests(unittest.TestCase):
                 {"zk": True},
             )
             result = json.loads(stdout.getvalue())
-            bundled_manifest = json.loads(
-                Path(result["manifest_path"]).read_text(encoding="utf-8")
-            )
+            bundled_manifest = json.loads(Path(result["manifest_path"]).read_text(encoding="utf-8"))
             self.assertEqual(bundled_manifest["runtime_features"], {"zk": True})
             genesis_file = Path(result["genesis_path"])
             self.assertEqual(

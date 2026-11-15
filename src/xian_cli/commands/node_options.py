@@ -138,6 +138,7 @@ def node_config_options(
         moniker=profile["moniker"],
         p2p_seeds=_peer_values(profile, network, "seeds"),
         p2p_persistent_peers=_peer_values(profile, network, "persistent_peers"),
+        p2p_external_address=str(advanced_cometbft.get("external_address", "")),
         allow_cors=bool(advanced_cometbft.get("allow_cors", True)),
         bds_enabled=bool(service_config(profile, "bds").get("enabled")),
         enable_pruning=bool(profile.get("pruning_enabled")),
