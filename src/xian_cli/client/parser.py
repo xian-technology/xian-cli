@@ -36,7 +36,7 @@ def _add_submission_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--chi",
         type=int,
-        help="explicit chi to supply; omit to supply exactly the simulated chi",
+        help="explicit chi to supply; omit to supply the simulated chi plus the SDK's 2-chi margin",
     )
     parser.add_argument(
         "--nonce",

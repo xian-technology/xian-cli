@@ -1612,8 +1612,8 @@ class ClientCommandTests(unittest.TestCase):
         self.assertEqual(call["chi"], 123)
 
     def test_client_tx_send_forwards_only_options_the_sdk_accepts(self) -> None:
-        # Automatic chi supplies exactly the simulated chi; the SDK has no
-        # headroom options, so the CLI must not forward any.
+        # Automatic chi is the SDK's fixed rule (estimate + 2-chi margin); the
+        # SDK has no headroom options, so the CLI must not forward any.
         fake_client = _FakeContextClient(send_tx={"submitted": True, "tx_hash": "ABC123"})
         with (
             patch("xian_cli.client.handlers._make_client", return_value=fake_client),
