@@ -1639,6 +1639,40 @@ class ClientCommandTests(unittest.TestCase):
         self.assertLessEqual(set(fake_client.send_tx_calls[0]), set(accepted))
         self.assertIsNone(fake_client.send_tx_calls[0]["chi"])
 
+    def test_client_tx_exit_code_reports_the_transaction_outcome(self) -> None:
+        # Scripts (set -e) rely on the exit code: a rejected or failed
+        # transaction must not exit 0, and the JSON result is still printed.
+        cases = (
+            ("admitted, not awaited", {"submitted": True, "accepted": True}, 0),
+            ("async, outcome unknown", {"submitted": True, "accepted": None}, 0),
+            ("executed", {"accepted": True, "finalized": True, "receipt": {"success": True}}, 0),
+            ("rejected by CheckTx", {"submitted": True, "accepted": False}, 1),
+            (
+                "executed and failed",
+                {"accepted": True, "finalized": True, "receipt": {"success": False}},
+                1,
+            ),
+            ("commit not finalized", {"mode": "commit", "accepted": True, "finalized": False}, 1),
+        )
+        for name, result, expected in cases:
+            for command in (
+                ["send", "currency", "approve", "--kwargs-json", '{"to":"bob","amount":7}'],
+                ["transfer", "bob", "1"],
+            ):
+                fake_client = _FakeContextClient(send_tx=result, send=result)
+                stdout = io.StringIO()
+                with (
+                    self.subTest(name=name, command=command[0]),
+                    patch("xian_cli.client.handlers._make_client", return_value=fake_client),
+                    patch("xian_cli.client.handlers._build_wallet", return_value=object()),
+                    redirect_stdout(stdout),
+                ):
+                    exit_code = main(
+                        ["client", "tx", *command[:1], "--node-url", "http://n", *command[1:]]
+                    )
+                    self.assertEqual(exit_code, expected)
+                    self.assertEqual(json.loads(stdout.getvalue()), result)
+
     def test_client_tx_rejects_removed_chi_headroom_flags(self) -> None:
         for flag, value in (("--chi-margin", "0.5"), ("--min-chi-headroom", "100")):
             with self.subTest(flag=flag), redirect_stderr(io.StringIO()):

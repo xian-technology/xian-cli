@@ -243,7 +243,9 @@ uv run xian client tx submit-source ./contracts/con_counter.s.py \
 ```
 
 For scripts and CI, prefer commands that emit JSON and avoid parsing human
-status text:
+status text. `xian client tx ...` always prints its JSON result and exits 1
+when the node refused the transaction, when it executed and failed (its fee is
+still paid), or when a `--mode commit` wait ended without finalization:
 
 ```bash
 uv run xian client query balance \

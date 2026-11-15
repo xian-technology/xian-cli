@@ -14,7 +14,7 @@ from xian_py import XianClientConfig
 from xian_py.wallet import Wallet
 from xian_py.xian import Xian
 
-from xian_cli.output import emit_json
+from xian_cli.output import emit_json, to_jsonable
 from xian_cli.secret_files import load_secret_from_args, secure_write_text
 
 
@@ -213,6 +213,20 @@ def handle_simulate(args: argparse.Namespace) -> int:
     return 0
 
 
+def _emit_submission(result: Any) -> int:
+    """Print the submission and exit 1 when the node refused it, it executed
+    and failed, or a commit-mode wait ended without finalization."""
+    emit_json(result)
+    outcome = to_jsonable(result)
+    receipt = outcome.get("receipt") or {}
+    failed = (
+        outcome.get("accepted") is False
+        or receipt.get("success") is False
+        or (outcome.get("mode") == "commit" and outcome.get("finalized") is False)
+    )
+    return 1 if failed else 0
+
+
 def handle_tx_send(args: argparse.Namespace) -> int:
     kwargs = _parse_json_object(args.kwargs_json, flag_name="--kwargs-json")
     wallet = _build_wallet(args)
@@ -224,8 +238,7 @@ def handle_tx_send(args: argparse.Namespace) -> int:
             nonce=args.nonce,
             **_submission_kwargs(args),
         )
-    emit_json(result)
-    return 0
+    return _emit_submission(result)
 
 
 def handle_tx_submit_source(args: argparse.Namespace) -> int:
@@ -250,8 +263,7 @@ def handle_tx_submit_source(args: argparse.Namespace) -> int:
             nonce=args.nonce,
             **_submission_kwargs(args),
         )
-    emit_json(result)
-    return 0
+    return _emit_submission(result)
 
 
 def handle_tx_transfer(args: argparse.Namespace) -> int:
@@ -263,5 +275,4 @@ def handle_tx_transfer(args: argparse.Namespace) -> int:
             token=args.token,
             **_submission_kwargs(args),
         )
-    emit_json(result)
-    return 0
+    return _emit_submission(result)
