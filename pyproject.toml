@@ -14,7 +14,7 @@ requires-python = ">=3.14,<3.15"
 dependencies = [
     "pynacl>=1.6.2,<2",
     "xian-tech-abci>=0.9.4,<0.10",
-    "xian-tech-contracting>=1.1.4,<2",
+    "xian-tech-compiler-core>=0.2.1,<0.3",
     "xian-tech-py>=0.5.3,<0.6",
 ]
 keywords = ["blockchain", "cometbft", "cli", "operator", "xian"]
@@ -57,6 +57,6 @@ select = ["E", "F", "I"]
 
 [tool.uv.sources]
 xian-tech-abci = { path = "../xian-abci", editable = true }
-xian-tech-contracting = { path = "../xian-contracting", editable = true }
+xian-tech-compiler-core = { path = "../xian-contracting/packages/xian-compiler-core" }
 xian-tech-vm-core = { path = "../xian-contracting/packages/xian-vm-core" }
 xian-tech-py = { path = "../xian-py", editable = true }
