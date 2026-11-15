@@ -273,6 +273,8 @@ def test_setup_node_local_mode_puts_the_fee_policy_into_network_creation(tmp_pat
 def test_template_fee_policy_seeds_a_new_bundle_network(tmp_path):
     templates = tmp_path / "configs" / "templates"
     templates.mkdir(parents=True)
+    # network create builds the bundle genesis to pin its genesis_sha256.
+    (tmp_path / "configs" / "contracts").symlink_to(CONFIGS_DIR / "contracts")
     (templates / "free-dev.json").write_text(
         json.dumps(
             {
@@ -307,6 +309,8 @@ def test_template_fee_policy_seeds_a_new_bundle_network(tmp_path):
 def test_template_caps_apply_to_paid_networks_too(tmp_path):
     templates = tmp_path / "configs" / "templates"
     templates.mkdir(parents=True)
+    # network create builds the bundle genesis to pin its genesis_sha256.
+    (tmp_path / "configs" / "contracts").symlink_to(CONFIGS_DIR / "contracts")
     (templates / "tight.json").write_text(
         json.dumps(
             {

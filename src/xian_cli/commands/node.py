@@ -166,6 +166,7 @@ def _initialize_node_from_args(args: argparse.Namespace) -> dict:
         genesis=plan.genesis,
         priv_validator_key=plan.validator_key_payload,
         overwrite=args.force,
+        expected_genesis_sha256=plan.network.get("genesis_sha256"),
     )
     _restore_initialization_snapshot(result, plan, args)
     return result

@@ -188,6 +188,7 @@ The network manifest is the network-level source of truth. Target fields:
     "bundle": "devnet",
     "genesis_time": "2026-03-30T00:00:00.000000Z"
   },
+  "genesis_sha256": null,
   "snapshot_url": null,
   "p2p": {
     "seeds": [],
@@ -279,6 +280,21 @@ Rules:
   that joins the manifest materializes the same genesis
 - `node init` refuses a bundle genesis without `genesis_time` instead of
   sampling the current time on each node
+- `genesis_sha256` pins the network's genesis: the SHA-256 of the exact
+  `config/genesis.json` bytes `node init` installs (the node's canonical wire
+  encoding of the genesis document plus a trailing newline), so any formatting
+  of the same document matches and `sha256sum <home>/config/genesis.json`
+  prints the pin. When the manifest pins it, `node init` (and therefore
+  `network join --init-node` and the operator bundle join scripts) checks the
+  resolved genesis before writing anything to the home and refuses a mismatch,
+  also when a node profile overrides the genesis source. `network create` pins
+  every genesis it fixes (generated `genesis.json` or bundle with its creation
+  `genesis_time`); an external `--genesis-source` stays unpinned until its
+  publisher sets the field. `network package-operator-bundle` refuses a genesis
+  that does not match the source manifest's pin and writes the shipped
+  genesis's hash into the bundled manifest, `operator-bundle.json`, and the
+  bundle README, so participants can compare it with the value published
+  through a separate channel
 - the fee policy (`tx_fee_mode`, `max_tx_chi`, `max_block_chi`) is genesis
   state: `network create` resolves each field from its flag, then the
   template, then the node's default (paid_metered, 200,000, 500,000), checks it

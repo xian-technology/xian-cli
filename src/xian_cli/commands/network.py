@@ -7,6 +7,7 @@ import shutil
 from datetime import UTC, datetime
 from pathlib import Path
 
+from xian_cli.abci_bridge import get_node_setup_module
 from xian_cli.commands.catalog import _load_template
 from xian_cli.commands.common import (
     _default_intentkit_network_id,
@@ -29,6 +30,7 @@ from xian_cli.config_repo import resolve_network_manifest_path
 from xian_cli.models import (
     NetworkManifest,
     NodeProfile,
+    normalize_network_manifest,
     read_json,
     read_network_manifest,
     write_json,
@@ -487,6 +489,23 @@ def _finish_bootstrap_node(
     result["node_init"] = _initialize_node_from_args(init_args)
 
 
+def _created_genesis_sha256(
+    args: argparse.Namespace, *, base_dir: Path, target: Path, manifest: NetworkManifest
+) -> str | None:
+    """Pin the genesis this network fixed, resolved the way every joining node resolves it."""
+    if args.genesis_source is not None:
+        # An external genesis is pinned by whoever publishes it.
+        return None
+    genesis, _ = _resolve_effective_genesis_payload(
+        profile={},
+        network=normalize_network_manifest(manifest.to_dict()),
+        base_dir=base_dir,
+        manifest_path=target,
+        configs_dir=args.configs_dir,
+    )
+    return get_node_setup_module().genesis_sha256(genesis)
+
+
 def _handle_network_create(args: argparse.Namespace) -> int:
     base_dir = args.base_dir.resolve()
     _validate_founder_private_key_sources(args)
@@ -549,6 +568,9 @@ def _handle_network_create(args: argparse.Namespace) -> int:
         genesis=genesis,
         genesis_build=genesis_build,
         fee_policy=fee_policy,
+    )
+    manifest.genesis_sha256 = _created_genesis_sha256(
+        args, base_dir=base_dir, target=target, manifest=manifest
     )
     write_json(target, manifest.to_dict(), force=args.force)
 
@@ -845,6 +867,7 @@ def _operator_bundle_readme(
     *,
     network_name: str,
     chain_id: str,
+    genesis_sha256: str,
     includes_privacy_catalog: bool,
 ) -> str:
     network_dir = f"networks/{network_name}"
@@ -867,6 +890,14 @@ This bundle is a shareable handoff for operators joining `{chain_id}`.
 - `SMOKE-CHECKLIST.md` - quick post-start checks
 {privacy_note}
 No private validator keys, node homes, databases, or logs are included.
+
+## Genesis Integrity
+
+The manifest pins `genesis_sha256` = `{genesis_sha256}`, the SHA-256 of the
+`config/genesis.json` every joining node installs. `node init` (and the join
+scripts) refuse any other genesis. Compare this value with the one the network
+coordinator published through a separate channel before you join; after
+initialization, `sha256sum <home>/config/genesis.json` prints the same value.
 
 The bundle directory is a workspace: the join scripts write the node profile
 under `nodes/` and its keys under `keys/`, and every later `xian node ...`
@@ -961,10 +992,13 @@ def _operator_bundle_output_dir(
     return output_dir
 
 
-def _bundled_operator_manifest(network: dict, *, bootstrap_seed: str | None) -> dict:
+def _bundled_operator_manifest(
+    network: dict, *, bootstrap_seed: str | None, genesis_sha256: str
+) -> dict:
     """The shared manifest points at the materialized genesis, which carries the fee policy."""
     bundled_manifest = dict(network)
     bundled_manifest["genesis"] = {"kind": "source", "source": "./genesis.json"}
+    bundled_manifest["genesis_sha256"] = genesis_sha256
     bundled_manifest["fee_policy"] = None
     if bootstrap_seed:
         p2p = dict(bundled_manifest.get("p2p") or {})
@@ -1014,6 +1048,7 @@ def _write_operator_bundle_docs(
         _operator_bundle_readme(
             network_name=network["name"],
             chain_id=network["chain_id"],
+            genesis_sha256=network["genesis_sha256"],
             includes_privacy_catalog=privacy_catalog is not None,
         ),
         force=force,
@@ -1065,7 +1100,12 @@ def _handle_network_package_operator_bundle(args: argparse.Namespace) -> int:
         manifest_path=manifest_path,
         configs_dir=args.configs_dir,
     )
-    bundled_manifest = _bundled_operator_manifest(network, bootstrap_seed=args.bootstrap_seed)
+    node_setup = get_node_setup_module()
+    genesis_sha256 = node_setup.genesis_sha256(genesis)
+    node_setup.verify_genesis_sha256(genesis_sha256, network["genesis_sha256"])
+    bundled_manifest = _bundled_operator_manifest(
+        network, bootstrap_seed=args.bootstrap_seed, genesis_sha256=genesis_sha256
+    )
     # The bundle is a --base-dir workspace: the network lives where every node
     # command resolves it by name, so the joined node is operated in place.
     bundled_manifest_path = _default_network_manifest_path(output_dir, network["name"])
@@ -1083,7 +1123,7 @@ def _handle_network_package_operator_bundle(args: argparse.Namespace) -> int:
     bootstrap_seed = _operator_bundle_bootstrap_seed(args.bootstrap_seed, bundled_manifest)
     _write_operator_bundle_docs(
         output_dir,
-        network=network,
+        network=bundled_manifest,
         bootstrap_seed=bootstrap_seed,
         privacy_catalog=privacy_catalog,
         force=args.force,
@@ -1102,6 +1142,7 @@ def _handle_network_package_operator_bundle(args: argparse.Namespace) -> int:
             "chain_id": network["chain_id"],
             "source_manifest": str(manifest_path),
             "source_genesis": genesis_ref,
+            "genesis_sha256": genesis_sha256,
             "bootstrap_seed": bootstrap_seed,
             "files": files,
         },

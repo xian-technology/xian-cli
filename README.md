@@ -132,6 +132,11 @@ uv run xian network package-operator-bundle devnet \
   --archive
 ```
 
+The bundle pins the shipped genesis with `genesis_sha256` (manifest,
+`operator-bundle.json`, README); `node init` refuses any genesis whose
+installed `config/genesis.json` hashes differently. Publish that value through
+a separate channel so participants can check the bundle they received.
+
 Inspect or recover a configured node:
 
 ```bash

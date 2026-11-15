@@ -2279,7 +2279,7 @@ class NetworkManifestTests(unittest.TestCase):
             privacy_dir.mkdir(parents=True)
             source_genesis = json.loads(TEST_FIXTURE_GENESIS.read_text(encoding="utf-8"))
             source_genesis["abci_genesis"]["genesis"].append(
-                {"key": "con_archived.amount", "value": {"__fixed__": "1.2300"}}
+                {"key": "con_archived.amount", "value": {"__fixed__": "1.23"}}
             )
             (network_dir / "genesis.json").write_text(
                 json.dumps(source_genesis),

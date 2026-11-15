@@ -182,6 +182,12 @@ def _require_sha256(payload: dict, key: str) -> str:
     return value
 
 
+def _require_optional_sha256(payload: dict, key: str) -> str | None:
+    if payload.get(key) is None:
+        return None
+    return _require_sha256(payload, key)
+
+
 def _require_optional_choice(
     payload: dict,
     key: str,
@@ -923,6 +929,7 @@ def normalize_network_manifest(payload: dict) -> dict:
             "name",
             "chain_id",
             "genesis",
+            "genesis_sha256",
             "genesis_build",
             "snapshot_url",
             "snapshot_signing_keys",
@@ -955,6 +962,7 @@ def normalize_network_manifest(payload: dict) -> dict:
         "name": _require_str(payload, "name"),
         "chain_id": _require_str(payload, "chain_id"),
         "genesis": (genesis := _normalize_genesis(payload)),
+        "genesis_sha256": _require_optional_sha256(payload, "genesis_sha256"),
         "genesis_build": _require_optional_object(payload, "genesis_build"),
         "snapshot_url": _require_optional_str(payload, "snapshot_url"),
         "snapshot_signing_keys": _require_str_list(payload, "snapshot_signing_keys"),
@@ -1254,6 +1262,7 @@ class NetworkManifest:
             "genesis_time": None,
         }
     )
+    genesis_sha256: str | None = None
     genesis_build: dict | None = None
     node_image_mode: str = "local_build"
     node_integrated_image: str | None = None
