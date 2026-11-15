@@ -2336,8 +2336,9 @@ class NetworkManifestTests(unittest.TestCase):
             self.assertEqual(exit_code, 0)
             result = json.loads(stdout.getvalue())
             bundle_dir = Path(result["bundle_dir"])
+            network_dir = bundle_dir / "networks" / "private-dev"
             bundled_manifest = json.loads(
-                (bundle_dir / "manifest.json").read_text(encoding="utf-8")
+                (network_dir / "manifest.json").read_text(encoding="utf-8")
             )
             join_script = (bundle_dir / "participant-join.sh").read_text(encoding="utf-8")
 
@@ -2351,8 +2352,8 @@ class NetworkManifestTests(unittest.TestCase):
             )
             self.assertNotIn("runtime_backend", bundled_manifest)
             self.assertNotIn("tracer_mode", bundled_manifest)
-            self.assertEqual(json.loads((bundle_dir / "genesis.json").read_text()), source_genesis)
-            self.assertTrue((bundle_dir / "privacy" / "artifacts.json").exists())
+            self.assertEqual(json.loads((network_dir / "genesis.json").read_text()), source_genesis)
+            self.assertTrue((network_dir / "privacy" / "artifacts.json").exists())
             self.assertEqual(
                 (bundle_dir / "bootstrap-seed.txt").read_text(encoding="utf-8"),
                 f"{bootstrap_seed}\n",
@@ -2425,10 +2426,10 @@ class NetworkManifestTests(unittest.TestCase):
             )
             result = json.loads(stdout.getvalue())
             bundled_manifest = json.loads(
-                (Path(result["bundle_dir"]) / "manifest.json").read_text(encoding="utf-8")
+                Path(result["manifest_path"]).read_text(encoding="utf-8")
             )
             self.assertEqual(bundled_manifest["runtime_features"], {"zk": True})
-            genesis_file = Path(result["bundle_dir"]) / "genesis.json"
+            genesis_file = Path(result["genesis_path"])
             self.assertEqual(
                 json.loads(genesis_file.read_text())["abci_genesis"]["genesis"][0]["value"],
                 {"__big_int__": str(2**53)},

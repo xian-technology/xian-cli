@@ -89,3 +89,74 @@ def test_packaged_join_script_preserves_literal_network_name(
     assert ("--no-enable-bds" in join) is not bds_enabled
     assert calls[1][:3] == ["node", "start", "participant"]
     assert calls[2][:3] == ["node", "health", "participant"]
+
+
+def test_node_joined_from_the_bundle_is_operated_with_base_dir_alone(tmp_path, capsys):
+    """participant-join.sh runs `node start`/`node health` with --base-dir only,
+    as the bundle README and smoke checklist do; the joined node's network must
+    resolve from the bundle directory itself."""
+    base = tmp_path / "coordinator"
+    assert (
+        main(
+            [
+                "network",
+                "create",
+                "shared",
+                "--base-dir",
+                str(base),
+                "--chain-id",
+                "shared-1",
+                "--generate-validator-key",
+                "--bootstrap-node",
+                "bootstrap-1",
+            ]
+        )
+        == 0
+    )
+    bundle = tmp_path / "bundle"
+    assert (
+        main(
+            [
+                "network",
+                "package-operator-bundle",
+                "shared",
+                "--base-dir",
+                str(base),
+                "--output",
+                str(bundle),
+                "--bootstrap-seed",
+                "abc@localhost:26656",
+            ]
+        )
+        == 0
+    )
+    capsys.readouterr()
+    # The real CLI runs the join; start/health (they need Docker) run as
+    # `node endpoints`, which resolves the node's network the same way.
+    cli = tmp_path / "xian"
+    cli.write_text(
+        f"#!{sys.executable}\n"
+        "import sys\n"
+        "from xian_cli.cli import main\n"
+        "argv = sys.argv[1:]\n"
+        "if argv[:2] in (['node', 'start'], ['node', 'health']):\n"
+        "    argv[1] = 'endpoints'\n"
+        "sys.exit(main(argv))\n",
+        encoding="utf-8",
+    )
+    cli.chmod(0o700)
+    (tmp_path / "xian-stack").mkdir()
+    result = subprocess.run(
+        ["bash", str(bundle / "participant-join.sh")],
+        env={
+            **os.environ,
+            "XIAN_CMD": str(cli),
+            "NODE_NAME": "participant",
+            "STACK_DIR": str(tmp_path / "xian-stack"),
+        },
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    assert (bundle / "nodes" / "participant.json").exists()

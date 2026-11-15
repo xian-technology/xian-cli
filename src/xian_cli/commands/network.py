@@ -819,7 +819,6 @@ args=(
   network join "${{NODE_NAME}}"
   --base-dir "${{BUNDLE_DIR}}"
   --network {shlex.quote(network_name)}
-  --network-manifest "${{BUNDLE_DIR}}/manifest.json"
   --generate-validator-key
   --seed "${{BOOTSTRAP_SEED}}"
   --simulation-enabled
@@ -848,8 +847,9 @@ def _operator_bundle_readme(
     chain_id: str,
     includes_privacy_catalog: bool,
 ) -> str:
+    network_dir = f"networks/{network_name}"
     privacy_note = (
-        "- `privacy/` - copied privacy artifact catalog referenced by the manifest\n"
+        f"- `{network_dir}/privacy/` - copied privacy artifact catalog referenced by the manifest\n"
         if includes_privacy_catalog
         else ""
     )
@@ -859,14 +859,18 @@ This bundle is a shareable handoff for operators joining `{chain_id}`.
 
 ## Included Files
 
-- `manifest.json` - modern network manifest
-- `genesis.json` - materialized genesis for this network
+- `{network_dir}/manifest.json` - modern network manifest
+- `{network_dir}/genesis.json` - materialized genesis for this network
 - `bootstrap-seed.txt` - bootstrap seed placeholder or live seed
 - `participant-join.sh` - join as a lean validator-capable node
 - `participant-bds-node.sh` - join with BDS, dashboard, and monitoring
 - `SMOKE-CHECKLIST.md` - quick post-start checks
 {privacy_note}
 No private validator keys, node homes, databases, or logs are included.
+
+The bundle directory is a workspace: the join scripts write the node profile
+under `nodes/` and its keys under `keys/`, and every later `xian node ...`
+command for that node runs with `--base-dir` pointing here.
 
 ## Lean Validator
 
@@ -937,8 +941,6 @@ PY
 
 _SEED_PLACEHOLDER = "REPLACE_WITH_<node_id>@<public-host>:26656"
 _OPERATOR_BUNDLE_FILES = (
-    "manifest.json",
-    "genesis.json",
     "bootstrap-seed.txt",
     "README.md",
     "SMOKE-CHECKLIST.md",
@@ -1064,15 +1066,19 @@ def _handle_network_package_operator_bundle(args: argparse.Namespace) -> int:
         configs_dir=args.configs_dir,
     )
     bundled_manifest = _bundled_operator_manifest(network, bootstrap_seed=args.bootstrap_seed)
-    write_json(output_dir / "manifest.json", bundled_manifest, force=args.force)
+    # The bundle is a --base-dir workspace: the network lives where every node
+    # command resolves it by name, so the joined node is operated in place.
+    bundled_manifest_path = _default_network_manifest_path(output_dir, network["name"])
+    network_dir = bundled_manifest_path.parent
+    write_json(bundled_manifest_path, bundled_manifest, force=args.force)
     write_json(
-        output_dir / "genesis.json",
+        network_dir / "genesis.json",
         genesis,
         force=args.force,
         preserve_runtime_types=network["genesis"]["kind"] == "bundle",
     )
     privacy_catalog = _copy_operator_privacy_catalog(
-        bundled_manifest, manifest_path=manifest_path, output_dir=output_dir, force=args.force
+        bundled_manifest, manifest_path=manifest_path, output_dir=network_dir, force=args.force
     )
     bootstrap_seed = _operator_bundle_bootstrap_seed(args.bootstrap_seed, bundled_manifest)
     _write_operator_bundle_docs(
@@ -1082,9 +1088,11 @@ def _handle_network_package_operator_bundle(args: argparse.Namespace) -> int:
         privacy_catalog=privacy_catalog,
         force=args.force,
     )
-    files = list(_OPERATOR_BUNDLE_FILES)
+    network_files = ["manifest.json", "genesis.json"]
     if privacy_catalog is not None:
-        files.append(privacy_catalog)
+        network_files.append(privacy_catalog)
+    network_ref = network_dir.relative_to(output_dir)
+    files = [str(network_ref / name) for name in network_files] + list(_OPERATOR_BUNDLE_FILES)
     write_json(
         output_dir / "operator-bundle.json",
         {
@@ -1103,8 +1111,8 @@ def _handle_network_package_operator_bundle(args: argparse.Namespace) -> int:
 
     result = {
         "bundle_dir": str(output_dir),
-        "manifest_path": str(output_dir / "manifest.json"),
-        "genesis_path": str(output_dir / "genesis.json"),
+        "manifest_path": str(bundled_manifest_path),
+        "genesis_path": str(network_dir / "genesis.json"),
         "network": network["name"],
         "chain_id": network["chain_id"],
         "archive_path": archive_path,

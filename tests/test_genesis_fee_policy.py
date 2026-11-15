@@ -211,10 +211,11 @@ def test_operator_bundle_materializes_the_policy_into_its_genesis(tmp_path):
         str(output),
     )
 
-    bundled = json.loads((output / "manifest.json").read_text())
+    network_dir = output / "networks" / "shared"
+    bundled = json.loads((network_dir / "manifest.json").read_text())
     assert bundled["genesis"] == {"kind": "source", "source": "./genesis.json"}
     assert bundled["fee_policy"] is None
-    assert genesis_fee_policy(output / "genesis.json") == FREE_POLICY
+    assert genesis_fee_policy(network_dir / "genesis.json") == FREE_POLICY
 
 
 def test_setup_node_join_mode_rejects_fee_policy_flags(tmp_path):
