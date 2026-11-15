@@ -4,6 +4,8 @@ import argparse
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 
+from xian_compiler_core import DEFAULT_VM_PROFILE, SUPPORTED_VM_PROFILES
+
 from xian_cli.client.parser import register_client_commands
 from xian_cli.models import (
     SUPPORTED_APP_LOG_LEVELS,
@@ -354,9 +356,9 @@ def build_parser() -> argparse.ArgumentParser:
     )
     contract_build_artifacts_parser.add_argument(
         "--vm-profile",
-        choices=("xian_vm_v1", "xian_vm_v2"),
-        default="xian_vm_v2",
-        help="compiler profile (default: xian_vm_v2)",
+        choices=SUPPORTED_VM_PROFILES,
+        default=DEFAULT_VM_PROFILE,
+        help=f"compiler profile (default: {DEFAULT_VM_PROFILE})",
     )
     contract_build_artifacts_parser.add_argument(
         "--output",

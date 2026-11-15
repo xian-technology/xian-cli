@@ -5,6 +5,8 @@ import json
 import sys
 from pathlib import Path
 
+from xian_compiler_core import compile_contract_artifact
+
 from xian_cli.commands.common import _write_validator_material_files
 from xian_cli.config_repo import (
     list_network_template_paths,
@@ -77,14 +79,9 @@ def _handle_contract_build_artifacts(args: argparse.Namespace) -> int:
         source = source_path.read_text(encoding="utf-8")
         module_name = args.name or _infer_contract_module_name(source_path)
 
-    try:
-        from contracting.artifacts import build_contract_artifacts
-    except ImportError as exc:  # pragma: no cover - packaging guard
-        raise RuntimeError("xian contract build-artifacts requires xian-tech-contracting") from exc
-
-    artifacts = build_contract_artifacts(
-        module_name=module_name,
-        source=source,
+    artifacts = compile_contract_artifact(
+        module_name,
+        source,
         lint=not args.no_lint,
         vm_profile=args.vm_profile,
     )

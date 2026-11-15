@@ -6510,6 +6510,25 @@ class ConfigRepoTests(unittest.TestCase):
             hashlib.sha256(payload["vm_ir_json"].encode()).hexdigest(),
         )
 
+    def test_contract_build_artifacts_uses_the_compiler_core_alone(self) -> None:
+        # build-artifacts needs xian-tech-compiler-core, not xian-tech-contracting.
+        source = "@export\ndef ping() -> str:\n    return 'pong'\n"
+        script = (
+            "import io, json, sys\n"
+            "from contextlib import redirect_stdout\n"
+            "sys.modules['contracting'] = None\n"
+            "import xian_compiler_core\n"
+            "from xian_cli.cli import main\n"
+            f"sys.stdin = io.StringIO({source!r})\n"
+            "out = io.StringIO()\n"
+            "with redirect_stdout(out):\n"
+            "    code = main(['contract', 'build-artifacts', '-', '--name', 'con_ping'])\n"
+            "assert code == 0\n"
+            f"expected = xian_compiler_core.compile_contract_artifact('con_ping', {source!r})\n"
+            "assert json.loads(out.getvalue()) == expected\n"
+        )
+        subprocess.run([sys.executable, "-c", script], check=True)
+
     def test_resolve_configs_dir_uses_workspace_fallback(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             resolved = resolve_configs_dir(Path(tmp_dir))
