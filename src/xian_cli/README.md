@@ -21,8 +21,8 @@ behind network manifests, node profiles, and backend integration.
 - `models.py`: typed manifest, profile, and related config models
 - `config_repo.py`: canonical network/template resolution
 - `contract_bundles.py`: hash-pinned contract bundle validation helpers
-- `contract build-artifacts`: command surface for compiler-backed artifact
-  generation for offline inspection
+- `contract build-artifacts`: offline artifact generation through
+  `xian_compiler_core` (no `xian-tech-contracting` import)
 - `runtime.py`: local runtime backend integration
 - `abci_bridge.py`: direct integration points with backend node tooling
 

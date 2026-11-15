@@ -219,6 +219,12 @@ uv run xian contract build-artifacts ./contracts/con_counter.s.py \
   --output ./dist/con_counter.artifacts.json
 ```
 
+The command calls the Rust compiler core (`xian_compiler_core`, package
+`xian-tech-compiler-core`) directly, so its output is byte-identical to
+`xian_compiler_core.compile_contract_artifact` and to the WASM
+`@xian-tech/compiler` used by the IDE. `--no-lint` is accepted, but the
+compiler always applies its lint rules.
+
 Artifact inspection defaults to the fresh chain's `xian_vm_v2` profile.
 Select `--vm-profile xian_vm_v1` to reproduce an archived V1 test artifact. Client calls,
 simulations, transfers and deployments use V2. In `--kwargs-json` and

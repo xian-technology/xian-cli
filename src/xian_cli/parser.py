@@ -368,7 +368,7 @@ def build_parser() -> argparse.ArgumentParser:
     contract_build_artifacts_parser.add_argument(
         "--no-lint",
         action="store_true",
-        help="skip lint checks while building artifacts",
+        help="accepted for compatibility; the compiler always applies its lint rules",
     )
     contract_build_artifacts_parser.add_argument(
         "--force",
