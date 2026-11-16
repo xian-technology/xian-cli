@@ -6,7 +6,7 @@ from pathlib import Path
 from xian_cli.abci_bridge import get_node_setup_module
 from xian_cli.commands.node_options import app_metrics_host_address, app_metrics_host_port
 from xian_cli.models import SUPPORTED_NODE_IMAGE_MODES, write_json
-from xian_cli.secret_files import ensure_secret_dir
+from xian_cli.secret_files import ensure_secret_dir, validate_secret_output
 
 
 def _block_age_seconds(block_time: object) -> float | None:
@@ -41,6 +41,8 @@ def _write_validator_material_files(
     private_key: str | None = None,
     force: bool = False,
 ) -> Path:
+    for name in ("priv_validator_key.json", "validator_key_info.json"):
+        validate_secret_output(out_dir / name, force=force)
     node_setup = get_node_setup_module()
     payload = node_setup.generate_validator_material(private_key)
     ensure_secret_dir(out_dir)

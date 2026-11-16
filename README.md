@@ -68,6 +68,10 @@ For scripted review without changing files:
 uv run xian setup node --mode join --network testnet --name validator-1 --plan
 ```
 
+Validator key generation validates both output files before writing either.
+Existing key or metadata files require `--force`; unsafe secret-file permissions
+or symlinks are refused before replacing any key material.
+
 Create a local network from a template:
 
 ```bash

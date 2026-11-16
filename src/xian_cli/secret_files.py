@@ -45,21 +45,23 @@ def ensure_secret_dir(path: Path) -> None:
 
 def _ensure_private_parent(path: Path) -> None:
     parent = path.parent
-    if parent.exists():
-        if not parent.is_dir():
-            raise NotADirectoryError(f"{parent} is not a directory")
-        return
-    parent.mkdir(parents=True, mode=SECRET_DIR_MODE)
-    if os.name != "nt":
-        parent.chmod(SECRET_DIR_MODE)
+    if not parent.exists():
+        ensure_secret_dir(parent)
+    elif not parent.is_dir():
+        raise NotADirectoryError(f"{parent} is not a directory")
 
 
-def secure_write_text(path: Path, content: str, *, force: bool = False) -> None:
-    _ensure_private_parent(path)
-    if path.exists():
+def validate_secret_output(path: Path, *, force: bool = False) -> None:
+    """Check an output before starting a write of one or more secret files."""
+    if path.exists() or path.is_symlink():
         if not force:
             raise FileExistsError(f"{path} already exists; pass --force to overwrite")
         assert_secret_file_permissions(path)
+
+
+def secure_write_text(path: Path, content: str, *, force: bool = False) -> None:
+    validate_secret_output(path, force=force)
+    _ensure_private_parent(path)
     flags = os.O_WRONLY | os.O_CREAT | (os.O_TRUNC if force else os.O_EXCL)
     if hasattr(os, "O_NOFOLLOW"):
         flags |= os.O_NOFOLLOW
