@@ -161,6 +161,16 @@ Numeric timing and ratio options in node profiles and templates must be finite.
 For remote snapshot bootstrap, prefer a signed snapshot manifest plus trusted
 snapshot signing keys in the network manifest or node profile.
 
+Protocol state sync requires a fresh-chain CometBFT 0.40.0 history revision 1
+build. `node start`, `node health`, and `doctor` check the intended release
+metadata as well as the configured trust settings. Registry mode uses the
+profile's `node_release_manifest`, then the network's; local builds use the
+selected stack's `release-manifest.json`. Missing or incomplete history build
+identity blocks state-sync startup, including with `--skip-health-check`.
+Ordinary replay profiles do not require this metadata. Build identity is a
+configuration diagnostic; the application's private capability handshake and
+verified historical bootstrap enforce state-sync safety.
+
 Wallet, query, and transaction automation against a running node:
 
 ```bash

@@ -120,6 +120,16 @@ def _normalized_release_manifest(manifest: dict) -> dict:
             "s6_overlay_noarch_sha256": build["s6_overlay_noarch_sha256"],
             "s6_overlay_x86_64_sha256": build["s6_overlay_x86_64_sha256"],
             "s6_overlay_aarch64_sha256": build["s6_overlay_aarch64_sha256"],
+            **{
+                key: build[key]
+                for key in (
+                    "cometbft_source_commit",
+                    "cometbft_patch_path",
+                    "cometbft_patch_sha256",
+                    "cometbft_history_revision",
+                )
+                if key in build
+            },
         },
         "images": manifest["images"],
     }
@@ -4763,6 +4773,9 @@ class NodeRuntimeTests(unittest.TestCase):
             (base_dir / "nodes").mkdir()
             stack_dir = base_dir / "xian-stack"
             stack_dir.mkdir()
+            (stack_dir / "release-manifest.json").write_text(
+                json.dumps(CANONICAL_NODE_RELEASE_MANIFEST), encoding="utf-8"
+            )
             home = stack_dir / ".cometbft"
             config_dir = home / "config"
             data_dir = home / "data"

@@ -140,6 +140,20 @@ def _effective_node_release_manifest(
     return network_manifest if isinstance(network_manifest, dict) else None
 
 
+def _statesync_artifact_kwargs(
+    profile: dict, network: dict | None = None, *, stack_dir: Path | None = None
+) -> dict:
+    mode, _, _ = _effective_node_image_config(profile, network)
+    return {
+        "release_manifest": _effective_node_release_manifest(profile, network),
+        "local_manifest_path": (
+            stack_dir / "release-manifest.json"
+            if mode == "local_build" and stack_dir is not None
+            else None
+        ),
+    }
+
+
 def _stack_runtime_profile_kwargs(
     profile: dict[str, object],
     network: dict[str, object] | None = None,

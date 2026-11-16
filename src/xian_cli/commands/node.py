@@ -14,6 +14,7 @@ from xian_cli.commands.common import (
     _effective_node_release_manifest,
     _network_shielded_relayer_endpoints,
     _stack_runtime_profile_kwargs,
+    _statesync_artifact_kwargs,
 )
 from xian_cli.commands.node_context import (
     _extract_priv_validator_key,
@@ -39,6 +40,7 @@ from xian_cli.runtime import (
     start_xian_stack_node,
     stop_xian_stack_node,
 )
+from xian_cli.state_sync_artifact import history_build_metadata
 
 
 def _describe_effective_genesis(*, profile: dict, network: dict) -> str | None:
@@ -212,6 +214,13 @@ def _handle_node_start(args: argparse.Namespace) -> int:
         raise FileNotFoundError(
             f"{xian_config_path} does not exist; run `xian node init {args.name}` first"
         )
+
+    readiness = _collect_statesync_readiness(
+        home, **_statesync_artifact_kwargs(profile, network, stack_dir=stack_dir)
+    )
+    if readiness["enabled"] and not readiness["ready"]:
+        detail = readiness.get("history_bootstrap", {}).get("error", "incomplete trust settings")
+        raise ValueError(f"state sync history bootstrap is not configured: {detail}")
 
     result = start_xian_stack_node(
         stack_dir=stack_dir,
@@ -613,15 +622,14 @@ def _read_rendered_config_toml(home: Path) -> dict[str, object]:
         raise ValueError(f"invalid TOML in {config_path}") from exc
 
 
-def _collect_statesync_readiness(home: Path) -> dict[str, object]:
-    config = _read_rendered_config_toml(home)
+def _statesync_rpc_servers(value: object) -> list[str]:
+    return [server.strip() for server in str(value).split(",") if server.strip()]
+
+
+def _statesync_trust_readiness(config: dict) -> dict[str, object]:
     statesync = config.get("statesync", {})
     enabled = bool(statesync.get("enable"))
-    rpc_servers = [
-        server.strip()
-        for server in str(statesync.get("rpc_servers", "")).split(",")
-        if server.strip()
-    ]
+    rpc_servers = _statesync_rpc_servers(statesync.get("rpc_servers", ""))
     trust_height = int(statesync.get("trust_height", 0) or 0)
     trust_hash = str(statesync.get("trust_hash", "") or "")
     trust_period = str(statesync.get("trust_period", "") or "")
@@ -644,6 +652,28 @@ def _collect_statesync_readiness(home: Path) -> dict[str, object]:
         "trust_hash_present": bool(trust_hash),
         "trust_period": trust_period,
     }
+
+
+def _history_artifact_intent(release_manifest: object, local_manifest_path: Path | None) -> dict:
+    try:
+        if release_manifest is None and local_manifest_path is not None:
+            release_manifest = read_json(local_manifest_path)
+        build = history_build_metadata(release_manifest)
+    except (OSError, ValueError) as exc:
+        return {"configured": False, "metadata_only": True, "error": str(exc)}
+    return {"configured": True, "metadata_only": True, "build": build}
+
+
+def _collect_statesync_readiness(
+    home: Path, *, release_manifest: object = None, local_manifest_path: Path | None = None
+) -> dict[str, object]:
+    readiness = _statesync_trust_readiness(_read_rendered_config_toml(home))
+    if readiness["enabled"]:
+        intent = _history_artifact_intent(release_manifest, local_manifest_path)
+        readiness["history_bootstrap"] = intent
+        if readiness["ready"] and not intent["configured"]:
+            readiness.update(state="unsupported_artifact", ready=False)
+    return readiness
 
 
 def _collect_node_health(args: argparse.Namespace) -> dict[str, object]:
@@ -674,7 +704,9 @@ def _collect_node_health(args: argparse.Namespace) -> dict[str, object]:
         payload["stack_dir"] = str(stack_dir)
 
     try:
-        payload["statesync"] = _collect_statesync_readiness(home)
+        payload["statesync"] = _collect_statesync_readiness(
+            home, **_statesync_artifact_kwargs(profile, network, stack_dir=stack_dir)
+        )
     except Exception as exc:
         payload["statesync"] = {
             "state": "unavailable",

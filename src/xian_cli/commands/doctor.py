@@ -9,6 +9,7 @@ from xian_cli.abci_bridge import (
     get_node_admin_module,
     get_node_setup_module,
 )
+from xian_cli.commands.common import _statesync_artifact_kwargs
 from xian_cli.commands.node import (
     _collect_node_status,
     _collect_statesync_readiness,
@@ -73,9 +74,14 @@ def _doctor_rpc_check(status: dict[str, object]) -> dict[str, object]:
 
 
 def _doctor_statesync_check(status: dict[str, object]) -> dict[str, object]:
-    readiness = _collect_statesync_readiness(Path(str(status["home"])))
-    if readiness["state"] == "incomplete":
-        raise RuntimeError("statesync is enabled but trust settings are incomplete")
+    stack_dir = Path(str(status["stack_dir"])) if status.get("stack_dir") else None
+    readiness = _collect_statesync_readiness(
+        Path(str(status["home"])),
+        **_statesync_artifact_kwargs(status.get("profile", {}), stack_dir=stack_dir),
+    )
+    if readiness["enabled"] and not readiness["ready"]:
+        detail = readiness.get("history_bootstrap", {}).get("error", "incomplete trust settings")
+        raise RuntimeError(f"state sync history bootstrap is not configured: {detail}")
     return readiness
 
 

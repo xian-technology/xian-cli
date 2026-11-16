@@ -45,6 +45,28 @@ Command intent:
 
 `node init` should hide most of the current manual steps. It is the boundary between persisted intent and generated runtime state.
 
+### State-Sync Artifact Intent
+
+Release manifest schema 1 preserves `build.cometbft_source_commit` (40 lowercase
+hex characters), `cometbft_patch_path` (a file under
+`docker/cometbft-patches/` ending in `.patch`), `cometbft_patch_sha256` (64
+lowercase hex characters), and `cometbft_history_revision` (the string `"1"`).
+If any of these fields is present, all must be valid. History revision 1 uses
+CometBFT `0.40.0`, its official commit-specific codeload URL, and a lowercase
+source SHA256. Status preserves these fields in `release_manifest_build`.
+Legacy manifests without them remain usable for ordinary replay.
+
+When the rendered CometBFT configuration enables state sync, startup requires
+complete trust settings and this intended build identity. Registry profiles
+use the profile release manifest before the network release manifest. Local
+builds use the selected stack's `release-manifest.json`. `node health` and
+`doctor` report `statesync.history_bootstrap` with `configured` and
+`metadata_only: true`; missing identity makes otherwise complete trust settings
+`unsupported_artifact`. `--skip-health-check` does not bypass startup's
+configuration check. These fields describe the expected build, not proof of
+the running binary. The application's private capability handshake and
+authenticated historical bootstrap remain the security boundary.
+
 ## Internal Lifecycle Stages
 
 ### 1. Key Material

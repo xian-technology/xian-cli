@@ -12,6 +12,7 @@ from xian_runtime_types.encoding import normalize_wire_numbers
 from xian_runtime_types.time import Datetime
 
 from xian_cli.secret_files import secure_write_text
+from xian_cli.state_sync_artifact import normalize_history_build
 
 SCHEMA_VERSION = 1
 SUPPORTED_BLOCK_POLICY_MODES = {"on_demand", "idle_interval", "periodic"}
@@ -370,19 +371,7 @@ def _merge_defaults(defaults: dict, value: dict | None) -> dict:
     return merged
 
 
-def _normalize_node_release_manifest(
-    payload: dict,
-    key: str,
-) -> dict | None:
-    value = payload.get(key)
-    if value is None:
-        return None
-    if not isinstance(value, dict):
-        raise ValueError(f"{key} must be an object when provided")
-    if value.get("schema_version") != SCHEMA_VERSION:
-        raise ValueError(f"{key}.schema_version must be {SCHEMA_VERSION}")
-
-    components_raw = value.get("components")
+def _normalize_release_components(components_raw: object, key: str) -> dict[str, dict[str, str]]:
     if not isinstance(components_raw, dict) or not components_raw:
         raise ValueError(f"{key}.components must be a non-empty object")
     components: dict[str, dict[str, str]] = {}
@@ -395,6 +384,22 @@ def _normalize_node_release_manifest(
             "repository": _require_str(component, "repository"),
             "ref": _require_str(component, "ref"),
         }
+    return components
+
+
+def _normalize_node_release_manifest(
+    payload: dict,
+    key: str,
+) -> dict | None:
+    value = payload.get(key)
+    if value is None:
+        return None
+    if not isinstance(value, dict):
+        raise ValueError(f"{key} must be an object when provided")
+    if type(value.get("schema_version")) is not int or value["schema_version"] != SCHEMA_VERSION:
+        raise ValueError(f"{key}.schema_version must be {SCHEMA_VERSION}")
+
+    components = _normalize_release_components(value.get("components"), key)
 
     build_raw = value.get("build")
     if not isinstance(build_raw, dict):
@@ -410,6 +415,8 @@ def _normalize_node_release_manifest(
         "s6_overlay_x86_64_sha256": _require_sha256(build_raw, "s6_overlay_x86_64_sha256"),
         "s6_overlay_aarch64_sha256": _require_sha256(build_raw, "s6_overlay_aarch64_sha256"),
     }
+
+    build.update(normalize_history_build(build_raw))
 
     images_raw = value.get("images")
     if not isinstance(images_raw, dict):
