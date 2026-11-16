@@ -9,6 +9,7 @@ from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 import pytest
+from snapshot_test_support import stopped_home_proof
 
 from xian_cli.abci_bridge import get_node_setup_module
 from xian_cli.cli import main
@@ -55,7 +56,7 @@ def initialization_profile(case):
                     "prometheus": False,
                 },
                 "statesync": {
-                    "enabled": True,
+                    "enabled": False,
                     "rpc_servers": ["http://localhost:26657", "http://localhost:26667"],
                     "trust_height": 42,
                     "trust_hash": "ab" * 32,
@@ -128,6 +129,7 @@ def observe_initialization(tmp_path, case, *flags, profile_changes=None):
             ),
         ),
         patch("xian_cli.commands.node._restore_snapshot", restore),
+        patch("xian_cli.commands.node._require_stopped_node"),
         redirect_stdout(io.StringIO()) as stdout,
     ):
         assert main(["node", "init", "node", "--base-dir", str(tmp_path), *flags]) == 0
@@ -188,3 +190,89 @@ def test_initialization_requires_an_existing_validator_key(tmp_path, key_referen
         observe_initialization(
             tmp_path, "defaults", profile_changes={"validator_key_ref": key_reference}
         )
+
+
+def test_initialization_rejects_unsupported_state_sync(tmp_path):
+    with pytest.raises(ValueError, match="full-node-store"):
+        observe_initialization(
+            tmp_path,
+            "defaults",
+            profile_changes={"advanced": {"statesync": {"enabled": True}}},
+        )
+
+
+def disk_initialization_plan(tmp_path):
+    setup = get_node_setup_module()
+    profile, network = initialization_profile("defaults")
+    profile["name"] = "node"
+    home = tmp_path / "home"
+    return SimpleNamespace(
+        base_dir=tmp_path,
+        profile_path=tmp_path / "p",
+        profile=profile,
+        network=network,
+        stack_dir=tmp_path / "stack",
+        validator_key_payload=setup.build_priv_validator_key("11" * 32),
+        genesis={"chain_id": "local-test"},
+        effective_genesis_source="public-genesis",
+        home=home,
+    )
+
+
+def test_init_materializes_recipient_genesis_config_and_identity_before_restore(
+    tmp_path, monkeypatch
+):
+    from xian_cli.commands import node, node_context
+
+    plan = disk_initialization_plan(tmp_path)
+    home = plan.home
+    monkeypatch.setattr(node, "_resolve_initialization", lambda args: plan)
+    status_query = Mock(
+        return_value={
+            "runtime_status_known": True,
+            "runtime_services_running": False,
+            "backend_running": False,
+            "compose_services": [],
+        }
+    )
+    monkeypatch.setattr(node_context, "get_xian_stack_node_status", status_query)
+    monkeypatch.setattr(node_context, "run_backend_command", stopped_home_proof)
+
+    def verify_recipient_before_restore(**kwargs):
+        assert kwargs["explicit_home"] == home
+        assert (home / "config/config.toml").is_file()
+        assert json.loads((home / "config/genesis.json").read_text())["chain_id"] == "local-test"
+        assert (home / "config/node_key.json").is_file()
+        assert (home / "config/priv_validator_key.json").is_file()
+        assert json.loads((home / "data/priv_validator_state.json").read_text())["height"] == "0"
+        return {"restored": "snapshot"}
+
+    verifier = Mock(side_effect=verify_recipient_before_restore)
+    monkeypatch.setattr(node, "_restore_snapshot", verifier)
+    run = ["node", "init", "node", "--base-dir", str(tmp_path), "--restore-snapshot"]
+    with redirect_stdout(io.StringIO()):
+        assert main(run) == 0
+    verifier.assert_called_once()
+    assert status_query.call_args.kwargs["stack_dir"] == plan.stack_dir
+
+
+def test_init_snapshot_refuses_running_home_before_any_materialization(tmp_path, monkeypatch):
+    from xian_cli.commands import node, node_context
+
+    plan = disk_initialization_plan(tmp_path)
+    monkeypatch.setattr(node, "_resolve_initialization", lambda args: plan)
+    monkeypatch.setattr(
+        node_context,
+        "get_xian_stack_node_status",
+        lambda **kw: {
+            "runtime_status_known": True,
+            "runtime_services_running": True,
+            "backend_running": True,
+            "compose_services": [{"service": "abci", "state": "running"}],
+        },
+    )
+    writer = Mock(side_effect=AssertionError("materialization ran before stopped-runtime proof"))
+    monkeypatch.setattr(get_node_setup_module(), "materialize_cometbft_home", writer)
+    with pytest.raises(RuntimeError, match="stop"):
+        main(["node", "init", "node", "--base-dir", str(tmp_path), "--restore-snapshot", "--force"])
+    writer.assert_not_called()

@@ -53,6 +53,19 @@ def _backend_options(values: Mapping[str, Any]) -> dict[str, Any]:
     )
 
 
+def _snapshot_backend_options(values: Mapping[str, Any], options: dict) -> dict:
+    """Offline tools accept image selection, not unrelated service toggles."""
+    return drop_none(
+        {
+            **{
+                name: values.get(name)
+                for name in ("node_image_mode", "node_integrated_image", "node_split_image")
+            },
+            **options,
+        }
+    )
+
+
 def resolve_stack_dir(base_dir: Path, explicit: Path | None = None) -> Path:
     if explicit is not None:
         resolved = explicit.expanduser().resolve()
@@ -239,10 +252,15 @@ def run_backend_command(
     rpc_timeout_seconds: float | None = None,
     rpc_url: str | None = None,
     check_disk: bool | None = None,
+    snapshot_options: dict[str, object] | None = None,
 ) -> dict:
     request = BackendRequest(
         command=command,
-        options=_backend_options(locals()),
+        options=(
+            _backend_options(locals())
+            if snapshot_options is None
+            else _snapshot_backend_options(locals(), snapshot_options)
+        ),
     )
     cmd = [
         sys.executable,

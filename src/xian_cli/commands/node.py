@@ -7,6 +7,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from urllib.parse import urlparse
 
+from xian.state_sync_policy import validate_comet_state_sync_disabled
+
 from xian_cli.abci_bridge import get_node_setup_module
 from xian_cli.commands.common import (
     _block_age_seconds,
@@ -14,11 +16,11 @@ from xian_cli.commands.common import (
     _effective_node_release_manifest,
     _network_shielded_relayer_endpoints,
     _stack_runtime_profile_kwargs,
-    _statesync_artifact_kwargs,
 )
 from xian_cli.commands.node_context import (
     _extract_priv_validator_key,
     _load_profile_and_network,
+    _require_stopped_node,
     _resolve_effective_genesis_payload,
     _resolve_effective_snapshot_url,
     _resolve_home,
@@ -37,10 +39,10 @@ from xian_cli.runtime import (
     get_xian_stack_node_health,
     get_xian_stack_node_status,
     resolve_stack_dir,
+    run_backend_command,
     start_xian_stack_node,
     stop_xian_stack_node,
 )
-from xian_cli.state_sync_artifact import history_build_metadata
 
 
 def _describe_effective_genesis(*, profile: dict, network: dict) -> str | None:
@@ -158,6 +160,13 @@ def _restore_initialization_snapshot(
 def _initialize_node_from_args(args: argparse.Namespace) -> dict:
     node_setup = get_node_setup_module()
     plan = _resolve_initialization(args)
+    if args.restore_snapshot:
+        _require_stopped_node(
+            stack_dir=plan.stack_dir or resolve_stack_dir(plan.base_dir),
+            home=plan.home,
+            profile=plan.profile,
+            network=plan.network,
+        )
     configs = node_setup.render_node_configs(
         options=node_config_options(node_setup, profile=plan.profile, network=plan.network)
     )
@@ -215,12 +224,9 @@ def _handle_node_start(args: argparse.Namespace) -> int:
             f"{xian_config_path} does not exist; run `xian node init {args.name}` first"
         )
 
-    readiness = _collect_statesync_readiness(
-        home, **_statesync_artifact_kwargs(profile, network, stack_dir=stack_dir)
-    )
-    if readiness["enabled"] and not readiness["ready"]:
-        detail = readiness.get("history_bootstrap", {}).get("error", "incomplete trust settings")
-        raise ValueError(f"state sync history bootstrap is not configured: {detail}")
+    readiness = _collect_statesync_readiness(home)
+    if readiness.get("error"):
+        raise ValueError(readiness["error"])
 
     result = start_xian_stack_node(
         stack_dir=stack_dir,
@@ -622,58 +628,15 @@ def _read_rendered_config_toml(home: Path) -> dict[str, object]:
         raise ValueError(f"invalid TOML in {config_path}") from exc
 
 
-def _statesync_rpc_servers(value: object) -> list[str]:
-    return [server.strip() for server in str(value).split(",") if server.strip()]
-
-
-def _statesync_trust_readiness(config: dict) -> dict[str, object]:
+def _collect_statesync_readiness(home: Path) -> dict[str, object]:
+    config = _read_rendered_config_toml(home)
     statesync = config.get("statesync", {})
-    enabled = bool(statesync.get("enable"))
-    rpc_servers = _statesync_rpc_servers(statesync.get("rpc_servers", ""))
-    trust_height = int(statesync.get("trust_height", 0) or 0)
-    trust_hash = str(statesync.get("trust_hash", "") or "")
-    trust_period = str(statesync.get("trust_period", "") or "")
-
-    if not enabled:
-        state = "disabled"
-        ready = False
-    else:
-        ready = (
-            len(rpc_servers) >= 2 and trust_height > 0 and bool(trust_hash) and bool(trust_period)
-        )
-        state = "configured" if ready else "incomplete"
-
-    return {
-        "enabled": enabled,
-        "state": state,
-        "ready": ready,
-        "rpc_servers": rpc_servers,
-        "trust_height": trust_height,
-        "trust_hash_present": bool(trust_hash),
-        "trust_period": trust_period,
-    }
-
-
-def _history_artifact_intent(release_manifest: object, local_manifest_path: Path | None) -> dict:
+    enabled = isinstance(statesync, dict) and statesync.get("enable") is True
     try:
-        if release_manifest is None and local_manifest_path is not None:
-            release_manifest = read_json(local_manifest_path)
-        build = history_build_metadata(release_manifest)
-    except (OSError, ValueError) as exc:
-        return {"configured": False, "metadata_only": True, "error": str(exc)}
-    return {"configured": True, "metadata_only": True, "build": build}
-
-
-def _collect_statesync_readiness(
-    home: Path, *, release_manifest: object = None, local_manifest_path: Path | None = None
-) -> dict[str, object]:
-    readiness = _statesync_trust_readiness(_read_rendered_config_toml(home))
-    if readiness["enabled"]:
-        intent = _history_artifact_intent(release_manifest, local_manifest_path)
-        readiness["history_bootstrap"] = intent
-        if readiness["ready"] and not intent["configured"]:
-            readiness.update(state="unsupported_artifact", ready=False)
-    return readiness
+        validate_comet_state_sync_disabled(config)
+    except ValueError as exc:
+        return {"enabled": enabled, "state": "unsupported", "ready": False, "error": str(exc)}
+    return {"enabled": enabled, "state": "disabled", "ready": False}
 
 
 def _collect_node_health(args: argparse.Namespace) -> dict[str, object]:
@@ -704,9 +667,7 @@ def _collect_node_health(args: argparse.Namespace) -> dict[str, object]:
         payload["stack_dir"] = str(stack_dir)
 
     try:
-        payload["statesync"] = _collect_statesync_readiness(
-            home, **_statesync_artifact_kwargs(profile, network, stack_dir=stack_dir)
-        )
+        payload["statesync"] = _collect_statesync_readiness(home)
     except Exception as exc:
         payload["statesync"] = {
             "state": "unavailable",
@@ -733,7 +694,7 @@ def _collect_node_health(args: argparse.Namespace) -> dict[str, object]:
 def _handle_node_health(args: argparse.Namespace) -> int:
     result = _collect_node_health(args)
     print(json.dumps(result, indent=2))
-    return 0
+    return 1 if result.get("statesync", {}).get("error") else 0
 
 
 def _handle_snapshot_restore(args: argparse.Namespace) -> int:
@@ -758,6 +719,29 @@ def _handle_snapshot_restore(args: argparse.Namespace) -> int:
         stack_dir=stack_dir,
         explicit_home=args.home,
         explicit_snapshot_url=args.snapshot_url,
+    )
+    print(json.dumps(result, indent=2))
+    return 0
+
+
+def _handle_snapshot_export(args: argparse.Namespace) -> int:
+    context = _resolve_node_context(args)
+    profile, network = context["profile"], context["network"]
+    stack_dir, home = context["stack_dir"], context["home"]
+    _require_stopped_node(stack_dir=stack_dir, home=home, profile=profile, network=network)
+    result = run_backend_command(
+        stack_dir,
+        "node-store-snapshot-export",
+        cometbft_home=home,
+        **_stack_runtime_profile_kwargs(profile, network),
+        snapshot_options={
+            "home": str(home),
+            "archive_output": str(args.archive_output.expanduser().resolve()),
+            "manifest_output": str(args.manifest_output.expanduser().resolve()),
+            "snapshot_url": args.snapshot_url,
+            "signing_key_file": str(args.signing_key_file.expanduser().resolve()),
+            "offline": True,
+        },
     )
     print(json.dumps(result, indent=2))
     return 0

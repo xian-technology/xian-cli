@@ -158,18 +158,58 @@ remove older records before seven days. See the node logging guide in
 
 Numeric timing and ratio options in node profiles and templates must be finite.
 
-For remote snapshot bootstrap, prefer a signed snapshot manifest plus trusted
-snapshot signing keys in the network manifest or node profile.
+Xian uses unmodified upstream CometBFT. P2P application state sync is disabled:
+`node start`, `node health`, and `doctor` reject `[statesync].enable = true`
+and explain the supported alternatives. `--skip-health-check` does not bypass
+this check. Use ordinary replay from genesis, or restore a verified full-node-store
+snapshot before startup.
 
-Protocol state sync requires a fresh-chain CometBFT 0.40.0 history revision 1
-build. `node start`, `node health`, and `doctor` check the intended release
-metadata as well as the configured trust settings. Registry mode uses the
-profile's `node_release_manifest`, then the network's; local builds use the
-selected stack's `release-manifest.json`. Missing or incomplete history build
-identity blocks state-sync startup, including with `--skip-health-check`.
-Ordinary replay profiles do not require this metadata. Build identity is a
-configuration diagnostic; the application's private capability handshake and
-verified historical bootstrap enforce state-sync safety.
+`xian snapshot restore` and `node init --restore-snapshot` consume a signed
+full-node-store manifest from `snapshot_url`, verified against the configured
+trusted `snapshot_signing_keys`. The node verifier binds its chain and genesis,
+application root and height, and complete CometBFT stores/checkpoint before
+publishing data. Recipient node/validator keys and signing state stay local.
+This bootstrap trusts the configured snapshot signer; it is not independent
+replay of every block. Application-only `xian-state-snapshot` exports are offline
+data APIs and cannot bootstrap a node.
+
+Release provenance preserves upstream `cometbft_source_commit`, source URL and
+SHA256. It does not require a custom CometBFT patch or attest a running binary.
+
+Create a signed full-store archive from a stopped nonvalidator home:
+
+```bash
+uv run xian node stop snapshot-source
+uv run xian snapshot export snapshot-source \
+  --archive-output ./node-store.tar.gz \
+  --manifest-output ./node-store.manifest.json \
+  --snapshot-url https://snapshots.example/node-store.tar.gz \
+  --signing-key-file /private/publisher.key
+```
+
+The signing file contains the publisher's 32-byte hexadecimal private key and
+uses mode `0600`. Export writes the archive and signed manifest locally; it
+does not upload them. It uses the profile's current node image for native
+store inspection, so a host Go binary is not required. Both export and restore
+require a successful stopped-runtime status check; unknown status, partial
+split runtimes, paused or restarting containers are refused. A known-empty
+fresh home can be restored after its own genesis/configuration/keys are initialized.
+`node stop` remains available for profiles with unsupported old state-sync intent.
+
+Existing `recovery apply` plans may supply an independently trusted archive
+SHA256 as a lower-level alternative to a signed manifest. The canonical verifier
+still requires complete full-store/genesis/application/native-history/resource
+checks; an archive's self-declared hash is not authorization. `--skip-stop`
+skips issuing the stop command, not the stopped-runtime proof.
+
+Recovery plans keep an explicit manual incident policy: `target_height`,
+`trusted_block_hash`, and `trusted_app_hash` are not automatically compared to
+the restored checkpoint. The plan layer checks chain consistency and, when
+live RPC is available, that the live height is at least the target. The canonical
+verifier checks the archive's own full-store checkpoint and trust inputs.
+Operators must compare that checkpoint with the incident plan before using
+`--yes` or starting the restored node; JSON output retains
+`requires_manual_hash_confirmation: true` and the manual hash fields.
 
 Wallet, query, and transaction automation against a running node:
 

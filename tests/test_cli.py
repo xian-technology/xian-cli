@@ -19,6 +19,7 @@ from pathlib import Path
 from unittest.mock import AsyncMock, patch
 from urllib.error import URLError
 
+from snapshot_test_support import stopped_home_proof
 from xian_accounts import Ed25519Account
 from xian_py import XianAsync, XianClientConfig
 from xian_py.models import IndexedBlock, IndexedTransaction, TransactionReceipt
@@ -120,16 +121,7 @@ def _normalized_release_manifest(manifest: dict) -> dict:
             "s6_overlay_noarch_sha256": build["s6_overlay_noarch_sha256"],
             "s6_overlay_x86_64_sha256": build["s6_overlay_x86_64_sha256"],
             "s6_overlay_aarch64_sha256": build["s6_overlay_aarch64_sha256"],
-            **{
-                key: build[key]
-                for key in (
-                    "cometbft_source_commit",
-                    "cometbft_patch_path",
-                    "cometbft_patch_sha256",
-                    "cometbft_history_revision",
-                )
-                if key in build
-            },
+            **{key: build[key] for key in ("cometbft_source_commit",) if key in build},
         },
         "images": manifest["images"],
     }
@@ -4144,8 +4136,17 @@ class NodeInitTests(unittest.TestCase):
                     return_value=node_admin,
                 ),
                 patch(
+                    "xian_cli.commands.node_context.run_backend_command",
+                    side_effect=stopped_home_proof,
+                ),
+                patch(
                     "xian_cli.commands.node_context.get_xian_stack_node_status",
-                    return_value={"runtime_services_running": False, "backend_running": False},
+                    return_value={
+                        "runtime_status_known": True,
+                        "runtime_services_running": False,
+                        "backend_running": False,
+                        "compose_services": [],
+                    },
                 ),
             ):
                 with redirect_stdout(stdout):
@@ -4166,6 +4167,7 @@ class NodeInitTests(unittest.TestCase):
                 home,
                 trusted_manifest_public_keys=["a" * 64],
                 expected_chain_id="xian-testnet-1",
+                native_store_inspector=unittest.mock.ANY,
             )
             result = json.loads(stdout.getvalue())
             self.assertTrue(result["snapshot_restored"])
@@ -4860,15 +4862,16 @@ trust_period = "336h0m0s"
                         ]
                     )
 
-            self.assertEqual(exit_code, 0)
+            self.assertEqual(exit_code, 1)
             result = json.loads(stdout.getvalue())
             self.assertIsNone(result["operator_profile"])
             self.assertNotIn("monitoring_profile", result)
             # Without --skip-disk-check the health probe checks the disk.
             self.assertIs(node_health.call_args.kwargs["check_disk"], True)
             self.assertEqual(result["health"]["state"], "healthy")
-            self.assertEqual(result["statesync"]["state"], "configured")
-            self.assertTrue(result["statesync"]["ready"])
+            self.assertEqual(result["statesync"]["state"], "unsupported")
+            self.assertFalse(result["statesync"]["ready"])
+            self.assertIn("full-node-store", result["statesync"]["error"])
             self.assertEqual(
                 result["effective_snapshot_url"],
                 "https://example.invalid/snapshot.tar.gz",
@@ -5215,8 +5218,17 @@ class SnapshotCommandTests(unittest.TestCase):
                     return_value=node_admin,
                 ),
                 patch(
+                    "xian_cli.commands.node_context.run_backend_command",
+                    side_effect=stopped_home_proof,
+                ),
+                patch(
                     "xian_cli.commands.node_context.get_xian_stack_node_status",
-                    return_value={"runtime_services_running": False, "backend_running": False},
+                    return_value={
+                        "runtime_status_known": True,
+                        "runtime_services_running": False,
+                        "backend_running": False,
+                        "compose_services": [],
+                    },
                 ),
             ):
                 with redirect_stdout(stdout):
@@ -5236,6 +5248,7 @@ class SnapshotCommandTests(unittest.TestCase):
                 home,
                 trusted_manifest_public_keys=["b" * 64],
                 expected_chain_id="xian-local-1",
+                native_store_inspector=unittest.mock.ANY,
             )
             result = json.loads(stdout.getvalue())
             self.assertEqual(result["home"], str(home))
@@ -5540,6 +5553,19 @@ class SnapshotCommandTests(unittest.TestCase):
                     "xian_cli.commands.recovery.get_node_admin_module",
                     return_value=node_admin,
                 ),
+                patch(
+                    "xian_cli.commands.node_context.run_backend_command",
+                    side_effect=stopped_home_proof,
+                ),
+                patch(
+                    "xian_cli.commands.node_context.get_xian_stack_node_status",
+                    return_value={
+                        "runtime_status_known": True,
+                        "runtime_services_running": False,
+                        "backend_running": False,
+                        "compose_services": [],
+                    },
+                ),
             ):
                 with redirect_stdout(stdout):
                     exit_code = main(
@@ -5563,6 +5589,9 @@ class SnapshotCommandTests(unittest.TestCase):
                 "https://example.invalid/recovery.tar.gz",
                 home,
                 expected_sha256="ab" * 32,
+                expected_chain_id="xian-local-1",
+                trusted_manifest_public_keys=[],
+                native_store_inspector=unittest.mock.ANY,
             )
             payload = json.loads(stdout.getvalue())
             self.assertFalse(payload["dry_run"])

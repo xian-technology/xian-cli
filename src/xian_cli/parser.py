@@ -236,6 +236,79 @@ def add_node_profile_runtime_args(
     )
 
 
+def _register_snapshot_commands(subparsers) -> None:
+    snapshot_parser = subparsers.add_parser("snapshot", help="snapshot tools")
+    snapshot_subparsers = snapshot_parser.add_subparsers(dest="snapshot_command", required=True)
+
+    restore_parser = snapshot_subparsers.add_parser(
+        "restore",
+        help="restore a node snapshot into an initialized home",
+    )
+    export_parser = snapshot_subparsers.add_parser(
+        "export", help="export and sign a stopped full-node-store snapshot locally"
+    )
+    for snapshot_command_parser in (restore_parser, export_parser):
+        snapshot_command_parser.add_argument("name", help="node profile name")
+        snapshot_command_parser.add_argument(
+            "--base-dir",
+            type=Path,
+            default=Path.cwd(),
+            help=("workspace with ./nodes, ./networks, and optional ./xian-configs"),
+        )
+        snapshot_command_parser.add_argument(
+            "--profile",
+            type=Path,
+            help="explicit node profile path; defaults to ./nodes/<name>.json",
+        )
+        snapshot_command_parser.add_argument(
+            "--network",
+            type=Path,
+            help=("network manifest; defaults to ./networks/<profile.network>/manifest.json"),
+        )
+        snapshot_command_parser.add_argument(
+            "--stack-dir",
+            type=Path,
+            help=("explicit xian-stack checkout path; overrides stack_dir in the profile"),
+        )
+        snapshot_command_parser.add_argument(
+            "--configs-dir",
+            type=Path,
+            help=(
+                "explicit xian-configs checkout path; defaults to XIAN_CONFIGS_DIR "
+                "or the sibling workspace layout"
+            ),
+        )
+        snapshot_command_parser.add_argument(
+            "--home",
+            type=Path,
+            help="explicit CometBFT home path; overrides the profile home",
+        )
+    restore_parser.add_argument(
+        "--snapshot-url",
+        help="explicit snapshot URL override",
+    )
+    restore_parser.set_defaults(handler_name="_handle_snapshot_restore")
+
+    export_parser.add_argument(
+        "--archive-output", required=True, type=Path, help="local archive output path"
+    )
+    export_parser.add_argument(
+        "--manifest-output", required=True, type=Path, help="local signed manifest output path"
+    )
+    export_parser.add_argument(
+        "--snapshot-url",
+        required=True,
+        help="publication URL of the archive recorded in the manifest; no upload",
+    )
+    export_parser.add_argument(
+        "--signing-key-file",
+        required=True,
+        type=Path,
+        help="private publisher signing-key file; never inline key material",
+    )
+    export_parser.set_defaults(handler_name="_handle_snapshot_export")
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="xian",
@@ -566,9 +639,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--base-dir",
         type=Path,
         default=Path.cwd(),
-        help=(
-            "workspace directory that contains ./nodes, ./networks, and optionally ./xian-configs"
-        ),
+        help=("workspace with ./nodes, ./networks, and optional ./xian-configs"),
     )
     join_parser.add_argument(
         "--network",
@@ -928,9 +999,7 @@ def build_parser() -> argparse.ArgumentParser:
     init_parser.add_argument(
         "--network",
         type=Path,
-        help=(
-            "explicit network manifest path; defaults to ./networks/<profile.network>/manifest.json"
-        ),
+        help=("network manifest; defaults to ./networks/<profile.network>/manifest.json"),
     )
     init_parser.add_argument(
         "--validator-key",
@@ -987,9 +1056,7 @@ def build_parser() -> argparse.ArgumentParser:
     start_parser.add_argument(
         "--network",
         type=Path,
-        help=(
-            "explicit network manifest path; defaults to ./networks/<profile.network>/manifest.json"
-        ),
+        help=("network manifest; defaults to ./networks/<profile.network>/manifest.json"),
     )
     start_parser.add_argument(
         "--stack-dir",
@@ -1033,9 +1100,7 @@ def build_parser() -> argparse.ArgumentParser:
     stop_parser.add_argument(
         "--network",
         type=Path,
-        help=(
-            "explicit network manifest path; defaults to ./networks/<profile.network>/manifest.json"
-        ),
+        help=("network manifest; defaults to ./networks/<profile.network>/manifest.json"),
     )
     stop_parser.add_argument(
         "--stack-dir",
@@ -1072,9 +1137,7 @@ def build_parser() -> argparse.ArgumentParser:
     status_parser.add_argument(
         "--network",
         type=Path,
-        help=(
-            "explicit network manifest path; defaults to ./networks/<profile.network>/manifest.json"
-        ),
+        help=("network manifest; defaults to ./networks/<profile.network>/manifest.json"),
     )
     status_parser.add_argument(
         "--stack-dir",
@@ -1127,9 +1190,7 @@ def build_parser() -> argparse.ArgumentParser:
     endpoints_parser.add_argument(
         "--network",
         type=Path,
-        help=(
-            "explicit network manifest path; defaults to ./networks/<profile.network>/manifest.json"
-        ),
+        help=("network manifest; defaults to ./networks/<profile.network>/manifest.json"),
     )
     endpoints_parser.add_argument(
         "--stack-dir",
@@ -1181,9 +1242,7 @@ def build_parser() -> argparse.ArgumentParser:
     health_parser.add_argument(
         "--network",
         type=Path,
-        help=(
-            "explicit network manifest path; defaults to ./networks/<profile.network>/manifest.json"
-        ),
+        help=("network manifest; defaults to ./networks/<profile.network>/manifest.json"),
     )
     health_parser.add_argument(
         "--stack-dir",
@@ -1238,9 +1297,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--base-dir",
         type=Path,
         default=Path.cwd(),
-        help=(
-            "workspace directory that contains ./nodes, ./networks, and optionally ./xian-configs"
-        ),
+        help=("workspace with ./nodes, ./networks, and optional ./xian-configs"),
     )
     recovery_validate_parser.add_argument(
         "--profile",
@@ -1250,9 +1307,7 @@ def build_parser() -> argparse.ArgumentParser:
     recovery_validate_parser.add_argument(
         "--network",
         type=Path,
-        help=(
-            "explicit network manifest path; defaults to ./networks/<profile.network>/manifest.json"
-        ),
+        help=("network manifest; defaults to ./networks/<profile.network>/manifest.json"),
     )
     recovery_validate_parser.add_argument(
         "--stack-dir",
@@ -1293,9 +1348,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--base-dir",
         type=Path,
         default=Path.cwd(),
-        help=(
-            "workspace directory that contains ./nodes, ./networks, and optionally ./xian-configs"
-        ),
+        help=("workspace with ./nodes, ./networks, and optional ./xian-configs"),
     )
     recovery_apply_parser.add_argument(
         "--profile",
@@ -1305,9 +1358,7 @@ def build_parser() -> argparse.ArgumentParser:
     recovery_apply_parser.add_argument(
         "--network",
         type=Path,
-        help=(
-            "explicit network manifest path; defaults to ./networks/<profile.network>/manifest.json"
-        ),
+        help=("network manifest; defaults to ./networks/<profile.network>/manifest.json"),
     )
     recovery_apply_parser.add_argument(
         "--stack-dir",
@@ -1375,57 +1426,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     recovery_apply_parser.set_defaults(handler_name="_handle_recovery_apply")
 
-    snapshot_parser = subparsers.add_parser("snapshot", help="snapshot tools")
-    snapshot_subparsers = snapshot_parser.add_subparsers(dest="snapshot_command", required=True)
-
-    restore_parser = snapshot_subparsers.add_parser(
-        "restore",
-        help="restore a node snapshot into an initialized home",
-    )
-    restore_parser.add_argument("name", help="node profile name")
-    restore_parser.add_argument(
-        "--base-dir",
-        type=Path,
-        default=Path.cwd(),
-        help=(
-            "workspace directory that contains ./nodes, ./networks, and optionally ./xian-configs"
-        ),
-    )
-    restore_parser.add_argument(
-        "--profile",
-        type=Path,
-        help="explicit node profile path; defaults to ./nodes/<name>.json",
-    )
-    restore_parser.add_argument(
-        "--network",
-        type=Path,
-        help=(
-            "explicit network manifest path; defaults to ./networks/<profile.network>/manifest.json"
-        ),
-    )
-    restore_parser.add_argument(
-        "--stack-dir",
-        type=Path,
-        help=("explicit xian-stack checkout path; overrides stack_dir in the profile"),
-    )
-    restore_parser.add_argument(
-        "--configs-dir",
-        type=Path,
-        help=(
-            "explicit xian-configs checkout path; defaults to XIAN_CONFIGS_DIR "
-            "or the sibling workspace layout"
-        ),
-    )
-    restore_parser.add_argument(
-        "--home",
-        type=Path,
-        help="explicit CometBFT home path; overrides the profile home",
-    )
-    restore_parser.add_argument(
-        "--snapshot-url",
-        help="explicit snapshot URL override",
-    )
-    restore_parser.set_defaults(handler_name="_handle_snapshot_restore")
+    _register_snapshot_commands(subparsers)
 
     doctor_parser = subparsers.add_parser(
         "doctor",
@@ -1452,9 +1453,7 @@ def build_parser() -> argparse.ArgumentParser:
     doctor_parser.add_argument(
         "--network",
         type=Path,
-        help=(
-            "explicit network manifest path; defaults to ./networks/<profile.network>/manifest.json"
-        ),
+        help=("network manifest; defaults to ./networks/<profile.network>/manifest.json"),
     )
     doctor_parser.add_argument(
         "--stack-dir",

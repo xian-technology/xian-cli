@@ -148,7 +148,7 @@
     "block_policy_mode": "idle_interval",
     "block_policy_interval": "2s",
     "statesync": {
-      "enable": true,
+      "enable": false,
       "rpc_servers": [
         "http://localhost:26657",
         "http://localhost:26667"

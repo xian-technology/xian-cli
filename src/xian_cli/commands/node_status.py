@@ -5,7 +5,6 @@ from __future__ import annotations
 from collections.abc import Callable
 
 from xian_cli.commands.node_options import service_config
-from xian_cli.state_sync_artifact import HISTORY_BUILD_FIELDS
 
 _RELEASE_BUILD_FIELDS = (
     "python_image",
@@ -94,7 +93,9 @@ def _release_summary(release_manifest: object) -> dict:
             field: build.get(field) for field in _RELEASE_BUILD_FIELDS
         }
         summary["release_manifest_build"].update(
-            {field: build[field] for field in HISTORY_BUILD_FIELDS if field in build}
+            {"cometbft_source_commit": build["cometbft_source_commit"]}
+            if "cometbft_source_commit" in build
+            else {}
         )
     return summary
 

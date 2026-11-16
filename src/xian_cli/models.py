@@ -3,6 +3,7 @@ from __future__ import annotations
 import decimal
 import json
 import math
+import re
 from copy import deepcopy
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
@@ -12,7 +13,6 @@ from xian_runtime_types.encoding import normalize_wire_numbers
 from xian_runtime_types.time import Datetime
 
 from xian_cli.secret_files import secure_write_text
-from xian_cli.state_sync_artifact import normalize_history_build
 
 SCHEMA_VERSION = 1
 SUPPORTED_BLOCK_POLICY_MODES = {"on_demand", "idle_interval", "periodic"}
@@ -387,6 +387,15 @@ def _normalize_release_components(components_raw: object, key: str) -> dict[str,
     return components
 
 
+def _normalize_upstream_source_commit(build: dict) -> dict[str, str]:
+    if "cometbft_source_commit" not in build:
+        return {}
+    commit = build["cometbft_source_commit"]
+    if not isinstance(commit, str) or re.fullmatch(r"[0-9a-f]{40}", commit) is None:
+        raise ValueError("cometbft_source_commit must be a lowercase 40-character hex string")
+    return {"cometbft_source_commit": commit}
+
+
 def _normalize_node_release_manifest(
     payload: dict,
     key: str,
@@ -416,7 +425,7 @@ def _normalize_node_release_manifest(
         "s6_overlay_aarch64_sha256": _require_sha256(build_raw, "s6_overlay_aarch64_sha256"),
     }
 
-    build.update(normalize_history_build(build_raw))
+    build.update(_normalize_upstream_source_commit(build_raw))
 
     images_raw = value.get("images")
     if not isinstance(images_raw, dict):
@@ -859,19 +868,6 @@ def _normalize_advanced_statesync(statesync: dict) -> dict:
     statesync_trust_height = _require_non_negative_int(statesync, "trust_height", default=0)
     statesync_trust_hash = _require_optional_str(statesync, "trust_hash") or ""
     statesync_trust_period = _require_str(statesync, "trust_period")
-    if statesync_enabled:
-        if len(statesync_servers) < 2:
-            raise ValueError(
-                "advanced.statesync.rpc_servers must include at least two "
-                "servers when state sync is enabled"
-            )
-        if statesync_trust_height <= 0:
-            raise ValueError(
-                "advanced.statesync.trust_height must be greater than zero "
-                "when state sync is enabled"
-            )
-        if not statesync_trust_hash:
-            raise ValueError("advanced.statesync.trust_hash is required when state sync is enabled")
     return {
         "enabled": statesync_enabled,
         "rpc_servers": statesync_servers,

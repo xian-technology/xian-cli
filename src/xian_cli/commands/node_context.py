@@ -19,6 +19,7 @@ from xian_cli.runtime import (
     fetch_json,
     get_xian_stack_node_status,
     resolve_stack_dir,
+    run_backend_command,
 )
 
 
@@ -276,19 +277,67 @@ def _resolve_effective_snapshot_signing_keys(
 
 
 def _require_stopped_node(*, stack_dir: Path, home: Path, profile: dict, network: dict) -> None:
-    """Refuse to replace node data while the stack runtime may still use it."""
+    """Require a successful status query before reading or replacing node stores."""
     status = get_xian_stack_node_status(
         stack_dir=stack_dir,
         cometbft_home=home,
         **_stack_runtime_profile_kwargs(profile, network),
     )
-    # A running container counts even when its processes crash-loop: it
-    # restarts into whatever data the restore leaves behind.
-    if status.get("runtime_services_running") or status.get("backend_running"):
+    if (
+        not isinstance(status, dict)
+        or status.get("runtime_status_known") is not True
+        or not isinstance(status.get("compose_services"), list)
+    ):
+        raise RuntimeError("cannot verify stopped runtime status; fix the status query first")
+    # Aggregated flags can miss a partially running split runtime. Paused,
+    # restarting or unknown containers are also not proof of a stopped node.
+    if (
+        status.get("runtime_services_running") is not False
+        or status.get("backend_running") is not False
+        or not all(_snapshot_service_stopped(service) for service in status["compose_services"])
+    ):
         raise RuntimeError(
-            f"node {profile['name']} is running; stop it with "
-            f"`xian node stop {profile['name']}` before restoring a snapshot"
+            f"node {profile['name']} may be running; stop it with "
+            f"`xian node stop {profile['name']}` and verify its stopped status "
+            "before exporting or restoring a snapshot"
         )
+    _require_global_stopped_home(stack_dir=stack_dir, home=home, profile=profile, network=network)
+
+
+def _snapshot_service_stopped(service: object) -> bool:
+    return isinstance(service, dict) and service.get("state") in {"exited", "created"}
+
+
+def _require_global_stopped_home(*, stack_dir: Path, home: Path, profile: dict, network: dict):
+    proof = run_backend_command(
+        stack_dir,
+        "node-store-snapshot-check-stopped",
+        cometbft_home=home,
+        **_stack_runtime_profile_kwargs(profile, network),
+        snapshot_options={"home": str(home)},
+    )
+    if not isinstance(proof, dict) or proof.get("runtime_stopped") is not True:
+        raise RuntimeError("cannot verify global stopped-home status proof")
+    proof_home = proof.get("home")
+    if not isinstance(proof_home, str) or Path(proof_home) != home.resolve():
+        raise RuntimeError("global stopped-home status proof does not match the requested home")
+
+
+def _snapshot_store_inspector(*, stack_dir: Path, home: Path, profile: dict, network: dict):
+    def inspect(db_dir: Path, db_backend: str, genesis_file: Path) -> dict:
+        return run_backend_command(
+            stack_dir,
+            "node-store-snapshot-inspect",
+            cometbft_home=home,
+            **_stack_runtime_profile_kwargs(profile, network),
+            snapshot_options={
+                "db_dir": str(db_dir),
+                "db_backend": db_backend,
+                "genesis_file": str(genesis_file),
+            },
+        )
+
+    return inspect
 
 
 def _restore_snapshot(
@@ -342,6 +391,12 @@ def _restore_snapshot(
         home,
         trusted_manifest_public_keys=snapshot_signing_keys,
         expected_chain_id=network.get("chain_id"),
+        native_store_inspector=_snapshot_store_inspector(
+            stack_dir=resolve_stack_dir(base_dir, explicit=stack_dir),
+            home=home,
+            profile=profile,
+            network=network,
+        ),
     )
     return {
         "home": str(home),

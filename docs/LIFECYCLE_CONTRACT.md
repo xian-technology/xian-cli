@@ -23,6 +23,7 @@ Primary commands:
 - `xian node health`
 - `xian recovery validate`
 - `xian recovery apply`
+- `xian snapshot export`
 - `xian snapshot restore`
 - `xian doctor`
 
@@ -38,6 +39,7 @@ Command intent:
 - `node init` performs all preparation stages needed before startup.
 - `node status` reports local bootstrap state, backend runtime state, and
   optional live RPC status.
+- `snapshot export` writes a signed full-node-store archive and manifest from a stopped nonvalidator.
 - `snapshot restore` applies the effective snapshot source to an initialized
   node home.
 - `doctor` checks workspace prerequisites and optional node prerequisites.
@@ -45,27 +47,22 @@ Command intent:
 
 `node init` should hide most of the current manual steps. It is the boundary between persisted intent and generated runtime state.
 
-### State-Sync Artifact Intent
+### Supported Bootstrap and Upstream Provenance
 
-Release manifest schema 1 preserves `build.cometbft_source_commit` (40 lowercase
-hex characters), `cometbft_patch_path` (a file under
-`docker/cometbft-patches/` ending in `.patch`), `cometbft_patch_sha256` (64
-lowercase hex characters), and `cometbft_history_revision` (the string `"1"`).
-If any of these fields is present, all must be valid. History revision 1 uses
-CometBFT `0.40.0`, its official commit-specific codeload URL, and a lowercase
-source SHA256. Status preserves these fields in `release_manifest_build`.
-Legacy manifests without them remain usable for ordinary replay.
+Xian uses unmodified upstream CometBFT. P2P application state sync is disabled.
+Initialization rejects enabled state-sync profile intent; a rendered
+`[statesync].enable = true` is rejected by startup, doctor, health, and deployment, including startup with
+`--skip-health-check`. Health returns a nonzero exit code and reports
+`statesync.state: "unsupported"` with the supported alternatives. Use replay
+from genesis or a verified full-node-store snapshot. `node stop` remains usable
+for an existing profile with unsupported state-sync intent.
 
-When the rendered CometBFT configuration enables state sync, startup requires
-complete trust settings and this intended build identity. Registry profiles
-use the profile release manifest before the network release manifest. Local
-builds use the selected stack's `release-manifest.json`. `node health` and
-`doctor` report `statesync.history_bootstrap` with `configured` and
-`metadata_only: true`; missing identity makes otherwise complete trust settings
-`unsupported_artifact`. `--skip-health-check` does not bypass startup's
-configuration check. These fields describe the expected build, not proof of
-the running binary. The application's private capability handshake and
-authenticated historical bootstrap remain the security boundary.
+Release manifest schema 1 preserves optional `build.cometbft_source_commit`
+(40 lowercase hex characters) alongside the existing source URL/SHA256 and
+release source version. Status preserves that source commit. Legacy ordinary
+replay manifests without it remain readable. Custom patch/history fields are
+not part of this upstream artifact contract. Provenance describes configured
+source intent and is not running-binary attestation.
 
 ## Internal Lifecycle Stages
 
@@ -179,11 +176,47 @@ backend for the node's runtime state first and refuse to run while its runtime
 containers are up, even if the node processes are crash-looping. Stop the node
 with `xian node stop <name>` before restoring.
 
+The normal configured network snapshot flow accepts signed manifest version 2
+with `snapshot_kind: "full_node_store"`. The canonical `xian-abci` verifier binds
+chain/genesis, height, application hash, block hash, archive and unpacked sizes,
+and the full application/CometBFT checkpoint before publication. The archive
+contains `data/` and `xian/`; recipient keys/configuration and signing state
+are preserved. `snapshot_signing_keys` is an explicit trusted-publisher
+boundary, not proof of replay from genesis. Legacy v1 manifests, unpinned raw or
+incomplete archives, and application-only SnapshotManager exports are rejected
+for node bootstrap; offline application import/export APIs remain separate.
+Existing explicitly trusted `expected_sha256` backend/recovery-plan input can
+instead authorize a raw full-store archive, subject to the same complete
+verification and resource limits. A self-declared archive hash is not trusted.
+
+`snapshot export` takes the same node context flags as restore plus required
+`--archive-output`, `--manifest-output`, `--snapshot-url` (the publication URL),
+and `--signing-key-file`. It writes local output only, dispatching the selected
+node image's offline exporter and readonly inspector. Key bytes are handled by
+the lower-level exporter, never embedded in CLI arguments or output.
+
+Export, restore and recovery require a positively known stopped runtime. Failed
+status queries and partially running, paused, restarting or unknown Compose
+services are refused; a known-empty fresh runtime is allowed. Recovery checks
+this after the optional stop command, before reading the home for backup or
+restoring; `--skip-stop` does not bypass the proof. The image-backed native
+inspector receives staged data, database backend and recipient genesis so the
+central verifier can compare CometBFT's cached genesis as well as local files.
+
 `recovery apply` backs up the complete node home before restoring unless
 `--skip-backup` is set. Backups contain private validator and node keys: on POSIX
 systems the backup directory uses mode `0700` and each archive uses mode `0600`.
 Every backup has a unique filename, including repeated recovery attempts within
 the same second.
+
+Recovery plans keep an explicit manual incident policy: `target_height`,
+`trusted_block_hash`, and `trusted_app_hash` are not automatically compared to
+the restored checkpoint. The plan layer checks chain consistency and, when
+live RPC is available, that the live height is at least the target. The canonical
+verifier checks the archive's own full-store checkpoint and trust inputs.
+Operators must compare that checkpoint with the incident plan before using
+`--yes` or starting the restored node; JSON output retains
+`requires_manual_hash_confirmation: true` and the manual hash fields.
 
 ### 9. Process Start and Health Checks
 

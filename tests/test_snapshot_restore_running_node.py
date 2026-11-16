@@ -3,9 +3,10 @@
 import io
 from contextlib import redirect_stdout
 from types import SimpleNamespace
-from unittest.mock import Mock, patch
+from unittest.mock import ANY, Mock, patch
 
 import pytest
+from snapshot_test_support import stopped_home_proof
 
 from xian_cli.cli import main
 
@@ -55,13 +56,17 @@ def initialized_node(tmp_path):
 
 def restore(node, status):
     apply_snapshot = Mock(return_value="snapshot.tar.gz")
-    node_status = Mock(return_value=status)
+    # A successful stopped/running observation is distinct from an unknown query.
+    node_status = Mock(
+        return_value={"runtime_status_known": True, "compose_services": [], **status}
+    )
     with (
         patch(
             "xian_cli.commands.node_context.get_node_admin_module",
             return_value=SimpleNamespace(apply_snapshot_archive=apply_snapshot),
         ),
         patch("xian_cli.commands.node_context.get_xian_stack_node_status", node_status),
+        patch("xian_cli.commands.node_context.run_backend_command", side_effect=stopped_home_proof),
         redirect_stdout(io.StringIO()),
     ):
         try:
@@ -98,6 +103,7 @@ def test_snapshot_restore_proceeds_once_the_node_is_stopped(initialized_node):
         initialized_node.home,
         trusted_manifest_public_keys=["b" * 64],
         expected_chain_id="local-dev-1",
+        native_store_inspector=ANY,
     )
 
 
@@ -126,7 +132,7 @@ def test_snapshot_restore_checks_the_default_stack_when_the_profile_has_none(tmp
     )
     node = SimpleNamespace(base_dir=tmp_path)
 
-    with pytest.raises(RuntimeError, match="is running"):
+    with pytest.raises(RuntimeError, match="stop"):
         restore(node, {"runtime_services_running": True})
 
     assert node.node_status.call_args.kwargs["stack_dir"] == (tmp_path / "xian-stack").resolve()

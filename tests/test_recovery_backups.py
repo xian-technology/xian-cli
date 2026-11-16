@@ -2,9 +2,13 @@ import os
 import stat
 import tarfile
 from datetime import UTC, datetime
+from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import Mock
 
 import pytest
 
+from xian_cli.commands import recovery
 from xian_cli.commands.recovery import _build_recovery_backup
 
 
@@ -77,3 +81,27 @@ def test_failed_recovery_backup_removes_partial_archive(tmp_path):
         )
 
     assert list(backup_dir.iterdir()) == []
+
+
+@pytest.mark.parametrize("skip", [False, True])
+def test_recovery_backup_uses_base_directory_and_respects_skip(tmp_path, monkeypatch, skip):
+    builder = Mock(return_value=tmp_path / "selected/archive.tar.gz")
+    monkeypatch.setattr(recovery, "_build_recovery_backup", builder)
+    result = recovery._backup_before_recovery(
+        SimpleNamespace(skip_backup=skip, backup_dir=Path("selected")),
+        base_dir=tmp_path,
+        home=tmp_path / "home",
+        plan_name="plan",
+        node_name="node",
+    )
+    if skip:
+        assert result is None
+        builder.assert_not_called()
+    else:
+        assert result == tmp_path / "selected/archive.tar.gz"
+        builder.assert_called_once_with(
+            home=tmp_path / "home",
+            backup_dir=tmp_path / "selected",
+            plan_name="plan",
+            node_name="node",
+        )

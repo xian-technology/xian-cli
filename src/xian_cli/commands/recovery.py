@@ -11,12 +11,16 @@ from xian_cli.abci_bridge import get_node_admin_module
 from xian_cli.commands.common import _stack_runtime_profile_kwargs
 from xian_cli.commands.node_context import (
     _load_profile_and_network,
+    _require_stopped_node,
+    _resolve_effective_snapshot_signing_keys,
     _resolve_home,
     _resolve_stack_dir_from_profile,
+    _snapshot_store_inspector,
 )
 from xian_cli.models import read_recovery_plan
 from xian_cli.runtime import (
     fetch_json,
+    resolve_stack_dir,
     start_xian_stack_node,
     stop_xian_stack_node,
 )
@@ -167,6 +171,19 @@ def _handle_recovery_validate(args: argparse.Namespace) -> int:
     return 0
 
 
+def _backup_before_recovery(args, *, base_dir: Path, home: Path, plan_name: str, node_name: str):
+    if args.skip_backup:
+        return None
+    backup_dir = args.backup_dir
+    if backup_dir is None:
+        backup_dir = base_dir / "recovery-backups"
+    if not backup_dir.is_absolute():
+        backup_dir = (base_dir / backup_dir).resolve()
+    return _build_recovery_backup(
+        home=home, backup_dir=backup_dir, plan_name=plan_name, node_name=node_name
+    )
+
+
 def _handle_recovery_apply(args: argparse.Namespace) -> int:
     if not args.yes:
         raise ValueError("recovery apply is destructive; pass --yes after reviewing the plan")
@@ -213,43 +230,35 @@ def _handle_recovery_apply(args: argparse.Namespace) -> int:
         print(json.dumps(payload, indent=2))
         return 0
 
+    stack_dir = resolve_stack_dir(base_dir, explicit=stack_dir)
     stop_result = None
     if not args.skip_stop:
-        if stack_dir is None:
-            raise ValueError(
-                "recovery apply requires a resolved xian-stack directory unless --skip-stop is used"
-            )
         stop_result = stop_xian_stack_node(
             stack_dir=stack_dir,
             cometbft_home=home,
             **_stack_runtime_profile_kwargs(profile, network),
         )
-
-    backup_archive = None
-    if not args.skip_backup:
-        backup_dir = args.backup_dir
-        if backup_dir is None:
-            backup_dir = base_dir / "recovery-backups"
-        if not backup_dir.is_absolute():
-            backup_dir = (base_dir / backup_dir).resolve()
-        backup_archive = _build_recovery_backup(
-            home=home,
-            backup_dir=backup_dir,
-            plan_name=plan["name"],
-            node_name=profile["name"],
-        )
+    _require_stopped_node(stack_dir=stack_dir, home=home, profile=profile, network=network)
+    backup_archive = _backup_before_recovery(
+        args, base_dir=base_dir, home=home, plan_name=plan["name"], node_name=profile["name"]
+    )
 
     node_admin = get_node_admin_module()
     snapshot_archive_name = node_admin.apply_snapshot_archive(
         plan["artifact"]["uri"],
         home,
         expected_sha256=plan["artifact"].get("sha256"),
+        trusted_manifest_public_keys=_resolve_effective_snapshot_signing_keys(
+            profile=profile, network=network
+        ),
+        expected_chain_id=network.get("chain_id"),
+        native_store_inspector=_snapshot_store_inspector(
+            stack_dir=stack_dir, home=home, profile=profile, network=network
+        ),
     )
 
     start_result = None
     if args.start_node:
-        if stack_dir is None:
-            raise ValueError("--start-node requires a resolved xian-stack directory")
         start_result = start_xian_stack_node(
             stack_dir=stack_dir,
             cometbft_home=home,
