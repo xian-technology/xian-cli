@@ -9,6 +9,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from xian.node_defaults import DEFAULT_BLOCK_POLICY_INTERVAL, DEFAULT_BLOCK_POLICY_MODE
+
 from xian_cli.commands.catalog import _load_template
 from xian_cli.commands.common import _pick_template_value
 from xian_cli.commands.network import _handle_network_create, _handle_network_join
@@ -299,14 +301,20 @@ def _resolve_block_policy(
         _pick_template_value(
             args.block_policy_mode,
             template.get("block_policy_mode") if template is not None else None,
-            network.get("block_policy_mode", "on_demand") if network is not None else "on_demand",
+            network.get("block_policy_mode", DEFAULT_BLOCK_POLICY_MODE)
+            if network is not None
+            else DEFAULT_BLOCK_POLICY_MODE,
         )
     )
     default_interval = str(
         _pick_template_value(
             args.block_policy_interval,
             template.get("block_policy_interval") if template is not None else None,
-            (network.get("block_policy_interval", "0s") if network is not None else "0s"),
+            (
+                network.get("block_policy_interval", DEFAULT_BLOCK_POLICY_INTERVAL)
+                if network is not None
+                else DEFAULT_BLOCK_POLICY_INTERVAL
+            ),
         )
     )
     source = _block_policy_source(args=args, template=template, network=network)

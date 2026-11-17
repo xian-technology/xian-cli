@@ -104,6 +104,10 @@ the policy as `fee_policy` in its manifest and every `node init` builds it into
 genesis; a generated genesis carries it directly. Joining nodes cannot choose
 it, and node profiles or `xian.toml` that set fee keys are rejected.
 
+Node profiles start with the shared node defaults, apply template choices and
+explicit flags, and save the resolved values. Existing explicit profile values
+stay fixed; fields omitted from a profile receive the installed release's defaults.
+
 Block production defaults come from the selected network template or manifest.
 For on-demand local development, use `--block-policy-mode on_demand`; for
 scheduled empty blocks, pass both a mode and empty-block interval:

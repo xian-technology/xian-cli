@@ -7,6 +7,8 @@ import shutil
 from datetime import UTC, datetime
 from pathlib import Path
 
+from xian.node_defaults import DEFAULT_BLOCK_POLICY_INTERVAL, DEFAULT_BLOCK_POLICY_MODE
+
 from xian_cli.abci_bridge import get_node_setup_module
 from xian_cli.commands.catalog import _load_template
 from xian_cli.commands.common import (
@@ -369,12 +371,12 @@ def _network_manifest(
         block_policy_mode=_pick_template_value(
             args.block_policy_mode,
             None if template is None else template.get("block_policy_mode"),
-            "on_demand",
+            DEFAULT_BLOCK_POLICY_MODE,
         ),
         block_policy_interval=_pick_template_value(
             args.block_policy_interval,
             None if template is None else template.get("block_policy_interval"),
-            "0s",
+            DEFAULT_BLOCK_POLICY_INTERVAL,
         ),
         node_image_mode=node_image_mode,
         node_integrated_image=node_integrated_image,
@@ -712,12 +714,12 @@ def _handle_network_join(args: argparse.Namespace) -> int:
         block_policy_mode=_pick_template_value(
             args.block_policy_mode,
             None if template is None else template.get("block_policy_mode"),
-            network.get("block_policy_mode", "on_demand"),
+            network.get("block_policy_mode", DEFAULT_BLOCK_POLICY_MODE),
         ),
         block_policy_interval=_pick_template_value(
             args.block_policy_interval,
             None if template is None else template.get("block_policy_interval"),
-            network.get("block_policy_interval", "0s"),
+            network.get("block_policy_interval", DEFAULT_BLOCK_POLICY_INTERVAL),
         ),
         **build_profile_runtime_fields(
             args=args,

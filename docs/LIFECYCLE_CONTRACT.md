@@ -358,6 +358,14 @@ Rules:
   manifest's `fee_policy` or writes it into a generated genesis; `node init` passes the manifest
   `fee_policy` to the bundle genesis builder. A `source` genesis manifest must
   not carry `fee_policy`, and node profiles must not set fee keys
+- ordinary node settings use the same shared baseline as runtime configuration;
+  templates specify intentional overrides, and explicit CLI flags win. Profile
+  creation saves the resolved values. Loading an existing profile preserves
+  explicit values; omitted fields receive the installed release's shared
+  defaults. An explicit `"simulation_max_chi": null` keeps the chain cap in charge
+- BDS profile host/user/RPC placeholders continue to defer to the backend;
+  password paths belong to the backend. Metrics profile host/port values
+  describe host publication, independently of the container listener
 - templates may provide defaults for tracing, bootstrap validator names, BDS,
   dashboard exposure, monitoring,
   `xian-intentkit` exposure, `xian-dex-automation` exposure, and pruning, but

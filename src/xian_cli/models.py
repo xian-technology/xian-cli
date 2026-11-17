@@ -8,6 +8,14 @@ from copy import deepcopy
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
+from xian.node_defaults import (
+    COMETBFT_DEFAULTS,
+    DEFAULT_ABCI_PROXY_APP,
+    DEFAULT_BLOCK_POLICY_INTERVAL,
+    DEFAULT_BLOCK_POLICY_MODE,
+    RUNTIME_DEFAULTS,
+)
+from xian.services.bds.config import BdsConfig
 from xian_runtime_types.decimal import ContractingDecimal
 from xian_runtime_types.encoding import normalize_wire_numbers
 from xian_runtime_types.time import Datetime
@@ -68,27 +76,31 @@ DEFAULT_P2P = {
     "persistent_peers": [],
 }
 
+_BDS_DEFAULTS = BdsConfig()
+
 DEFAULT_SERVICES = {
     "bds": {
-        "enabled": False,
-        "dsn": "",
+        # Empty connection fields defer to the backend deployment context.
+        # Secret paths remain backend-owned and are never saved in profiles.
+        "enabled": RUNTIME_DEFAULTS.bds_enabled,
+        "dsn": _BDS_DEFAULTS.dsn or "",
         "host": "",
-        "port": 5432,
-        "database": "xian",
+        "port": _BDS_DEFAULTS.port,
+        "database": _BDS_DEFAULTS.database,
         "user": "",
-        "pool_min_size": 1,
-        "pool_max_size": 10,
-        "statement_timeout_ms": 0,
-        "acquire_timeout_ms": 10000,
-        "application_name": "xian-bds",
-        "queue_max_size": 128,
-        "catchup_enabled": True,
-        "catchup_poll_seconds": 1.0,
+        "pool_min_size": _BDS_DEFAULTS.pool_min_size,
+        "pool_max_size": _BDS_DEFAULTS.pool_max_size,
+        "statement_timeout_ms": _BDS_DEFAULTS.statement_timeout_ms,
+        "acquire_timeout_ms": _BDS_DEFAULTS.acquire_timeout_ms,
+        "application_name": _BDS_DEFAULTS.application_name,
+        "queue_max_size": _BDS_DEFAULTS.queue_max_size,
+        "catchup_enabled": _BDS_DEFAULTS.catchup_enabled,
+        "catchup_poll_seconds": _BDS_DEFAULTS.catchup_poll_seconds,
         "rpc_url": None,
-        "spool_dir": "",
-        "spool_warn_entries": 256,
-        "spool_warn_bytes": 536_870_912,
-        "disk_free_warn_bytes": 2_147_483_648,
+        "spool_dir": _BDS_DEFAULTS.spool_dir or "",
+        "spool_warn_entries": _BDS_DEFAULTS.spool_warn_entries,
+        "spool_warn_bytes": _BDS_DEFAULTS.spool_warn_bytes,
+        "disk_free_warn_bytes": _BDS_DEFAULTS.disk_free_warn_bytes,
     },
     "dashboard": {
         "enabled": False,
@@ -122,33 +134,33 @@ DEFAULT_SERVICES = {
 # node-specific and live only in node profiles.
 DEFAULT_TEMPLATE_SERVICES = {
     **DEFAULT_SERVICES,
-    "bds": {"enabled": False},
+    "bds": {"enabled": RUNTIME_DEFAULTS.bds_enabled},
 }
 
 DEFAULT_ADVANCED_RUNTIME = {
     "cometbft": {
-        "allow_cors": True,
-        "prometheus": True,
-        "proxy_app": "unix:///tmp/abci.sock",
-        # host:port peers dial (CometBFT p2p.external_address); "" = unset.
-        "external_address": "",
+        "allow_cors": bool(COMETBFT_DEFAULTS["rpc"]["cors_allowed_origins"]),
+        "prometheus": COMETBFT_DEFAULTS["instrumentation"]["prometheus"],
+        "proxy_app": DEFAULT_ABCI_PROXY_APP,
+        "external_address": COMETBFT_DEFAULTS["p2p"]["external_address"],
     },
     "statesync": {
-        "enabled": False,
-        "rpc_servers": [],
-        "trust_height": 0,
-        "trust_hash": "",
-        "trust_period": "168h0m0s",
+        "enabled": COMETBFT_DEFAULTS["statesync"]["enable"],
+        "rpc_servers": list(filter(None, COMETBFT_DEFAULTS["statesync"]["rpc_servers"].split(","))),
+        "trust_height": COMETBFT_DEFAULTS["statesync"]["trust_height"],
+        "trust_hash": COMETBFT_DEFAULTS["statesync"]["trust_hash"],
+        "trust_period": COMETBFT_DEFAULTS["statesync"]["trust_period"],
     },
     "metrics": {
-        "enabled": True,
-        "host": "127.0.0.1",
-        "port": 9108,
-        "bds_refresh_seconds": 5.0,
+        "enabled": RUNTIME_DEFAULTS.metrics_enabled,
+        # Profile metrics addresses describe host publication, not the container listener.
+        "host": RUNTIME_DEFAULTS.metrics_host,
+        "port": RUNTIME_DEFAULTS.metrics_port,
+        "bds_refresh_seconds": RUNTIME_DEFAULTS.metrics_bds_refresh_seconds,
     },
     "pending_nonce": {
-        "reservation_ttl_seconds": 60.0,
-        "max_per_sender": 128,
+        "reservation_ttl_seconds": RUNTIME_DEFAULTS.pending_nonce_reservation_ttl_seconds,
+        "max_per_sender": RUNTIME_DEFAULTS.max_pending_nonces_per_sender,
     },
 }
 
@@ -318,10 +330,13 @@ def _require_positive_int_no_default(payload: dict, key: str) -> int:
     return value
 
 
-def _require_optional_positive_int(payload: dict, key: str) -> int | None:
-    if payload.get(key) is None:
+def _require_optional_positive_int(
+    payload: dict, key: str, *, default: int | None = None
+) -> int | None:
+    value = payload.get(key, default)
+    if value is None:
         return None
-    return _require_positive_int_no_default(payload, key)
+    return _require_positive_int_no_default({key: value}, key)
 
 
 def _require_str_list(payload: dict, key: str) -> list[str]:
@@ -657,21 +672,21 @@ def _validate_node_image_config(
 
 
 def _require_block_policy_mode(payload: dict, key: str) -> str:
-    value = payload.get(key, "on_demand")
+    value = payload.get(key, DEFAULT_BLOCK_POLICY_MODE)
     if not isinstance(value, str) or value not in SUPPORTED_BLOCK_POLICY_MODES:
         raise ValueError(f"{key} must be one of {sorted(SUPPORTED_BLOCK_POLICY_MODES)}")
     return value
 
 
 def _require_block_policy_interval(payload: dict, key: str) -> str:
-    value = payload.get(key, "0s")
+    value = payload.get(key, DEFAULT_BLOCK_POLICY_INTERVAL)
     if not isinstance(value, str) or not value:
         raise ValueError(f"{key} must be a non-empty string")
     return value
 
 
 def _require_app_log_level(payload: dict, key: str) -> str:
-    value = payload.get(key, "INFO")
+    value = payload.get(key, RUNTIME_DEFAULTS.app_log_level)
     if not isinstance(value, str):
         raise ValueError(f"{key} must be a string")
     normalized = value.upper()
@@ -742,36 +757,66 @@ def _normalize_bds_service(payload: dict, key: str) -> dict:
         label=key,
     )
     value = _merge_defaults(DEFAULT_SERVICES["bds"], payload)
-    pool_min_size = _require_non_negative_int(value, "pool_min_size", default=1)
-    pool_max_size = _require_positive_int(value, "pool_max_size", default=10)
+    pool_min_size = _require_non_negative_int(
+        value, "pool_min_size", default=_BDS_DEFAULTS.pool_min_size
+    )
+    pool_max_size = _require_positive_int(
+        value, "pool_max_size", default=_BDS_DEFAULTS.pool_max_size
+    )
     if pool_min_size > pool_max_size:
         raise ValueError(f"{key}.pool_min_size must be <= pool_max_size")
-    catchup_poll_seconds = _require_float(value, "catchup_poll_seconds", default=1.0)
+    catchup_poll_seconds = _require_float(
+        value,
+        "catchup_poll_seconds",
+        default=_BDS_DEFAULTS.catchup_poll_seconds,
+    )
     if catchup_poll_seconds <= 0:
         raise ValueError(f"{key}.catchup_poll_seconds must be greater than zero")
     return {
-        "enabled": _require_bool(value, "enabled", default=False),
+        "enabled": _require_bool(value, "enabled", default=RUNTIME_DEFAULTS.bds_enabled),
         "dsn": _require_optional_str(value, "dsn") or "",
         "host": _require_optional_str(value, "host") or "",
-        "port": _require_port(value, "port", default=5432),
+        "port": _require_port(value, "port", default=_BDS_DEFAULTS.port),
         "database": _require_str(value, "database"),
         "user": _require_optional_str(value, "user") or "",
         "pool_min_size": pool_min_size,
         "pool_max_size": pool_max_size,
-        "statement_timeout_ms": _require_non_negative_int(value, "statement_timeout_ms", default=0),
-        "acquire_timeout_ms": _require_non_negative_int(value, "acquire_timeout_ms", default=10000),
+        "statement_timeout_ms": _require_non_negative_int(
+            value,
+            "statement_timeout_ms",
+            default=_BDS_DEFAULTS.statement_timeout_ms,
+        ),
+        "acquire_timeout_ms": _require_non_negative_int(
+            value,
+            "acquire_timeout_ms",
+            default=_BDS_DEFAULTS.acquire_timeout_ms,
+        ),
         "application_name": _require_str(value, "application_name"),
-        "queue_max_size": _require_positive_int(value, "queue_max_size", default=128),
-        "catchup_enabled": _require_bool(value, "catchup_enabled", default=True),
+        "queue_max_size": _require_positive_int(
+            value, "queue_max_size", default=_BDS_DEFAULTS.queue_max_size
+        ),
+        "catchup_enabled": _require_bool(
+            value,
+            "catchup_enabled",
+            default=_BDS_DEFAULTS.catchup_enabled,
+        ),
         "catchup_poll_seconds": catchup_poll_seconds,
         "rpc_url": _require_optional_str(value, "rpc_url"),
         "spool_dir": _require_optional_str(value, "spool_dir") or "",
-        "spool_warn_entries": _require_non_negative_int(value, "spool_warn_entries", default=256),
+        "spool_warn_entries": _require_non_negative_int(
+            value,
+            "spool_warn_entries",
+            default=_BDS_DEFAULTS.spool_warn_entries,
+        ),
         "spool_warn_bytes": _require_non_negative_int(
-            value, "spool_warn_bytes", default=536_870_912
+            value,
+            "spool_warn_bytes",
+            default=_BDS_DEFAULTS.spool_warn_bytes,
         ),
         "disk_free_warn_bytes": _require_non_negative_int(
-            value, "disk_free_warn_bytes", default=2_147_483_648
+            value,
+            "disk_free_warn_bytes",
+            default=_BDS_DEFAULTS.disk_free_warn_bytes,
         ),
     }
 
@@ -807,15 +852,23 @@ def _normalize_services(
     return {
         "bds": _normalize_bds_service(raw.get("bds") or {}, "services.bds"),
         "dashboard": {
-            "enabled": _require_bool(dashboard, "enabled", default=False),
+            "enabled": _require_bool(
+                dashboard, "enabled", default=DEFAULT_SERVICES["dashboard"]["enabled"]
+            ),
             "host": _require_str(dashboard, "host"),
-            "port": _require_port(dashboard, "port", default=8080),
+            "port": _require_port(dashboard, "port", default=DEFAULT_SERVICES["dashboard"]["port"]),
         },
         "monitoring": {
-            "enabled": _require_bool(raw.get("monitoring") or {}, "enabled", default=False),
+            "enabled": _require_bool(
+                raw.get("monitoring") or {},
+                "enabled",
+                default=DEFAULT_SERVICES["monitoring"]["enabled"],
+            ),
         },
         "intentkit": {
-            "enabled": _require_bool(intentkit, "enabled", default=False),
+            "enabled": _require_bool(
+                intentkit, "enabled", default=DEFAULT_SERVICES["intentkit"]["enabled"]
+            ),
             "network_id": _require_optional_choice(
                 intentkit,
                 "network_id",
@@ -823,19 +876,27 @@ def _normalize_services(
                 default=intentkit.get("network_id"),
             ),
             "host": _require_str(intentkit, "host"),
-            "port": _require_port(intentkit, "port", default=38000),
-            "api_port": _require_port(intentkit, "api_port", default=38080),
+            "port": _require_port(intentkit, "port", default=DEFAULT_SERVICES["intentkit"]["port"]),
+            "api_port": _require_port(
+                intentkit, "api_port", default=DEFAULT_SERVICES["intentkit"]["api_port"]
+            ),
         },
         "dex_automation": {
-            "enabled": _require_bool(dex, "enabled", default=False),
+            "enabled": _require_bool(
+                dex, "enabled", default=DEFAULT_SERVICES["dex_automation"]["enabled"]
+            ),
             "host": _require_str(dex, "host"),
-            "port": _require_port(dex, "port", default=38280),
+            "port": _require_port(dex, "port", default=DEFAULT_SERVICES["dex_automation"]["port"]),
             "config": _require_optional_str(dex, "config"),
         },
         "shielded_relayer": {
-            "enabled": _require_bool(relayer, "enabled", default=False),
+            "enabled": _require_bool(
+                relayer, "enabled", default=DEFAULT_SERVICES["shielded_relayer"]["enabled"]
+            ),
             "host": _require_str(relayer, "host"),
-            "port": _require_port(relayer, "port", default=38180),
+            "port": _require_port(
+                relayer, "port", default=DEFAULT_SERVICES["shielded_relayer"]["port"]
+            ),
         },
     }
 
@@ -855,17 +916,25 @@ def _normalize_template_services(payload: dict) -> dict:
 
 def _normalize_advanced_cometbft(cometbft: dict) -> dict:
     return {
-        "allow_cors": _require_bool(cometbft, "allow_cors", default=True),
-        "prometheus": _require_bool(cometbft, "prometheus", default=True),
+        "allow_cors": _require_bool(
+            cometbft, "allow_cors", default=DEFAULT_ADVANCED_RUNTIME["cometbft"]["allow_cors"]
+        ),
+        "prometheus": _require_bool(
+            cometbft, "prometheus", default=DEFAULT_ADVANCED_RUNTIME["cometbft"]["prometheus"]
+        ),
         "proxy_app": _require_str(cometbft, "proxy_app"),
         "external_address": _require_text(cometbft, "external_address"),
     }
 
 
 def _normalize_advanced_statesync(statesync: dict) -> dict:
-    statesync_enabled = _require_bool(statesync, "enabled", default=False)
+    statesync_enabled = _require_bool(
+        statesync, "enabled", default=DEFAULT_ADVANCED_RUNTIME["statesync"]["enabled"]
+    )
     statesync_servers = _require_str_list(statesync, "rpc_servers")
-    statesync_trust_height = _require_non_negative_int(statesync, "trust_height", default=0)
+    statesync_trust_height = _require_non_negative_int(
+        statesync, "trust_height", default=DEFAULT_ADVANCED_RUNTIME["statesync"]["trust_height"]
+    )
     statesync_trust_hash = _require_optional_str(statesync, "trust_hash") or ""
     statesync_trust_period = _require_str(statesync, "trust_period")
     return {
@@ -900,24 +969,38 @@ def _normalize_advanced_runtime(payload: dict) -> dict:
     pending_nonce = _merge_defaults(
         DEFAULT_ADVANCED_RUNTIME["pending_nonce"], raw.get("pending_nonce")
     )
-    metrics_refresh = _require_float(metrics, "bds_refresh_seconds", default=5.0)
+    metrics_refresh = _require_float(
+        metrics, "bds_refresh_seconds", default=RUNTIME_DEFAULTS.metrics_bds_refresh_seconds
+    )
     if metrics_refresh <= 0:
         raise ValueError("advanced.metrics.bds_refresh_seconds must be greater than zero")
-    pending_nonce_ttl = _require_float(pending_nonce, "reservation_ttl_seconds", default=60.0)
+    pending_nonce_ttl = _require_float(
+        pending_nonce,
+        "reservation_ttl_seconds",
+        default=RUNTIME_DEFAULTS.pending_nonce_reservation_ttl_seconds,
+    )
     if pending_nonce_ttl < 0:
         raise ValueError("advanced.pending_nonce.reservation_ttl_seconds must be non-negative")
     return {
         "cometbft": _normalize_advanced_cometbft(cometbft),
         "statesync": _normalize_advanced_statesync(statesync),
         "metrics": {
-            "enabled": _require_bool(metrics, "enabled", default=True),
+            "enabled": _require_bool(
+                metrics, "enabled", default=DEFAULT_ADVANCED_RUNTIME["metrics"]["enabled"]
+            ),
             "host": _require_str(metrics, "host"),
-            "port": _require_port(metrics, "port", default=9108),
+            "port": _require_port(
+                metrics, "port", default=DEFAULT_ADVANCED_RUNTIME["metrics"]["port"]
+            ),
             "bds_refresh_seconds": metrics_refresh,
         },
         "pending_nonce": {
             "reservation_ttl_seconds": pending_nonce_ttl,
-            "max_per_sender": _require_positive_int(pending_nonce, "max_per_sender", default=128),
+            "max_per_sender": _require_positive_int(
+                pending_nonce,
+                "max_per_sender",
+                default=DEFAULT_ADVANCED_RUNTIME["pending_nonce"]["max_per_sender"],
+            ),
         },
     }
 
@@ -995,8 +1078,12 @@ def normalize_network_manifest(payload: dict) -> dict:
 
 
 def _normalize_app_log_budgets(payload: dict) -> dict[str, int]:
-    file_mb = _require_positive_int(payload, "app_log_max_file_mb", default=50)
-    total_mb = _require_positive_int(payload, "app_log_max_total_mb", default=250)
+    file_mb = _require_positive_int(
+        payload, "app_log_max_file_mb", default=RUNTIME_DEFAULTS.app_log_max_file_mb
+    )
+    total_mb = _require_positive_int(
+        payload, "app_log_max_total_mb", default=RUNTIME_DEFAULTS.app_log_max_total_mb
+    )
     if total_mb < file_mb:
         raise ValueError("app_log_max_total_mb must be at least app_log_max_file_mb")
     return {"app_log_max_file_mb": file_mb, "app_log_max_total_mb": total_mb}
@@ -1074,32 +1161,44 @@ def normalize_node_profile(payload: dict) -> dict:
         "snapshot_url": _require_optional_str(payload, "snapshot_url"),
         "snapshot_signing_keys": _require_str_list(payload, "snapshot_signing_keys"),
         "home": _require_optional_str(payload, "home"),
-        "pruning_enabled": _require_bool(payload, "pruning_enabled", default=False),
-        "blocks_to_keep": _require_positive_int(payload, "blocks_to_keep", default=100000),
+        "pruning_enabled": _require_bool(
+            payload, "pruning_enabled", default=RUNTIME_DEFAULTS.pruning_enabled
+        ),
+        "blocks_to_keep": _require_positive_int(
+            payload, "blocks_to_keep", default=RUNTIME_DEFAULTS.blocks_to_keep
+        ),
         "block_policy_mode": _require_block_policy_mode(payload, "block_policy_mode"),
         "block_policy_interval": _require_block_policy_interval(payload, "block_policy_interval"),
         "transaction_trace_logging": _require_bool(
-            payload, "transaction_trace_logging", default=False
+            payload, "transaction_trace_logging", default=RUNTIME_DEFAULTS.transaction_trace_logging
         ),
         "app_log_level": _require_app_log_level(payload, "app_log_level"),
-        "app_log_json": _require_bool(payload, "app_log_json", default=False),
+        "app_log_json": _require_bool(
+            payload, "app_log_json", default=RUNTIME_DEFAULTS.app_log_json
+        ),
         "app_log_rotation_hours": _require_positive_int(
-            payload, "app_log_rotation_hours", default=1
+            payload, "app_log_rotation_hours", default=RUNTIME_DEFAULTS.app_log_rotation_hours
         ),
         "app_log_retention_days": _require_positive_int(
-            payload, "app_log_retention_days", default=7
+            payload, "app_log_retention_days", default=RUNTIME_DEFAULTS.app_log_retention_days
         ),
         **_normalize_app_log_budgets(payload),
-        "simulation_enabled": _require_bool(payload, "simulation_enabled", default=True),
+        "simulation_enabled": _require_bool(
+            payload, "simulation_enabled", default=RUNTIME_DEFAULTS.simulation_enabled
+        ),
         "simulation_max_concurrency": _require_positive_int(
-            payload, "simulation_max_concurrency", default=2
+            payload,
+            "simulation_max_concurrency",
+            default=RUNTIME_DEFAULTS.simulation_max_concurrency,
         ),
         "simulation_timeout_ms": _require_positive_int(
-            payload, "simulation_timeout_ms", default=3000
+            payload, "simulation_timeout_ms", default=RUNTIME_DEFAULTS.simulation_timeout_ms
         ),
         # Optional operator cap on one readonly simulation. Unset, the node
         # simulates with the chain's max_tx_chi; a value only ever lowers it.
-        "simulation_max_chi": _require_optional_positive_int(payload, "simulation_max_chi"),
+        "simulation_max_chi": _require_optional_positive_int(
+            payload, "simulation_max_chi", default=RUNTIME_DEFAULTS.simulation_max_chi
+        ),
         "operator_profile": _require_optional_choice(
             payload,
             "operator_profile",
@@ -1159,27 +1258,35 @@ def normalize_network_template(payload: dict) -> dict:
         "block_policy_mode": _require_block_policy_mode(payload, "block_policy_mode"),
         "block_policy_interval": _require_block_policy_interval(payload, "block_policy_interval"),
         "transaction_trace_logging": _require_bool(
-            payload, "transaction_trace_logging", default=False
+            payload, "transaction_trace_logging", default=RUNTIME_DEFAULTS.transaction_trace_logging
         ),
         "app_log_level": _require_app_log_level(payload, "app_log_level"),
-        "app_log_json": _require_bool(payload, "app_log_json", default=False),
+        "app_log_json": _require_bool(
+            payload, "app_log_json", default=RUNTIME_DEFAULTS.app_log_json
+        ),
         "app_log_rotation_hours": _require_positive_int(
-            payload, "app_log_rotation_hours", default=1
+            payload, "app_log_rotation_hours", default=RUNTIME_DEFAULTS.app_log_rotation_hours
         ),
         "app_log_retention_days": _require_positive_int(
-            payload, "app_log_retention_days", default=7
+            payload, "app_log_retention_days", default=RUNTIME_DEFAULTS.app_log_retention_days
         ),
         **_normalize_app_log_budgets(payload),
-        "simulation_enabled": _require_bool(payload, "simulation_enabled", default=True),
+        "simulation_enabled": _require_bool(
+            payload, "simulation_enabled", default=RUNTIME_DEFAULTS.simulation_enabled
+        ),
         "simulation_max_concurrency": _require_positive_int(
-            payload, "simulation_max_concurrency", default=2
+            payload,
+            "simulation_max_concurrency",
+            default=RUNTIME_DEFAULTS.simulation_max_concurrency,
         ),
         "simulation_timeout_ms": _require_positive_int(
-            payload, "simulation_timeout_ms", default=3000
+            payload, "simulation_timeout_ms", default=RUNTIME_DEFAULTS.simulation_timeout_ms
         ),
         # Optional operator cap on one readonly simulation. Unset, the node
         # simulates with the chain's max_tx_chi; a value only ever lowers it.
-        "simulation_max_chi": _require_optional_positive_int(payload, "simulation_max_chi"),
+        "simulation_max_chi": _require_optional_positive_int(
+            payload, "simulation_max_chi", default=RUNTIME_DEFAULTS.simulation_max_chi
+        ),
         "tx_fee_mode": _require_tx_fee_mode(payload, "tx_fee_mode"),
         # Unset caps fall back to the chain defaults when genesis is built.
         **{name: _require_optional_positive_int(payload, name) for name in CHI_CAP_FIELDS},
@@ -1192,8 +1299,12 @@ def normalize_network_template(payload: dict) -> dict:
         "additional_validator_names": _require_str_list(payload, "additional_validator_names"),
         "services": _normalize_template_services(payload),
         "advanced": _normalize_advanced_runtime(payload),
-        "pruning_enabled": _require_bool(payload, "pruning_enabled", default=False),
-        "blocks_to_keep": _require_positive_int(payload, "blocks_to_keep", default=100000),
+        "pruning_enabled": _require_bool(
+            payload, "pruning_enabled", default=RUNTIME_DEFAULTS.pruning_enabled
+        ),
+        "blocks_to_keep": _require_positive_int(
+            payload, "blocks_to_keep", default=RUNTIME_DEFAULTS.blocks_to_keep
+        ),
     }
 
 
@@ -1279,8 +1390,8 @@ class NetworkManifest:
     snapshot_url: str | None = None
     snapshot_signing_keys: list[str] = field(default_factory=list)
     p2p: dict = field(default_factory=lambda: deepcopy(DEFAULT_P2P))
-    block_policy_mode: str = "on_demand"
-    block_policy_interval: str = "0s"
+    block_policy_mode: str = DEFAULT_BLOCK_POLICY_MODE
+    block_policy_interval: str = DEFAULT_BLOCK_POLICY_INTERVAL
     schema_version: int = SCHEMA_VERSION
 
     def to_dict(self) -> dict:
@@ -1303,21 +1414,21 @@ class NodeProfile:
     snapshot_url: str | None = None
     snapshot_signing_keys: list[str] = field(default_factory=list)
     home: str | None = None
-    pruning_enabled: bool = False
-    blocks_to_keep: int = 100000
-    block_policy_mode: str = "on_demand"
-    block_policy_interval: str = "0s"
-    transaction_trace_logging: bool = False
-    app_log_level: str = "INFO"
-    app_log_json: bool = False
-    app_log_rotation_hours: int = 1
-    app_log_retention_days: int = 7
-    app_log_max_file_mb: int = 50
-    app_log_max_total_mb: int = 250
-    simulation_enabled: bool = True
-    simulation_max_concurrency: int = 2
-    simulation_timeout_ms: int = 3000
-    simulation_max_chi: int | None = None
+    pruning_enabled: bool = RUNTIME_DEFAULTS.pruning_enabled
+    blocks_to_keep: int = RUNTIME_DEFAULTS.blocks_to_keep
+    block_policy_mode: str = DEFAULT_BLOCK_POLICY_MODE
+    block_policy_interval: str = DEFAULT_BLOCK_POLICY_INTERVAL
+    transaction_trace_logging: bool = RUNTIME_DEFAULTS.transaction_trace_logging
+    app_log_level: str = RUNTIME_DEFAULTS.app_log_level
+    app_log_json: bool = RUNTIME_DEFAULTS.app_log_json
+    app_log_rotation_hours: int = RUNTIME_DEFAULTS.app_log_rotation_hours
+    app_log_retention_days: int = RUNTIME_DEFAULTS.app_log_retention_days
+    app_log_max_file_mb: int = RUNTIME_DEFAULTS.app_log_max_file_mb
+    app_log_max_total_mb: int = RUNTIME_DEFAULTS.app_log_max_total_mb
+    simulation_enabled: bool = RUNTIME_DEFAULTS.simulation_enabled
+    simulation_max_concurrency: int = RUNTIME_DEFAULTS.simulation_max_concurrency
+    simulation_timeout_ms: int = RUNTIME_DEFAULTS.simulation_timeout_ms
+    simulation_max_chi: int | None = RUNTIME_DEFAULTS.simulation_max_chi
     operator_profile: str | None = None
     services: dict = field(default_factory=lambda: deepcopy(DEFAULT_SERVICES))
     advanced: dict = field(default_factory=lambda: deepcopy(DEFAULT_ADVANCED_RUNTIME))
@@ -1332,19 +1443,19 @@ class NetworkTemplate:
     name: str
     display_name: str
     description: str
-    block_policy_mode: str = "on_demand"
-    block_policy_interval: str = "0s"
-    transaction_trace_logging: bool = False
-    app_log_level: str = "INFO"
-    app_log_json: bool = False
-    app_log_rotation_hours: int = 1
-    app_log_retention_days: int = 7
-    app_log_max_file_mb: int = 50
-    app_log_max_total_mb: int = 250
-    simulation_enabled: bool = True
-    simulation_max_concurrency: int = 2
-    simulation_timeout_ms: int = 3000
-    simulation_max_chi: int | None = None
+    block_policy_mode: str = DEFAULT_BLOCK_POLICY_MODE
+    block_policy_interval: str = DEFAULT_BLOCK_POLICY_INTERVAL
+    transaction_trace_logging: bool = RUNTIME_DEFAULTS.transaction_trace_logging
+    app_log_level: str = RUNTIME_DEFAULTS.app_log_level
+    app_log_json: bool = RUNTIME_DEFAULTS.app_log_json
+    app_log_rotation_hours: int = RUNTIME_DEFAULTS.app_log_rotation_hours
+    app_log_retention_days: int = RUNTIME_DEFAULTS.app_log_retention_days
+    app_log_max_file_mb: int = RUNTIME_DEFAULTS.app_log_max_file_mb
+    app_log_max_total_mb: int = RUNTIME_DEFAULTS.app_log_max_total_mb
+    simulation_enabled: bool = RUNTIME_DEFAULTS.simulation_enabled
+    simulation_max_concurrency: int = RUNTIME_DEFAULTS.simulation_max_concurrency
+    simulation_timeout_ms: int = RUNTIME_DEFAULTS.simulation_timeout_ms
+    simulation_max_chi: int | None = RUNTIME_DEFAULTS.simulation_max_chi
     tx_fee_mode: str = DEFAULT_TX_FEE_MODE
     max_tx_chi: int | None = None
     max_block_chi: int | None = None
@@ -1353,8 +1464,8 @@ class NetworkTemplate:
     additional_validator_names: list[str] = field(default_factory=list)
     services: dict = field(default_factory=lambda: deepcopy(DEFAULT_TEMPLATE_SERVICES))
     advanced: dict = field(default_factory=lambda: deepcopy(DEFAULT_ADVANCED_RUNTIME))
-    pruning_enabled: bool = False
-    blocks_to_keep: int = 100000
+    pruning_enabled: bool = RUNTIME_DEFAULTS.pruning_enabled
+    blocks_to_keep: int = RUNTIME_DEFAULTS.blocks_to_keep
     schema_version: int = SCHEMA_VERSION
 
     def to_dict(self) -> dict:

@@ -5,6 +5,8 @@ from collections.abc import Callable, Mapping
 from copy import deepcopy
 from typing import Any
 
+from xian.node_defaults import RUNTIME_DEFAULTS
+
 from xian_cli.models import (
     DEFAULT_ADVANCED_RUNTIME,
     DEFAULT_SERVICES,
@@ -151,7 +153,7 @@ def build_profile_runtime_fields(
             "pruning_enabled",
             "enable_pruning",
             "pruning_enabled",
-            False,
+            RUNTIME_DEFAULTS.pruning_enabled,
             False,
             None,
         ),
@@ -159,7 +161,7 @@ def build_profile_runtime_fields(
             "blocks_to_keep",
             "blocks_to_keep",
             "blocks_to_keep",
-            100000,
+            RUNTIME_DEFAULTS.blocks_to_keep,
             False,
             None,
         ),
@@ -167,7 +169,7 @@ def build_profile_runtime_fields(
             "transaction_trace_logging",
             "transaction_trace_logging",
             "transaction_trace_logging",
-            False,
+            RUNTIME_DEFAULTS.transaction_trace_logging,
             False,
             None,
         ),
@@ -175,16 +177,23 @@ def build_profile_runtime_fields(
             "app_log_level",
             "app_log_level",
             "app_log_level",
-            "INFO",
+            RUNTIME_DEFAULTS.app_log_level,
             False,
             None,
         ),
-        ("app_log_json", "app_log_json", "app_log_json", False, False, None),
+        (
+            "app_log_json",
+            "app_log_json",
+            "app_log_json",
+            RUNTIME_DEFAULTS.app_log_json,
+            False,
+            None,
+        ),
         (
             "app_log_rotation_hours",
             "app_log_rotation_hours",
             "app_log_rotation_hours",
-            1,
+            RUNTIME_DEFAULTS.app_log_rotation_hours,
             False,
             validate_positive_int,
         ),
@@ -192,7 +201,7 @@ def build_profile_runtime_fields(
             "app_log_max_file_mb",
             "app_log_max_file_mb",
             "app_log_max_file_mb",
-            50,
+            RUNTIME_DEFAULTS.app_log_max_file_mb,
             False,
             validate_positive_int,
         ),
@@ -200,7 +209,7 @@ def build_profile_runtime_fields(
             "app_log_max_total_mb",
             "app_log_max_total_mb",
             "app_log_max_total_mb",
-            250,
+            RUNTIME_DEFAULTS.app_log_max_total_mb,
             False,
             validate_positive_int,
         ),
@@ -208,7 +217,7 @@ def build_profile_runtime_fields(
             "app_log_retention_days",
             "app_log_retention_days",
             "app_log_retention_days",
-            7,
+            RUNTIME_DEFAULTS.app_log_retention_days,
             False,
             validate_positive_int,
         ),
@@ -216,7 +225,7 @@ def build_profile_runtime_fields(
             "simulation_enabled",
             "simulation_enabled",
             "simulation_enabled",
-            True,
+            RUNTIME_DEFAULTS.simulation_enabled,
             False,
             None,
         ),
@@ -224,7 +233,7 @@ def build_profile_runtime_fields(
             "simulation_max_concurrency",
             "simulation_max_concurrency",
             "simulation_max_concurrency",
-            2,
+            RUNTIME_DEFAULTS.simulation_max_concurrency,
             False,
             validate_positive_int,
         ),
@@ -232,7 +241,7 @@ def build_profile_runtime_fields(
             "simulation_timeout_ms",
             "simulation_timeout_ms",
             "simulation_timeout_ms",
-            3000,
+            RUNTIME_DEFAULTS.simulation_timeout_ms,
             False,
             validate_positive_int,
         ),
@@ -240,7 +249,7 @@ def build_profile_runtime_fields(
             "simulation_max_chi",
             "simulation_max_chi",
             "simulation_max_chi",
-            None,
+            RUNTIME_DEFAULTS.simulation_max_chi,
             False,
             validate_optional_positive_int,
         ),
@@ -276,7 +285,9 @@ def build_profile_runtime_fields(
         field_name="services.bds.enabled",
         arg_name="enable_bds",
         template_key="unused",
-        default=_service_template_value(template, "bds", "enabled", False),
+        default=_service_template_value(
+            template, "bds", "enabled", DEFAULT_SERVICES["bds"]["enabled"]
+        ),
         runtime_only=True,
     )
     services["dashboard"]["enabled"] = _profile_field_value(
@@ -286,7 +297,9 @@ def build_profile_runtime_fields(
         field_name="services.dashboard.enabled",
         arg_name="enable_dashboard",
         template_key="unused",
-        default=_service_template_value(template, "dashboard", "enabled", False),
+        default=_service_template_value(
+            template, "dashboard", "enabled", DEFAULT_SERVICES["dashboard"]["enabled"]
+        ),
         runtime_only=True,
     )
     services["dashboard"]["host"] = _profile_field_value(
@@ -296,7 +309,9 @@ def build_profile_runtime_fields(
         field_name="services.dashboard.host",
         arg_name="dashboard_host",
         template_key="unused",
-        default=_service_template_value(template, "dashboard", "host", "127.0.0.1"),
+        default=_service_template_value(
+            template, "dashboard", "host", DEFAULT_SERVICES["dashboard"]["host"]
+        ),
         runtime_only=True,
     )
     services["dashboard"]["port"] = _profile_field_value(
@@ -306,7 +321,9 @@ def build_profile_runtime_fields(
         field_name="services.dashboard.port",
         arg_name="dashboard_port",
         template_key="unused",
-        default=_service_template_value(template, "dashboard", "port", 8080),
+        default=_service_template_value(
+            template, "dashboard", "port", DEFAULT_SERVICES["dashboard"]["port"]
+        ),
         runtime_only=True,
     )
     services["monitoring"]["enabled"] = _profile_field_value(
@@ -316,7 +333,9 @@ def build_profile_runtime_fields(
         field_name="services.monitoring.enabled",
         arg_name="enable_monitoring",
         template_key="unused",
-        default=_service_template_value(template, "monitoring", "enabled", False),
+        default=_service_template_value(
+            template, "monitoring", "enabled", DEFAULT_SERVICES["monitoring"]["enabled"]
+        ),
         runtime_only=True,
     )
     services["intentkit"]["enabled"] = _profile_field_value(
@@ -326,7 +345,9 @@ def build_profile_runtime_fields(
         field_name="services.intentkit.enabled",
         arg_name="enable_intentkit",
         template_key="unused",
-        default=_service_template_value(template, "intentkit", "enabled", False),
+        default=_service_template_value(
+            template, "intentkit", "enabled", DEFAULT_SERVICES["intentkit"]["enabled"]
+        ),
         runtime_only=True,
     )
     services["intentkit"]["network_id"] = _profile_field_value(
@@ -351,7 +372,9 @@ def build_profile_runtime_fields(
         field_name="services.intentkit.host",
         arg_name="intentkit_host",
         template_key="unused",
-        default=_service_template_value(template, "intentkit", "host", "127.0.0.1"),
+        default=_service_template_value(
+            template, "intentkit", "host", DEFAULT_SERVICES["intentkit"]["host"]
+        ),
         runtime_only=True,
     )
     services["intentkit"]["port"] = _profile_field_value(
@@ -361,7 +384,9 @@ def build_profile_runtime_fields(
         field_name="services.intentkit.port",
         arg_name="intentkit_port",
         template_key="unused",
-        default=_service_template_value(template, "intentkit", "port", 38000),
+        default=_service_template_value(
+            template, "intentkit", "port", DEFAULT_SERVICES["intentkit"]["port"]
+        ),
         runtime_only=True,
     )
     services["intentkit"]["api_port"] = _profile_field_value(
@@ -371,7 +396,9 @@ def build_profile_runtime_fields(
         field_name="services.intentkit.api_port",
         arg_name="intentkit_api_port",
         template_key="unused",
-        default=_service_template_value(template, "intentkit", "api_port", 38080),
+        default=_service_template_value(
+            template, "intentkit", "api_port", DEFAULT_SERVICES["intentkit"]["api_port"]
+        ),
         runtime_only=True,
     )
     services["dex_automation"]["enabled"] = _profile_field_value(
@@ -381,7 +408,9 @@ def build_profile_runtime_fields(
         field_name="services.dex_automation.enabled",
         arg_name="enable_dex_automation",
         template_key="unused",
-        default=_service_template_value(template, "dex_automation", "enabled", False),
+        default=_service_template_value(
+            template, "dex_automation", "enabled", DEFAULT_SERVICES["dex_automation"]["enabled"]
+        ),
         runtime_only=True,
     )
     services["dex_automation"]["host"] = _profile_field_value(
@@ -391,7 +420,9 @@ def build_profile_runtime_fields(
         field_name="services.dex_automation.host",
         arg_name="dex_automation_host",
         template_key="unused",
-        default=_service_template_value(template, "dex_automation", "host", "127.0.0.1"),
+        default=_service_template_value(
+            template, "dex_automation", "host", DEFAULT_SERVICES["dex_automation"]["host"]
+        ),
         runtime_only=True,
     )
     services["dex_automation"]["port"] = _profile_field_value(
@@ -401,7 +432,9 @@ def build_profile_runtime_fields(
         field_name="services.dex_automation.port",
         arg_name="dex_automation_port",
         template_key="unused",
-        default=_service_template_value(template, "dex_automation", "port", 38280),
+        default=_service_template_value(
+            template, "dex_automation", "port", DEFAULT_SERVICES["dex_automation"]["port"]
+        ),
         runtime_only=True,
     )
     services["dex_automation"]["config"] = _profile_field_value(
@@ -421,7 +454,9 @@ def build_profile_runtime_fields(
         field_name="services.shielded_relayer.enabled",
         arg_name="enable_shielded_relayer",
         template_key="unused",
-        default=_service_template_value(template, "shielded_relayer", "enabled", False),
+        default=_service_template_value(
+            template, "shielded_relayer", "enabled", DEFAULT_SERVICES["shielded_relayer"]["enabled"]
+        ),
         runtime_only=True,
     )
     services["shielded_relayer"]["host"] = _profile_field_value(
@@ -431,7 +466,9 @@ def build_profile_runtime_fields(
         field_name="services.shielded_relayer.host",
         arg_name="shielded_relayer_host",
         template_key="unused",
-        default=_service_template_value(template, "shielded_relayer", "host", "127.0.0.1"),
+        default=_service_template_value(
+            template, "shielded_relayer", "host", DEFAULT_SERVICES["shielded_relayer"]["host"]
+        ),
         runtime_only=True,
     )
     services["shielded_relayer"]["port"] = _profile_field_value(
@@ -441,7 +478,9 @@ def build_profile_runtime_fields(
         field_name="services.shielded_relayer.port",
         arg_name="shielded_relayer_port",
         template_key="unused",
-        default=_service_template_value(template, "shielded_relayer", "port", 38180),
+        default=_service_template_value(
+            template, "shielded_relayer", "port", DEFAULT_SERVICES["shielded_relayer"]["port"]
+        ),
         runtime_only=True,
     )
     fields["services"] = services
