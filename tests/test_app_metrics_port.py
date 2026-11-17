@@ -20,6 +20,9 @@ PROFILE = {"advanced": {"metrics": {"host": "10.0.0.5", "port": 39108}}}
 
 
 class _MetricsOptions:
+    enabled = True
+    bds_refresh_seconds = 5.0
+
     def __init__(self, **values: object) -> None:
         self.values = values
 

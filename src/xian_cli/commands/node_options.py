@@ -48,13 +48,14 @@ def _peer_values(profile: dict, network: dict, name: str) -> tuple[str, ...]:
 
 
 def state_sync_options(node_setup: ModuleType, profile: dict) -> StateSyncOptions:
+    defaults = node_setup.StateSyncOptions()
     settings = profile_config(profile, "advanced", "statesync")
     return node_setup.StateSyncOptions(
-        enable=bool(settings.get("enabled", False)),
+        enable=bool(settings.get("enabled", defaults.enable)),
         rpc_servers=tuple(settings.get("rpc_servers") or ()),
-        trust_height=int(settings.get("trust_height", 0)),
-        trust_hash=str(settings.get("trust_hash", "")),
-        trust_period=str(settings.get("trust_period", "168h0m0s")),
+        trust_height=int(settings.get("trust_height", defaults.trust_height)),
+        trust_hash=str(settings.get("trust_hash", defaults.trust_hash)),
+        trust_period=str(settings.get("trust_period", defaults.trust_period)),
     )
 
 
@@ -71,36 +72,42 @@ def app_metrics_host_address(profile: dict) -> str:
 
 
 def metrics_options(node_setup: ModuleType, profile: dict) -> MetricsOptions:
+    defaults = node_setup.MetricsOptions()
     settings = profile_config(profile, "advanced", "metrics")
     return node_setup.MetricsOptions(
-        enabled=bool(settings.get("enabled", True)),
+        enabled=bool(settings.get("enabled", defaults.enabled)),
         host=APP_METRICS_CONTAINER_HOST,
         port=APP_METRICS_CONTAINER_PORT,
-        bds_refresh_seconds=float(settings.get("bds_refresh_seconds", 5.0)),
+        bds_refresh_seconds=float(
+            settings.get("bds_refresh_seconds", defaults.bds_refresh_seconds)
+        ),
     )
 
 
 def app_logging_options(node_setup: ModuleType, profile: dict) -> AppLoggingOptions:
+    defaults = node_setup.AppLoggingOptions()
     return node_setup.AppLoggingOptions(
-        level=str(profile.get("app_log_level", "INFO")),
-        json_logging=bool(profile.get("app_log_json", False)),
-        rotation_hours=int(profile.get("app_log_rotation_hours", 1)),
-        retention_days=int(profile.get("app_log_retention_days", 7)),
-        max_file_mb=int(profile.get("app_log_max_file_mb", 50)),
-        max_total_mb=int(profile.get("app_log_max_total_mb", 250)),
+        level=str(profile.get("app_log_level", defaults.level)),
+        json_logging=bool(profile.get("app_log_json", defaults.json_logging)),
+        rotation_hours=int(profile.get("app_log_rotation_hours", defaults.rotation_hours)),
+        retention_days=int(profile.get("app_log_retention_days", defaults.retention_days)),
+        max_file_mb=int(profile.get("app_log_max_file_mb", defaults.max_file_mb)),
+        max_total_mb=int(profile.get("app_log_max_total_mb", defaults.max_total_mb)),
     )
 
 
 def simulation_options(node_setup: ModuleType, profile: dict) -> SimulationOptions:
+    defaults = node_setup.SimulationOptions()
     return node_setup.SimulationOptions(
-        enabled=bool(profile.get("simulation_enabled", True)),
-        max_concurrency=int(profile.get("simulation_max_concurrency", 2)),
-        timeout_ms=int(profile.get("simulation_timeout_ms", 3000)),
-        max_chi=profile.get("simulation_max_chi"),
+        enabled=bool(profile.get("simulation_enabled", defaults.enabled)),
+        max_concurrency=int(profile.get("simulation_max_concurrency", defaults.max_concurrency)),
+        timeout_ms=int(profile.get("simulation_timeout_ms", defaults.timeout_ms)),
+        max_chi=profile.get("simulation_max_chi", defaults.max_chi),
     )
 
 
 def bds_options(node_setup: ModuleType, profile: dict) -> BdsOptions:
+    defaults = node_setup.BdsOptions()
     settings = profile_config(profile, "services", "bds")
     # An unset host, user or catch-up RPC URL leaves the backend's default in
     # place: the xian-stack Postgres service and the node's own RPC. The
@@ -110,61 +117,76 @@ def bds_options(node_setup: ModuleType, profile: dict) -> BdsOptions:
         key: str(settings[key]) for key in ("host", "user", "rpc_url") if settings.get(key)
     }
     return node_setup.BdsOptions(
-        dsn=str(settings.get("dsn", "")),
-        port=int(settings.get("port", 5432)),
-        database=str(settings.get("database", "xian")),
+        dsn=str(settings.get("dsn", defaults.dsn)),
+        port=int(settings.get("port", defaults.port)),
+        database=str(settings.get("database", defaults.database)),
         **connection,
-        pool_min_size=int(settings.get("pool_min_size", 1)),
-        pool_max_size=int(settings.get("pool_max_size", 10)),
-        statement_timeout_ms=int(settings.get("statement_timeout_ms", 0)),
-        acquire_timeout_ms=int(settings.get("acquire_timeout_ms", 10000)),
-        application_name=str(settings.get("application_name", "xian-bds")),
-        queue_max_size=int(settings.get("queue_max_size", 128)),
-        catchup_enabled=bool(settings.get("catchup_enabled", True)),
-        catchup_poll_seconds=float(settings.get("catchup_poll_seconds", 1.0)),
-        spool_dir=str(settings.get("spool_dir", "")),
-        spool_warn_entries=int(settings.get("spool_warn_entries", 256)),
-        spool_warn_bytes=int(settings.get("spool_warn_bytes", 536_870_912)),
-        disk_free_warn_bytes=int(settings.get("disk_free_warn_bytes", 2_147_483_648)),
+        pool_min_size=int(settings.get("pool_min_size", defaults.pool_min_size)),
+        pool_max_size=int(settings.get("pool_max_size", defaults.pool_max_size)),
+        statement_timeout_ms=int(
+            settings.get("statement_timeout_ms", defaults.statement_timeout_ms)
+        ),
+        acquire_timeout_ms=int(settings.get("acquire_timeout_ms", defaults.acquire_timeout_ms)),
+        application_name=str(settings.get("application_name", defaults.application_name)),
+        queue_max_size=int(settings.get("queue_max_size", defaults.queue_max_size)),
+        catchup_enabled=bool(settings.get("catchup_enabled", defaults.catchup_enabled)),
+        catchup_poll_seconds=float(
+            settings.get("catchup_poll_seconds", defaults.catchup_poll_seconds)
+        ),
+        spool_dir=str(settings.get("spool_dir", defaults.spool_dir)),
+        spool_warn_entries=int(settings.get("spool_warn_entries", defaults.spool_warn_entries)),
+        spool_warn_bytes=int(settings.get("spool_warn_bytes", defaults.spool_warn_bytes)),
+        disk_free_warn_bytes=int(
+            settings.get("disk_free_warn_bytes", defaults.disk_free_warn_bytes)
+        ),
     )
 
 
 def node_config_options(
     node_setup: ModuleType, *, profile: dict, network: dict
 ) -> NodeConfigOptions:
+    defaults = node_setup.NodeConfigOptions(moniker=profile["moniker"])
     advanced_cometbft = profile_config(profile, "advanced", "cometbft")
     advanced_pending_nonce = profile_config(profile, "advanced", "pending_nonce")
     return node_setup.NodeConfigOptions(
         moniker=profile["moniker"],
         p2p_seeds=_peer_values(profile, network, "seeds"),
         p2p_persistent_peers=_peer_values(profile, network, "persistent_peers"),
-        p2p_external_address=str(advanced_cometbft.get("external_address", "")),
-        allow_cors=bool(advanced_cometbft.get("allow_cors", True)),
-        bds_enabled=bool(service_config(profile, "bds").get("enabled")),
-        enable_pruning=bool(profile.get("pruning_enabled")),
-        blocks_to_keep=int(profile.get("blocks_to_keep", 100000)),
+        p2p_external_address=str(
+            advanced_cometbft.get("external_address", defaults.p2p_external_address)
+        ),
+        allow_cors=bool(advanced_cometbft.get("allow_cors", defaults.allow_cors)),
+        bds_enabled=bool(service_config(profile, "bds").get("enabled", defaults.bds_enabled)),
+        enable_pruning=bool(profile.get("pruning_enabled", defaults.enable_pruning)),
+        blocks_to_keep=int(profile.get("blocks_to_keep", defaults.blocks_to_keep)),
         block_policy_mode=str(
             profile.get(
                 "block_policy_mode",
-                network.get("block_policy_mode", "on_demand"),
+                network.get("block_policy_mode", defaults.block_policy_mode),
             )
         ),
         block_policy_interval=str(
             profile.get(
                 "block_policy_interval",
-                network.get("block_policy_interval", "0s"),
+                network.get("block_policy_interval", defaults.block_policy_interval),
             )
         ),
-        transaction_trace_logging=bool(profile.get("transaction_trace_logging", False)),
+        transaction_trace_logging=bool(
+            profile.get("transaction_trace_logging", defaults.transaction_trace_logging)
+        ),
         statesync=state_sync_options(node_setup, profile),
         metrics=metrics_options(node_setup, profile),
         app_logging=app_logging_options(node_setup, profile),
         simulation=simulation_options(node_setup, profile),
         pending_nonce_reservation_ttl_seconds=float(
-            advanced_pending_nonce.get("reservation_ttl_seconds", 60.0)
+            advanced_pending_nonce.get(
+                "reservation_ttl_seconds", defaults.pending_nonce_reservation_ttl_seconds
+            )
         ),
-        max_pending_nonces_per_sender=int(advanced_pending_nonce.get("max_per_sender", 128)),
+        max_pending_nonces_per_sender=int(
+            advanced_pending_nonce.get("max_per_sender", defaults.max_pending_nonces_per_sender)
+        ),
         bds=bds_options(node_setup, profile),
-        proxy_app=str(advanced_cometbft.get("proxy_app", "unix:///tmp/abci.sock")),
-        prometheus=bool(advanced_cometbft.get("prometheus", True)),
+        proxy_app=str(advanced_cometbft.get("proxy_app", defaults.proxy_app)),
+        prometheus=bool(advanced_cometbft.get("prometheus", defaults.prometheus)),
     )
