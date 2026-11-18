@@ -122,12 +122,14 @@ finalized block-time target: observed cadence is still bounded by normal
 CometBFT consensus timing, especially `timeout_commit`, and block execution
 time.
 
-Join a manifest-backed shared network with a local profile:
+Join an operator-supplied manifest-backed network with a local profile
+(`devnet` below is an example installed manifest name):
 
 ```bash
 uv run xian network join devnet-node --network devnet \
   --template single-node-indexed --generate-validator-key \
-  --init-node --restore-snapshot
+  --init-node
+uv run xian node start devnet-node
 uv run xian node health devnet-node
 uv run xian node endpoints devnet-node
 ```
