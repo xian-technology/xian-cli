@@ -45,11 +45,11 @@ def test_non_interactive_join_defaults(tmp_path):
 
     assert (plan.mode, plan.network, plan.name, plan.chain_id) == (
         "join",
-        "testnet",
+        "mainnet",
         "validator-1",
         None,
     )
-    assert plan.template == "single-node-indexed"
+    assert plan.template == "validator"
     assert plan.key_mode == "generate"
     assert plan.validator_key_ref is None
     assert plan.restore_snapshot is False
@@ -92,7 +92,7 @@ def test_explicit_flags_win(tmp_path):
         "--chain-id",
         "lab-9",
         "--preset",
-        "indexed",
+        "validator",
         "--template",
         "single-node-dev",
         "--validator-key-ref",
@@ -161,8 +161,8 @@ def test_inconsistent_setup_flags_are_rejected(tmp_path, flags, message):
 def test_wizard_defaults_join_and_starts(tmp_path):
     plan = plan_for(tmp_path, answers="")
 
-    assert (plan.mode, plan.network, plan.name) == ("join", "testnet", "validator-1")
-    assert plan.template == "single-node-indexed"
+    assert (plan.mode, plan.network, plan.name) == ("join", "mainnet", "validator-1")
+    assert plan.template == "validator"
     assert plan.key_mode == "generate"
     assert plan.restore_snapshot is False
     assert plan.start is True
@@ -173,14 +173,14 @@ def test_wizard_answers_shape_a_local_plan(tmp_path):
 
     assert (plan.mode, plan.network, plan.name) == ("local", "lab", "node-a")
     assert plan.chain_id == "xian-lab-1"
-    assert plan.template == "single-node-indexed"
+    assert plan.template == "validator"
     assert plan.key_mode == "existing"
     assert plan.validator_key_ref == Path("./keys/node-a/validator_key_info.json")
     assert plan.start is False
 
 
 def test_wizard_can_choose_a_snapshot_join(tmp_path):
-    plan = plan_for(tmp_path, answers="join\n\n\nbasic\n\ny\n")
+    plan = plan_for(tmp_path, answers="join\n\n\ndev\n\ny\n")
 
     assert plan.mode == "join"
     assert plan.template == "single-node-dev"

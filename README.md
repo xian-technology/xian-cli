@@ -65,7 +65,7 @@ uv run xian setup node
 For scripted review without changing files:
 
 ```bash
-uv run xian setup node --mode join --network testnet --name validator-1 --plan
+uv run xian setup node --mode join --network mainnet --name validator-1 --plan
 ```
 
 Validator key generation validates both output files before writing either.
@@ -122,22 +122,22 @@ finalized block-time target: observed cadence is still bounded by normal
 CometBFT consensus timing, especially `timeout_commit`, and block execution
 time.
 
-Join an operator-supplied manifest-backed network with a local profile
-(`devnet` below is an example installed manifest name):
+Join a manifest-backed shared network with the lean `validator` template (the
+node and monitoring; BDS, GraphQL and the dashboard stay off):
 
 ```bash
-uv run xian network join devnet-node --network devnet \
-  --template single-node-indexed --generate-validator-key \
+uv run xian network join mainnet-node --network mainnet \
+  --template validator --generate-validator-key \
   --init-node
-uv run xian node start devnet-node
-uv run xian node health devnet-node
-uv run xian node endpoints devnet-node
+uv run xian node start mainnet-node
+uv run xian node health mainnet-node
+uv run xian node endpoints mainnet-node
 ```
 
 Package a clean operator handoff bundle for a network manifest:
 
 ```bash
-uv run xian network package-operator-bundle devnet \
+uv run xian network package-operator-bundle mainnet \
   --bootstrap-seed '<node_id>@<public-host>:26656' \
   --archive
 ```
@@ -150,9 +150,9 @@ a separate channel so participants can check the bundle they received.
 Inspect or recover a configured node:
 
 ```bash
-uv run xian doctor devnet-node
-uv run xian doctor devnet-node --skip-live-checks
-uv run xian snapshot restore devnet-node
+uv run xian doctor mainnet-node
+uv run xian doctor mainnet-node --skip-live-checks
+uv run xian snapshot restore mainnet-node
 ```
 
 Application logs default to seven-day retention, 50 MiB segments and a
@@ -246,21 +246,6 @@ operations to `xian-stack`, and uses `xian-py` for wallet / RPC automation.
 | Validate deployment bundles | `xian contract bundle validate ...` | product or contract repos |
 | Submit contract source | `xian client tx submit-source ...` | product or contract repos, `xian-py` |
 | Script chain interactions | `xian client query/call/simulate/tx ...` | `xian-py` |
-
-The `single-node-indexed` template provides the same indexed and observability
-surface with the `indexed_development` operator posture:
-
-```bash
-uv run xian network template show single-node-indexed
-uv run xian network create local-indexed \
-  --chain-id xian-local-indexed-1 \
-  --template single-node-indexed \
-  --generate-validator-key \
-  --init-node
-uv run xian node start local-indexed
-uv run xian node health local-indexed
-uv run xian node endpoints local-indexed
-```
 
 Product repos own product bootstrap. Use the CLI for generic bundle and
 transaction helpers, then run the product repo's installer:

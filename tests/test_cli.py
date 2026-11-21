@@ -54,8 +54,8 @@ from xian_cli.runtime import (
 
 WORKSPACE_ROOT = Path(__file__).resolve().parents[2]
 TEST_FIXTURE_GENESIS = Path(__file__).resolve().parent / "fixtures" / "genesis.json"
-CANONICAL_DEVNET_MANIFEST = (
-    WORKSPACE_ROOT / "xian-configs" / "networks" / "devnet" / "manifest.json"
+CANONICAL_LOCAL_MANIFEST = (
+    WORKSPACE_ROOT / "xian-configs" / "networks" / "local" / "manifest.json"
 )
 CANONICAL_NODE_RELEASE_MANIFEST = json.loads(
     (WORKSPACE_ROOT / "xian-stack" / "release-manifest.json").read_text(encoding="utf-8")
@@ -279,7 +279,7 @@ class SetupNodeCommandTests(unittest.TestCase):
                         "--name",
                         "validator-1",
                         "--preset",
-                        "indexed",
+                        "validator",
                         "--key-mode",
                         "generate",
                         "--start",
@@ -293,7 +293,7 @@ class SetupNodeCommandTests(unittest.TestCase):
             payload = json.loads(stdout.getvalue())
             self.assertTrue(payload["dry_run"])
             self.assertEqual(payload["mode"], "join")
-            self.assertEqual(payload["template"], "single-node-indexed")
+            self.assertEqual(payload["template"], "validator")
             self.assertEqual(
                 payload["block_policy"],
                 {"mode": "on_demand", "interval": "0s", "source": "template"},
@@ -332,7 +332,7 @@ class SetupNodeCommandTests(unittest.TestCase):
                         "--chain-id",
                         "xian-local-1",
                         "--preset",
-                        "basic",
+                        "dev",
                         "--key-mode",
                         "generate",
                         "--block-policy-mode",
@@ -383,7 +383,7 @@ class SetupNodeCommandTests(unittest.TestCase):
                         "--chain-id",
                         "xian-local-1",
                         "--preset",
-                        "basic",
+                        "dev",
                         "--key-mode",
                         "generate",
                         "--validator-selection-mode",
@@ -421,7 +421,7 @@ class SetupNodeCommandTests(unittest.TestCase):
                             "--chain-id",
                             "xian-local-1",
                             "--preset",
-                            "basic",
+                            "dev",
                             "--key-mode",
                             "generate",
                             "--block-policy-mode",
@@ -449,7 +449,7 @@ class SetupNodeCommandTests(unittest.TestCase):
                             "--name",
                             "validator-1",
                             "--preset",
-                            "indexed",
+                            "validator",
                             "--key-mode",
                             "generate",
                             "--validator-selection-mode",
@@ -490,7 +490,7 @@ class SetupNodeCommandTests(unittest.TestCase):
                         "--name",
                         "validator-1",
                         "--preset",
-                        "indexed",
+                        "validator",
                         "--key-mode",
                         "generate",
                         "--home",
@@ -523,9 +523,9 @@ class SetupNodeCommandTests(unittest.TestCase):
             profile = json.loads(
                 (base_dir / "nodes" / "validator-1.json").read_text(encoding="utf-8")
             )
-            self.assertTrue(profile["services"]["bds"]["enabled"])
+            self.assertFalse(profile["services"]["bds"]["enabled"])
             self.assertEqual(profile["services"]["dashboard"]["host"], "127.0.0.1")
-            self.assertEqual(profile["operator_profile"], "indexed_development")
+            self.assertEqual(profile["operator_profile"], "shared_network")
             # The stack runs the node against its Postgres service; the
             # password is the mounted secret, never a value in xian.toml.
             bds = tomllib.loads((home / "config" / "xian.toml").read_text(encoding="utf-8"))["bds"]
@@ -667,7 +667,7 @@ class SetupNodeCommandTests(unittest.TestCase):
                         "--chain-id",
                         "xian-local-1",
                         "--preset",
-                        "basic",
+                        "dev",
                         "--key-mode",
                         "generate",
                         "--base-dir",
@@ -732,7 +732,7 @@ class SetupNodeCommandTests(unittest.TestCase):
                         "--chain-id",
                         "xian-local-1",
                         "--preset",
-                        "basic",
+                        "dev",
                         "--key-mode",
                         "generate",
                         "--base-dir",
@@ -849,7 +849,7 @@ class SetupNodeCommandTests(unittest.TestCase):
         scenarios = [
             {
                 "name": "intentkit",
-                "preset": "basic",
+                "preset": "dev",
                 "flags": [
                     "--enable-intentkit",
                     "--intentkit-network-id",
@@ -872,7 +872,7 @@ class SetupNodeCommandTests(unittest.TestCase):
             },
             {
                 "name": "dex-automation",
-                "preset": "indexed",
+                "preset": "dev",
                 "flags": [
                     "--enable-dex-automation",
                     "--dex-automation-port",
@@ -893,7 +893,7 @@ class SetupNodeCommandTests(unittest.TestCase):
             },
             {
                 "name": "shielded-relayer",
-                "preset": "basic",
+                "preset": "dev",
                 "flags": [
                     "--enable-shielded-relayer",
                     "--shielded-relayer-port",
@@ -907,7 +907,7 @@ class SetupNodeCommandTests(unittest.TestCase):
             },
             {
                 "name": "all-sidecars",
-                "preset": "indexed",
+                "preset": "dev",
                 "flags": [
                     "--enable-intentkit",
                     "--intentkit-network-id",
@@ -2082,9 +2082,9 @@ class NetworkManifestTests(unittest.TestCase):
             self.assertFalse(manifest_path.exists())
 
     def test_read_network_manifest_accepts_bundle_built_genesis(self) -> None:
-        manifest = read_network_manifest(CANONICAL_DEVNET_MANIFEST)
+        manifest = read_network_manifest(CANONICAL_LOCAL_MANIFEST)
         self.assertEqual(manifest["genesis"]["kind"], "bundle")
-        self.assertEqual(manifest["genesis"]["bundle"], "devnet")
+        self.assertEqual(manifest["genesis"]["bundle"], "local")
         self.assertEqual(
             manifest["genesis"]["genesis_time"],
             "2026-03-30T00:00:00.000000Z",
@@ -2102,7 +2102,7 @@ class NetworkManifestTests(unittest.TestCase):
                         chain_id="xian-privacy-1",
                         genesis={
                             "kind": "bundle",
-                            "bundle": "devnet",
+                            "bundle": "local",
                             "genesis_time": ("2026-03-30T00:00:00.000000Z"),
                         },
                         node_image_mode="local_build",
@@ -2174,11 +2174,11 @@ class NetworkManifestTests(unittest.TestCase):
             configs_dir = base_dir / "xian-configs"
             templates_dir = configs_dir / "templates"
             templates_dir.mkdir(parents=True)
-            (templates_dir / "single-node-indexed.json").write_text(
+            (templates_dir / "validator.json").write_text(
                 json.dumps(
                     {
                         "schema_version": 1,
-                        "name": "single-node-indexed",
+                        "name": "validator",
                         "display_name": "Single-Node Indexed",
                         "description": "Indexed single node",
                         "block_policy_mode": "on_demand",
@@ -2195,7 +2195,7 @@ class NetworkManifestTests(unittest.TestCase):
                         "tx_fee_mode": "free_metered",
                         "max_tx_chi": 150000,
                         "max_block_chi": 1000000,
-                        "operator_profile": "indexed_development",
+                        "operator_profile": "shared_network",
                         "bootstrap_node_name": "validator-1",
                         "additional_validator_names": [],
                         "services": _template_services(
@@ -2231,7 +2231,7 @@ class NetworkManifestTests(unittest.TestCase):
                         "--chain-id",
                         "xian-local-1",
                         "--template",
-                        "single-node-indexed",
+                        "validator",
                         "--generate-validator-key",
                         "--genesis-source",
                         str(TEST_FIXTURE_GENESIS),
@@ -2247,7 +2247,7 @@ class NetworkManifestTests(unittest.TestCase):
                 (base_dir / "nodes" / "validator-1.json").read_text(encoding="utf-8")
             )
 
-            self.assertEqual(result["template"], "single-node-indexed")
+            self.assertEqual(result["template"], "validator")
             self.assertNotIn("tracer_mode", manifest)
             self.assertTrue(profile["services"]["bds"]["enabled"])
             self.assertTrue(profile["transaction_trace_logging"])
@@ -2262,7 +2262,7 @@ class NetworkManifestTests(unittest.TestCase):
             # The external genesis source already fixes the chain fee policy.
             self.assertFalse({"tx_fee_mode", "max_tx_chi"} & set(profile))
             self.assertIsNone(manifest["fee_policy"])
-            self.assertEqual(profile["operator_profile"], "indexed_development")
+            self.assertEqual(profile["operator_profile"], "shared_network")
             self.assertNotIn("monitoring_profile", profile)
             self.assertTrue(profile["services"]["dashboard"]["enabled"])
             self.assertTrue(profile["services"]["monitoring"]["enabled"])
@@ -2445,7 +2445,7 @@ class NetworkManifestTests(unittest.TestCase):
                         "join",
                         "validator-1",
                         "--network",
-                        "devnet",
+                        "local",
                         "--seed",
                         "abc@127.0.0.1:26656",
                         "--enable-bds",
@@ -2462,15 +2462,15 @@ class NetworkManifestTests(unittest.TestCase):
             profile = json.loads(output_path.read_text(encoding="utf-8"))
             self.assertEqual(profile["schema_version"], 1)
             self.assertEqual(profile["name"], "validator-1")
-            self.assertEqual(profile["network"], "devnet")
+            self.assertEqual(profile["network"], "local")
             self.assertEqual(profile["moniker"], "validator-1")
             self.assertEqual(profile["p2p"]["seeds"], ["abc@127.0.0.1:26656"])
             self.assertTrue(profile["services"]["bds"]["enabled"])
             self.assertTrue(profile["services"]["dashboard"]["enabled"])
             self.assertEqual(profile["services"]["dashboard"]["host"], "0.0.0.0")
             self.assertEqual(profile["services"]["dashboard"]["port"], 18080)
-            self.assertEqual(profile["block_policy_mode"], "idle_interval")
-            self.assertEqual(profile["block_policy_interval"], "5s")
+            self.assertEqual(profile["block_policy_mode"], "on_demand")
+            self.assertEqual(profile["block_policy_interval"], "0s")
             self.assertNotIn("tracer_mode", profile)
             self.assertEqual(profile["node_image_mode"], "local_build")
             self.assertIsNone(profile["node_integrated_image"])
@@ -2491,7 +2491,7 @@ class NetworkManifestTests(unittest.TestCase):
                         "--base-dir",
                         str(base_dir),
                         "--network",
-                        "devnet",
+                        "local",
                         "--dry-run",
                     ]
                 )
@@ -2636,11 +2636,11 @@ class NetworkManifestTests(unittest.TestCase):
                 ),
                 encoding="utf-8",
             )
-            (templates_dir / "single-node-indexed.json").write_text(
+            (templates_dir / "validator.json").write_text(
                 json.dumps(
                     {
                         "schema_version": 1,
-                        "name": "single-node-indexed",
+                        "name": "validator",
                         "display_name": "Single-Node Indexed",
                         "description": "Indexed local node defaults",
                         "block_policy_mode": "on_demand",
@@ -2654,7 +2654,7 @@ class NetworkManifestTests(unittest.TestCase):
                         "simulation_max_concurrency": 4,
                         "simulation_timeout_ms": 4000,
                         "simulation_max_chi": 800000,
-                        "operator_profile": "indexed_development",
+                        "operator_profile": "shared_network",
                         "bootstrap_node_name": "validator-1",
                         "additional_validator_names": [],
                         "services": _template_services(
@@ -2685,7 +2685,7 @@ class NetworkManifestTests(unittest.TestCase):
                         "--network",
                         "canonical",
                         "--template",
-                        "single-node-indexed",
+                        "validator",
                         "--output",
                         str(output_path),
                     ]
@@ -2703,7 +2703,7 @@ class NetworkManifestTests(unittest.TestCase):
             self.assertEqual(profile["simulation_max_concurrency"], 4)
             self.assertEqual(profile["simulation_timeout_ms"], 4000)
             self.assertEqual(profile["simulation_max_chi"], 800000)
-            self.assertEqual(profile["operator_profile"], "indexed_development")
+            self.assertEqual(profile["operator_profile"], "shared_network")
             self.assertNotIn("monitoring_profile", profile)
             self.assertTrue(profile["services"]["monitoring"]["enabled"])
             self.assertFalse(profile["services"]["dashboard"]["enabled"])
@@ -2998,7 +2998,7 @@ class NetworkManifestTests(unittest.TestCase):
                         "--base-dir",
                         tmp_dir,
                         "--network",
-                        "devnet",
+                        "local",
                         "--validator-key-dir",
                         "keys/validator-1",
                     ]
@@ -3018,7 +3018,7 @@ class NetworkManifestTests(unittest.TestCase):
                         "--base-dir",
                         tmp_dir,
                         "--network",
-                        "devnet",
+                        "local",
                         "--restore-snapshot",
                     ]
                 )
@@ -3496,7 +3496,7 @@ class NodeInitTests(unittest.TestCase):
                         "--configs-dir",
                         str(WORKSPACE_ROOT / "xian-configs"),
                         "--network",
-                        "devnet",
+                        "local",
                         "--validator-key-ref",
                         str(base_dir / "keys" / "validator-1" / "validator_key_info.json"),
                         "--init-node",
@@ -3514,12 +3514,12 @@ class NodeInitTests(unittest.TestCase):
                 (home / "config" / "genesis.json").read_text(encoding="utf-8")
             )
 
-            self.assertEqual(rendered_genesis["chain_id"], "xian-devnet-1")
+            self.assertEqual(rendered_genesis["chain_id"], "xian-local-1")
             self.assertEqual(
                 result["node_init"]["effective_genesis_source"],
-                "bundle:devnet",
+                "bundle:local",
             )
-            self.assertEqual(len(rendered_genesis["validators"]), 2)
+            self.assertEqual(len(rendered_genesis["validators"]), 1)
             self.assertEqual(
                 rendered_genesis["abci_genesis"]["origin"],
                 {"sender": "", "signature": ""},
@@ -4551,7 +4551,7 @@ class NodeRuntimeTests(unittest.TestCase):
                         "--network",
                         "local-dev",
                         "--template",
-                        "single-node-indexed",
+                        "validator",
                         "--stack-dir",
                         str(stack_dir),
                         "--output",
@@ -4619,7 +4619,7 @@ class NodeRuntimeTests(unittest.TestCase):
                         "--network",
                         "local-dev",
                         "--template",
-                        "single-node-indexed",
+                        "single-node-dev",
                         "--stack-dir",
                         str(stack_dir),
                         "--output",
@@ -4723,7 +4723,7 @@ class NodeRuntimeTests(unittest.TestCase):
                         "--network",
                         "local-dev",
                         "--template",
-                        "single-node-indexed",
+                        "single-node-dev",
                         "--stack-dir",
                         str(stack_dir),
                         "--output",
@@ -6238,8 +6238,8 @@ class ConfigRepoTests(unittest.TestCase):
                 _manifest_payload(
                     genesis={
                         "kind": "bundle",
-                        "bundle": "devnet",
-                        "preset": "devnet",
+                        "bundle": "local",
+                        "preset": "local",
                     }
                 ),
                 read_network_manifest,

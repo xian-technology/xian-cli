@@ -820,7 +820,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     setup_node_parser.add_argument(
         "--network",
-        help="target network name; defaults to testnet for joins and local-dev locally",
+        help="target network name; defaults to mainnet for joins and local-dev locally",
     )
     setup_node_parser.add_argument(
         "--chain-id",
@@ -828,8 +828,8 @@ def build_parser() -> argparse.ArgumentParser:
     )
     setup_node_parser.add_argument(
         "--preset",
-        choices=["basic", "indexed"],
-        help="runtime preset; basic uses single-node-dev, indexed uses single-node-indexed",
+        choices=["dev", "validator"],
+        help="runtime preset; dev uses single-node-dev, validator uses validator",
     )
     setup_node_parser.add_argument(
         "--template",

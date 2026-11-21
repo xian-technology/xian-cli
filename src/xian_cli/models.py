@@ -28,13 +28,10 @@ SUPPORTED_NODE_IMAGE_MODES = {"local_build", "registry"}
 SUPPORTED_GENESIS_KINDS = {"source", "bundle"}
 SUPPORTED_OPERATOR_PROFILES = {
     "local_development",
-    "indexed_development",
     "shared_network",
 }
 SUPPORTED_INTENTKIT_NETWORK_IDS = {
     "xian-mainnet",
-    "xian-testnet",
-    "xian-devnet",
     "xian-localnet",
 }
 SUPPORTED_SHIELDED_RELAYER_AUTH_SCHEMES = {"none", "bearer"}

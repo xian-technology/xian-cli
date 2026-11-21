@@ -101,10 +101,6 @@ def _default_intentkit_network_id(network_name: str | None) -> str:
     normalized = (network_name or "").strip().lower()
     if normalized in {"mainnet", "xian-mainnet"}:
         return "xian-mainnet"
-    if normalized in {"testnet", "xian-testnet"}:
-        return "xian-testnet"
-    if normalized in {"devnet", "xian-devnet"}:
-        return "xian-devnet"
     return "xian-localnet"
 
 

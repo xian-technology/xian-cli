@@ -19,8 +19,8 @@ from xian_cli.config_repo import resolve_network_manifest_path
 from xian_cli.models import FEE_POLICY_FIELDS, read_network_manifest
 
 PRESET_TEMPLATES = {
-    "basic": "single-node-dev",
-    "indexed": "single-node-indexed",
+    "dev": "single-node-dev",
+    "validator": "validator",
 }
 
 BLOCK_POLICY_CHOICES = [
@@ -521,7 +521,7 @@ def _resolve_setup_mode(args: argparse.Namespace, *, prompt: bool) -> str:
     return _prompt_choice(
         "Setup path",
         [
-            ("join", "join a manifest-backed network such as testnet"),
+            ("join", "join a manifest-backed network such as mainnet"),
             ("local", "create a fresh single-node network for local development"),
         ],
         default="join",
@@ -555,7 +555,7 @@ def _flag_or_prompt_text(value: str | None, label: str, *, default: str, prompt:
 def _resolve_setup_identity(
     args: argparse.Namespace, *, mode: str, prompt: bool
 ) -> tuple[str, str, str | None]:
-    default_network = "local-dev" if mode == "local" else "testnet"
+    default_network = "local-dev" if mode == "local" else "mainnet"
     network = _flag_or_prompt_text(
         args.network, "Network name", default=default_network, prompt=prompt
     )
@@ -569,15 +569,15 @@ def _resolve_setup_identity(
 
 
 def _resolve_setup_template(args: argparse.Namespace, *, mode: str, prompt: bool) -> str:
-    default_preset = "basic" if mode == "local" else "indexed"
+    default_preset = "dev" if mode == "local" else "validator"
     preset = args.preset
     if preset is None and prompt:
         _prompt_note("The preset controls optional services written into the node profile.")
         preset = _prompt_choice(
             "Runtime preset",
             [
-                ("basic", "minimal sidecars; fastest local or development setup"),
-                ("indexed", "adds BDS, dashboard, and monitoring for operator observability"),
+                ("dev", "complete local development node: BDS, GraphQL, dashboard, monitoring"),
+                ("validator", "lean node for a shared network: the node and monitoring only"),
             ],
             default=default_preset,
         )
