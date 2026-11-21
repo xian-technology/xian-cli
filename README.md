@@ -164,11 +164,17 @@ remove older records before seven days. See the node logging guide in
 
 Numeric timing and ratio options in node profiles and templates must be finite.
 
-Xian uses unmodified upstream CometBFT. P2P application state sync is disabled:
-`node start`, `node health`, and `doctor` reject `[statesync].enable = true`
-and explain the supported alternatives. `--skip-health-check` does not bypass
-this check. Use ordinary replay from genesis, or restore a verified full-node-store
-snapshot before startup.
+Xian uses unmodified upstream CometBFT. Bootstrap through ordinary replay from
+genesis or a verified full-node-store snapshot. `node init` and `node start`
+require P2P application state sync to be disabled in the installed CometBFT
+configuration. `--skip-health-check` skips the startup RPC wait and still
+validates this configuration. `node health` and `doctor` report validation
+under `cometbft_config`.
+
+Generated profiles omit `advanced.statesync`. An existing disabled section is
+accepted and ignored. `node health` and `doctor` report incompatible legacy
+settings under `profile_config`. You can stop or inspect the node and export or
+restore full-store snapshots while you correct its profile.
 
 `xian snapshot restore` and `node init --restore-snapshot` consume a signed
 full-node-store manifest from `snapshot_url`, verified against the configured
@@ -200,7 +206,6 @@ store inspection, so a host Go binary is not required. Both export and restore
 require a successful stopped-runtime status check; unknown status, paused or
 restarting containers are refused. A known-empty
 fresh home can be restored after its own genesis/configuration/keys are initialized.
-`node stop` remains available for profiles with unsupported old state-sync intent.
 
 Existing `recovery apply` plans may supply an independently trusted archive
 SHA256 as a lower-level alternative to a signed manifest. The canonical verifier

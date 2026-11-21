@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import base64
+import tomllib
 from pathlib import Path
 from urllib.parse import urlparse
+
+from xian.state_sync_policy import validate_comet_state_sync_disabled
 
 from xian_cli.abci_bridge import (
     get_genesis_builder_module,
@@ -21,6 +24,15 @@ from xian_cli.runtime import (
     resolve_stack_dir,
     run_backend_command,
 )
+
+
+def _validate_rendered_cometbft_config(config_path: Path) -> None:
+    try:
+        with config_path.open("rb") as config_file:
+            config = tomllib.load(config_file)
+    except tomllib.TOMLDecodeError as exc:
+        raise ValueError(f"invalid TOML in {config_path}") from exc
+    validate_comet_state_sync_disabled(config)
 
 
 def _resolve_path(
@@ -412,6 +424,7 @@ def _load_profile_and_network(
     profile_arg: Path | None,
     network_arg: Path | None,
     configs_dir: Path | None = None,
+    ignore_legacy_state_sync: bool = False,
 ) -> tuple[Path, dict, Path, dict]:
     profile_path = profile_arg or base_dir / "nodes" / f"{name}.json"
     if not profile_path.is_absolute():
@@ -419,7 +432,7 @@ def _load_profile_and_network(
     if not profile_path.exists():
         raise FileNotFoundError(f"node profile not found: {profile_path}")
 
-    profile = read_node_profile(profile_path)
+    profile = read_node_profile(profile_path, ignore_legacy_state_sync=ignore_legacy_state_sync)
     network_name = profile.get("network")
     if not network_name:
         raise ValueError("node profile is missing network; recreate it with xian network join")

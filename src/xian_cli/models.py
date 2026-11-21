@@ -16,6 +16,7 @@ from xian.node_defaults import (
     RUNTIME_DEFAULTS,
 )
 from xian.services.bds.config import BdsConfig
+from xian.state_sync_policy import P2P_STATE_SYNC_UNSUPPORTED
 from xian_runtime_types.decimal import ContractingDecimal
 from xian_runtime_types.encoding import normalize_wire_numbers
 from xian_runtime_types.time import Datetime
@@ -140,13 +141,6 @@ DEFAULT_ADVANCED_RUNTIME = {
         "prometheus": COMETBFT_DEFAULTS["instrumentation"]["prometheus"],
         "proxy_app": DEFAULT_ABCI_PROXY_APP,
         "external_address": COMETBFT_DEFAULTS["p2p"]["external_address"],
-    },
-    "statesync": {
-        "enabled": COMETBFT_DEFAULTS["statesync"]["enable"],
-        "rpc_servers": list(filter(None, COMETBFT_DEFAULTS["statesync"]["rpc_servers"].split(","))),
-        "trust_height": COMETBFT_DEFAULTS["statesync"]["trust_height"],
-        "trust_hash": COMETBFT_DEFAULTS["statesync"]["trust_hash"],
-        "trust_period": COMETBFT_DEFAULTS["statesync"]["trust_period"],
     },
     "metrics": {
         "enabled": RUNTIME_DEFAULTS.metrics_enabled,
@@ -916,33 +910,31 @@ def _normalize_advanced_cometbft(cometbft: dict) -> dict:
     }
 
 
-def _normalize_advanced_statesync(statesync: dict) -> dict:
-    statesync_enabled = _require_bool(
-        statesync, "enabled", default=DEFAULT_ADVANCED_RUNTIME["statesync"]["enabled"]
+def _validate_legacy_state_sync(section: object) -> None:
+    if not isinstance(section, dict):
+        raise ValueError("advanced.statesync must be an object")
+    _reject_unknown_fields(
+        section,
+        allowed={"enabled", "rpc_servers", "trust_height", "trust_hash", "trust_period"},
+        label="advanced.statesync",
     )
-    statesync_servers = _require_str_list(statesync, "rpc_servers")
-    statesync_trust_height = _require_non_negative_int(
-        statesync, "trust_height", default=DEFAULT_ADVANCED_RUNTIME["statesync"]["trust_height"]
-    )
-    statesync_trust_hash = _require_optional_str(statesync, "trust_hash") or ""
-    statesync_trust_period = _require_str(statesync, "trust_period")
-    return {
-        "enabled": statesync_enabled,
-        "rpc_servers": statesync_servers,
-        "trust_height": statesync_trust_height,
-        "trust_hash": statesync_trust_hash,
-        "trust_period": statesync_trust_period,
-    }
+    enabled = section.get("enabled", False)
+    if not isinstance(enabled, bool):
+        raise ValueError("advanced.statesync.enabled must be a boolean")
+    if enabled:
+        raise ValueError(P2P_STATE_SYNC_UNSUPPORTED)
 
 
 def _normalize_advanced_runtime(payload: dict) -> dict:
     advanced_input = payload.get("advanced")
     _reject_unknown_object_fields(
         advanced_input,
-        allowed=set(DEFAULT_ADVANCED_RUNTIME),
+        allowed=set(DEFAULT_ADVANCED_RUNTIME) | {"statesync"},
         label="advanced",
     )
     if isinstance(advanced_input, dict):
+        if "statesync" in advanced_input:
+            _validate_legacy_state_sync(advanced_input["statesync"])
         for section_name, defaults in DEFAULT_ADVANCED_RUNTIME.items():
             _reject_unknown_object_fields(
                 advanced_input.get(section_name),
@@ -953,7 +945,6 @@ def _normalize_advanced_runtime(payload: dict) -> dict:
     if not isinstance(raw, dict):
         raise ValueError("advanced must be an object")
     cometbft = _merge_defaults(DEFAULT_ADVANCED_RUNTIME["cometbft"], raw.get("cometbft"))
-    statesync = _merge_defaults(DEFAULT_ADVANCED_RUNTIME["statesync"], raw.get("statesync"))
     metrics = _merge_defaults(DEFAULT_ADVANCED_RUNTIME["metrics"], raw.get("metrics"))
     pending_nonce = _merge_defaults(
         DEFAULT_ADVANCED_RUNTIME["pending_nonce"], raw.get("pending_nonce")
@@ -972,7 +963,6 @@ def _normalize_advanced_runtime(payload: dict) -> dict:
         raise ValueError("advanced.pending_nonce.reservation_ttl_seconds must be non-negative")
     return {
         "cometbft": _normalize_advanced_cometbft(cometbft),
-        "statesync": _normalize_advanced_statesync(statesync),
         "metrics": {
             "enabled": _require_bool(
                 metrics, "enabled", default=DEFAULT_ADVANCED_RUNTIME["metrics"]["enabled"]
@@ -1523,8 +1513,14 @@ def read_network_manifest(path: Path) -> dict:
     return normalize_network_manifest(read_json(path))
 
 
-def read_node_profile(path: Path) -> dict:
-    return normalize_node_profile(read_json(path))
+def read_node_profile(path: Path, *, ignore_legacy_state_sync: bool = False) -> dict:
+    """Read a profile and tolerate retired settings only for offline or diagnostic use."""
+    payload = read_json(path)
+    if ignore_legacy_state_sync and isinstance(payload, dict):
+        advanced = payload.get("advanced")
+        if isinstance(advanced, dict):
+            advanced.pop("statesync", None)
+    return normalize_node_profile(payload)
 
 
 def read_network_template(path: Path) -> dict:

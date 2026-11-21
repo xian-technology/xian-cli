@@ -11,13 +11,6 @@
     "transaction_trace_logging": false,
     "block_policy_mode": "on_demand",
     "block_policy_interval": "0s",
-    "statesync": {
-      "enable": false,
-      "rpc_servers": [],
-      "trust_height": 0,
-      "trust_hash": "",
-      "trust_period": "168h0m0s"
-    },
     "metrics": {
       "enabled": true,
       "host": "0.0.0.0",
@@ -76,13 +69,6 @@
     "transaction_trace_logging": false,
     "block_policy_mode": "periodic",
     "block_policy_interval": "7s",
-    "statesync": {
-      "enable": false,
-      "rpc_servers": [],
-      "trust_height": 0,
-      "trust_hash": "",
-      "trust_period": "168h0m0s"
-    },
     "metrics": {
       "enabled": true,
       "host": "0.0.0.0",
@@ -147,16 +133,6 @@
     "transaction_trace_logging": true,
     "block_policy_mode": "idle_interval",
     "block_policy_interval": "2s",
-    "statesync": {
-      "enable": false,
-      "rpc_servers": [
-        "http://localhost:26657",
-        "http://localhost:26667"
-      ],
-      "trust_height": 42,
-      "trust_hash": "abababababababababababababababababababababababababababababababab",
-      "trust_period": "48h0m0s"
-    },
     "metrics": {
       "enabled": false,
       "host": "0.0.0.0",

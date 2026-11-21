@@ -12,7 +12,6 @@ from xian_cli.commands import node_options
 @pytest.mark.parametrize(
     "function,kind,changes",
     [
-        ("state_sync_options", "StateSyncOptions", {"trust_period": "48h0m0s"}),
         ("metrics_options", "MetricsOptions", {"bds_refresh_seconds": 8.0}),
         ("app_logging_options", "AppLoggingOptions", {"rotation_hours": 6}),
         ("simulation_options", "SimulationOptions", {"timeout_ms": 4567}),

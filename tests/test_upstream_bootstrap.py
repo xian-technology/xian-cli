@@ -10,7 +10,7 @@ from unittest.mock import Mock
 import pytest
 
 from xian_cli.commands import node
-from xian_cli.commands.doctor import _doctor_statesync_check
+from xian_cli.commands.doctor import _doctor_cometbft_config_check
 from xian_cli.commands.node_status import _release_summary
 from xian_cli.models import read_network_manifest, read_node_profile, write_json
 
@@ -110,21 +110,23 @@ def test_ordinary_legacy_provenance_and_disabled_config_remain_usable(tmp_path):
         == "0.39.3"
     )
     write_config(tmp_path, enabled=False)
-    readiness = node._collect_statesync_readiness(tmp_path)
-    assert readiness["state"] == "disabled"
-    assert readiness["ready"] is False
-    assert _doctor_statesync_check({"home": str(tmp_path)})["enabled"] is False
+    assert _doctor_cometbft_config_check({"home": str(tmp_path)}) == {
+        "path": str(tmp_path / "config/config.toml")
+    }
+
+
+def test_disabled_legacy_profile_settings_are_dropped(tmp_path):
+    p = profile()
+    p["advanced"] = {"statesync": {"enabled": False, "trust_height": 42}}
+    path = tmp_path / "p.json"
+    write_json(path, p)
+    assert "statesync" not in read_node_profile(path)["advanced"]
 
 
 def test_enabled_rendered_state_sync_refuses_even_complete_trust_settings(tmp_path):
     write_config(tmp_path)
-    readiness = node._collect_statesync_readiness(tmp_path)
-    assert readiness["state"] == "unsupported"
-    assert readiness["ready"] is False
-    assert "replay" in readiness["error"]
-    assert "full-node-store" in readiness["error"]
-    with pytest.raises(RuntimeError, match="full-node-store"):
-        _doctor_statesync_check({"home": str(tmp_path)})
+    with pytest.raises(ValueError, match="replay.*full-node-store"):
+        _doctor_cometbft_config_check({"home": str(tmp_path)})
 
 
 @pytest.mark.parametrize("enabled", [False, True, 0])
@@ -164,6 +166,7 @@ def test_start_refuses_state_sync_before_backend_even_when_skipping_health(
 
 def test_node_health_returns_failure_for_enabled_state_sync(tmp_path, monkeypatch, capsys):
     write_config(tmp_path)
+    write_json(tmp_path / "p", profile())
     context = {
         "profile_path": tmp_path / "p",
         "profile": profile(),
@@ -176,13 +179,18 @@ def test_node_health_returns_failure_for_enabled_state_sync(tmp_path, monkeypatc
     args = SimpleNamespace(rpc_url="http://127.0.0.1:26657", skip_disk_check=True)
     assert node._handle_node_health(args) == 1
     result = json.loads(capsys.readouterr().out)
-    assert result["statesync"]["state"] == "unsupported"
-    assert "replay" in result["statesync"]["error"]
+    assert "statesync" not in result
+    assert result["profile_config"]["ok"] is True
+    assert result["cometbft_config"]["ok"] is False
+    assert "replay" in result["cometbft_config"]["error"]
 
 
-@pytest.mark.parametrize("text", ["[statesync]\nenable = 0\n", 'statesync = "invalid"\n'])
-def test_invalid_state_sync_types_fail_health_and_doctor(tmp_path, monkeypatch, capsys, text):
+@pytest.mark.parametrize(
+    "text", ["[statesync]\nenable = 0\n", 'statesync = "invalid"\n', "broken = [\n"]
+)
+def test_invalid_cometbft_config_fails_health_and_doctor(tmp_path, monkeypatch, capsys, text):
     write_config(tmp_path)
+    write_json(tmp_path / "p", profile())
     (tmp_path / "config/config.toml").write_text(text)
     context = {
         "profile_path": tmp_path / "p",
@@ -199,15 +207,17 @@ def test_invalid_state_sync_types_fail_health_and_doctor(tmp_path, monkeypatch, 
         )
         == 1
     )
-    assert json.loads(capsys.readouterr().out)["statesync"]["error"]
-    with pytest.raises(RuntimeError):
-        _doctor_statesync_check({"home": str(tmp_path)})
+    assert json.loads(capsys.readouterr().out)["cometbft_config"]["error"]
+    with pytest.raises(ValueError):
+        _doctor_cometbft_config_check({"home": str(tmp_path)})
 
 
-def test_unsupported_profile_can_still_be_stopped(tmp_path, monkeypatch):
+@pytest.mark.parametrize("legacy", [{"enabled": True}, {"enabled": 0}, [], None])
+def test_unsupported_profile_can_still_be_recovered(tmp_path, monkeypatch, capsys, legacy):
     p = profile()
-    p["advanced"] = {"statesync": {"enabled": True}}
+    p["advanced"] = {"statesync": legacy}
     p["home"] = str(tmp_path / "home")
+    write_config(Path(p["home"]), enabled=False)
     write_json(tmp_path / "nodes/node.json", p)
     write_json(
         tmp_path / "networks/local/manifest.json",
@@ -218,15 +228,57 @@ def test_unsupported_profile_can_still_be_stopped(tmp_path, monkeypatch):
             "genesis": {"kind": "source", "source": "./genesis.json"},
         },
     )
+    common_args = ["node", "--base-dir", str(tmp_path), "--stack-dir", str(tmp_path)]
     backend = Mock(return_value={"ok": True})
     monkeypatch.setattr(node, "stop_xian_stack_node", backend)
+    monkeypatch.setattr(node, "get_xian_stack_node_status", Mock(return_value={}))
+    monkeypatch.setattr(node, "get_xian_stack_node_endpoints", Mock(return_value={}))
+    monkeypatch.setattr(node, "_require_stopped_node", Mock())
+    export = Mock(return_value={})
+    monkeypatch.setattr(node, "run_backend_command", export)
+    restore = Mock(return_value={})
+    monkeypatch.setattr(node, "_restore_snapshot", restore)
     from xian_cli.cli import main
 
+    assert main(["node", "stop", *common_args]) == 0
+    backend.assert_called_once()
+    assert main(["node", "status", *common_args, "--skip-rpc"]) == 0
+    assert main(["node", "endpoints", *common_args]) == 0
+    assert main(["snapshot", "restore", *common_args]) == 0
+    restore.assert_called_once()
     assert (
-        main(["node", "stop", "node", "--base-dir", str(tmp_path), "--stack-dir", str(tmp_path)])
+        main(
+            [
+                "snapshot",
+                "export",
+                *common_args,
+                "--archive-output",
+                str(tmp_path / "snapshot.tar.gz"),
+                "--manifest-output",
+                str(tmp_path / "snapshot.json"),
+                "--snapshot-url",
+                "https://example.invalid/snapshot.tar.gz",
+                "--signing-key-file",
+                str(tmp_path / "publisher-key"),
+            ]
+        )
         == 0
     )
-    backend.assert_called_once()
+    export.assert_called_once()
+    with pytest.raises(ValueError, match="P2P application state sync|advanced.statesync"):
+        main(["node", "start", *common_args])
+
+    monkeypatch.setattr(node, "get_xian_stack_node_health", Mock(return_value={}))
+    capsys.readouterr()
+    assert main(["node", "health", *common_args]) == 1
+    health = json.loads(capsys.readouterr().out)
+    assert health["profile_config"]["ok"] is False
+    assert health["cometbft_config"]["ok"] is True
+
+    assert main(["doctor", *common_args, "--skip-live-checks"]) == 1
+    checks = {check["name"]: check for check in json.loads(capsys.readouterr().out)["checks"]}
+    assert checks["profile_config"]["ok"] is False
+    assert checks["cometbft_config"]["ok"] is True
 
 
 @pytest.mark.parametrize(

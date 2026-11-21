@@ -16,6 +16,7 @@ from xian_cli.commands.node_context import (
     _resolve_home,
     _resolve_stack_dir_from_profile,
     _snapshot_store_inspector,
+    _validate_rendered_cometbft_config,
 )
 from xian_cli.models import read_recovery_plan
 from xian_cli.runtime import (
@@ -139,6 +140,7 @@ def _handle_recovery_validate(args: argparse.Namespace) -> int:
         profile_arg=args.profile,
         network_arg=args.network,
         configs_dir=args.configs_dir,
+        ignore_legacy_state_sync=True,
     )
     stack_dir = _resolve_stack_dir_from_profile(
         base_dir=base_dir,
@@ -197,6 +199,7 @@ def _handle_recovery_apply(args: argparse.Namespace) -> int:
         profile_arg=args.profile,
         network_arg=args.network,
         configs_dir=args.configs_dir,
+        ignore_legacy_state_sync=not args.start_node,
     )
     stack_dir = _resolve_stack_dir_from_profile(
         base_dir=base_dir,
@@ -230,6 +233,8 @@ def _handle_recovery_apply(args: argparse.Namespace) -> int:
         print(json.dumps(payload, indent=2))
         return 0
 
+    if args.start_node:
+        _validate_rendered_cometbft_config(home / "config" / "config.toml")
     stack_dir = resolve_stack_dir(base_dir, explicit=stack_dir)
     stop_result = None
     if not args.skip_stop:

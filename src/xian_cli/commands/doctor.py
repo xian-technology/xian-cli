@@ -9,11 +9,10 @@ from xian_cli.abci_bridge import (
     get_node_admin_module,
     get_node_setup_module,
 )
-from xian_cli.commands.node import (
-    _collect_node_status,
-    _collect_statesync_readiness,
-)
+from xian_cli.commands.node import _collect_node_status
+from xian_cli.commands.node_context import _validate_rendered_cometbft_config
 from xian_cli.config_repo import resolve_configs_dir
+from xian_cli.models import read_node_profile
 from xian_cli.runtime import resolve_stack_dir
 
 
@@ -72,11 +71,16 @@ def _doctor_rpc_check(status: dict[str, object]) -> dict[str, object]:
     return status.get("summary", {})
 
 
-def _doctor_statesync_check(status: dict[str, object]) -> dict[str, object]:
-    readiness = _collect_statesync_readiness(Path(str(status["home"])))
-    if readiness.get("error"):
-        raise RuntimeError(readiness["error"])
-    return readiness
+def _doctor_cometbft_config_check(status: dict[str, object]) -> dict[str, object]:
+    config_path = Path(str(status["home"])) / "config" / "config.toml"
+    _validate_rendered_cometbft_config(config_path)
+    return {"path": str(config_path)}
+
+
+def _doctor_profile_config_check(status: dict[str, object]) -> dict[str, object]:
+    profile_path = Path(str(status["profile_path"]))
+    read_node_profile(profile_path)
+    return {"path": str(profile_path)}
 
 
 def _doctor_snapshot_check(status: dict[str, object]) -> dict[str, object]:
@@ -171,8 +175,14 @@ def _handle_doctor(args: argparse.Namespace) -> int:
         )
         checks.append(
             _run_check(
-                "statesync",
-                lambda: _doctor_statesync_check(node_status),
+                "profile_config",
+                lambda: _doctor_profile_config_check(node_status),
+            )
+        )
+        checks.append(
+            _run_check(
+                "cometbft_config",
+                lambda: _doctor_cometbft_config_check(node_status),
             )
         )
         checks.append(

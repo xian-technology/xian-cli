@@ -16,7 +16,6 @@ if TYPE_CHECKING:
         MetricsOptions,
         NodeConfigOptions,
         SimulationOptions,
-        StateSyncOptions,
     )
 
 
@@ -45,18 +44,6 @@ def _peer_values(profile: dict, network: dict, name: str) -> tuple[str, ...]:
     network_p2p = network.get("p2p") if isinstance(network.get("p2p"), dict) else {}
     profile_p2p = profile.get("p2p") if isinstance(profile.get("p2p"), dict) else {}
     return tuple(network_p2p.get(name) or ()) + tuple(profile_p2p.get(name) or ())
-
-
-def state_sync_options(node_setup: ModuleType, profile: dict) -> StateSyncOptions:
-    defaults = node_setup.StateSyncOptions()
-    settings = profile_config(profile, "advanced", "statesync")
-    return node_setup.StateSyncOptions(
-        enable=bool(settings.get("enabled", defaults.enable)),
-        rpc_servers=tuple(settings.get("rpc_servers") or ()),
-        trust_height=int(settings.get("trust_height", defaults.trust_height)),
-        trust_hash=str(settings.get("trust_hash", defaults.trust_hash)),
-        trust_period=str(settings.get("trust_period", defaults.trust_period)),
-    )
 
 
 def app_metrics_host_port(profile: dict) -> int:
@@ -174,7 +161,6 @@ def node_config_options(
         transaction_trace_logging=bool(
             profile.get("transaction_trace_logging", defaults.transaction_trace_logging)
         ),
-        statesync=state_sync_options(node_setup, profile),
         metrics=metrics_options(node_setup, profile),
         app_logging=app_logging_options(node_setup, profile),
         simulation=simulation_options(node_setup, profile),

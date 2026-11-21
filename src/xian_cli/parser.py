@@ -1211,7 +1211,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     health_parser = node_subparsers.add_parser(
         "health",
-        help=("inspect live runtime health, disk pressure, and state-sync readiness"),
+        help="inspect live runtime health, CometBFT configuration, and disk pressure",
     )
     health_parser.add_argument("name", help="node profile name")
     health_parser.add_argument(

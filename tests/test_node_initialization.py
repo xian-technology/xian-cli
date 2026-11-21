@@ -55,13 +55,6 @@ def initialization_profile(case):
                     "proxy_app": "unix:///tmp/custom.sock",
                     "prometheus": False,
                 },
-                "statesync": {
-                    "enabled": False,
-                    "rpc_servers": ["http://localhost:26657", "http://localhost:26667"],
-                    "trust_height": 42,
-                    "trust_hash": "ab" * 32,
-                    "trust_period": "48h0m0s",
-                },
                 "metrics": {
                     "enabled": False,
                     "host": "127.0.0.2",
@@ -193,12 +186,37 @@ def test_initialization_requires_an_existing_validator_key(tmp_path, key_referen
 
 
 def test_initialization_rejects_unsupported_state_sync(tmp_path):
-    with pytest.raises(ValueError, match="full-node-store"):
-        observe_initialization(
-            tmp_path,
-            "defaults",
-            profile_changes={"advanced": {"statesync": {"enabled": True}}},
+    profile_dir = tmp_path / "nodes"
+    profile_dir.mkdir()
+    (profile_dir / "node.json").write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "name": "node",
+                "moniker": "node",
+                "network": "local",
+                "advanced": {"statesync": {"enabled": True}},
+            }
         )
+    )
+    with pytest.raises(ValueError, match="full-node-store"):
+        main(["node", "init", "node", "--base-dir", str(tmp_path)])
+
+
+def test_forced_init_refuses_to_rewrite_enabled_cometbft_state_sync(tmp_path, monkeypatch):
+    from xian_cli.commands import node
+
+    plan = disk_initialization_plan(tmp_path)
+    config_path = plan.home / "config/config.toml"
+    config_path.parent.mkdir(parents=True)
+    config = "[statesync]\nenable = true\n"
+    config_path.write_text(config)
+    monkeypatch.setattr(node, "_resolve_initialization", lambda args: plan)
+
+    with pytest.raises(ValueError, match="full-node-store"):
+        main(["node", "init", "node", "--base-dir", str(tmp_path), "--force"])
+    assert config_path.read_text() == config
+    assert not (plan.home / "config/genesis.json").exists()
 
 
 def disk_initialization_plan(tmp_path):

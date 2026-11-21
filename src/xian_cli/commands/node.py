@@ -2,12 +2,9 @@ from __future__ import annotations
 
 import argparse
 import json
-import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
 from urllib.parse import urlparse
-
-from xian.state_sync_policy import validate_comet_state_sync_disabled
 
 from xian_cli.abci_bridge import get_node_setup_module
 from xian_cli.commands.common import (
@@ -27,12 +24,13 @@ from xian_cli.commands.node_context import (
     _resolve_path,
     _resolve_stack_dir_from_profile,
     _restore_snapshot,
+    _validate_rendered_cometbft_config,
 )
 from xian_cli.commands.node_options import app_metrics_host_port, node_config_options
 from xian_cli.commands.node_options import service_config as _service_config
 from xian_cli.commands.node_status import profile_service_summary as _profile_service_summary
 from xian_cli.commands.node_status import summarize_node_status
-from xian_cli.models import NodeProfile, read_json
+from xian_cli.models import NodeProfile, read_json, read_node_profile
 from xian_cli.runtime import (
     fetch_json,
     get_xian_stack_node_endpoints,
@@ -160,6 +158,9 @@ def _restore_initialization_snapshot(
 def _initialize_node_from_args(args: argparse.Namespace) -> dict:
     node_setup = get_node_setup_module()
     plan = _resolve_initialization(args)
+    config_path = plan.home / "config" / "config.toml"
+    if config_path.exists():
+        _validate_rendered_cometbft_config(config_path)
     if args.restore_snapshot:
         _require_stopped_node(
             stack_dir=plan.stack_dir or resolve_stack_dir(plan.base_dir),
@@ -224,9 +225,7 @@ def _handle_node_start(args: argparse.Namespace) -> int:
             f"{xian_config_path} does not exist; run `xian node init {args.name}` first"
         )
 
-    readiness = _collect_statesync_readiness(home)
-    if readiness.get("error"):
-        raise ValueError(readiness["error"])
+    _validate_rendered_cometbft_config(config_path)
 
     result = start_xian_stack_node(
         stack_dir=stack_dir,
@@ -247,6 +246,7 @@ def _handle_node_stop(args: argparse.Namespace) -> int:
         profile_arg=args.profile,
         network_arg=args.network,
         configs_dir=args.configs_dir,
+        ignore_legacy_state_sync=True,
     )
 
     stack_dir = resolve_stack_dir(
@@ -279,6 +279,7 @@ def _resolve_node_context(args: argparse.Namespace) -> dict[str, object]:
         profile_arg=args.profile,
         network_arg=args.network,
         configs_dir=args.configs_dir,
+        ignore_legacy_state_sync=True,
     )
 
     stack_dir = _resolve_stack_dir_from_profile(
@@ -612,25 +613,12 @@ def _handle_node_endpoints(args: argparse.Namespace) -> int:
     return 0
 
 
-def _read_rendered_config_toml(home: Path) -> dict[str, object]:
-    config_path = home / "config" / "config.toml"
-    if not config_path.exists():
-        raise FileNotFoundError(f"{config_path} does not exist")
+def _config_check(path: Path, validate) -> dict[str, object]:
     try:
-        return tomllib.loads(config_path.read_text(encoding="utf-8"))
-    except tomllib.TOMLDecodeError as exc:
-        raise ValueError(f"invalid TOML in {config_path}") from exc
-
-
-def _collect_statesync_readiness(home: Path) -> dict[str, object]:
-    config = _read_rendered_config_toml(home)
-    statesync = config.get("statesync", {})
-    enabled = isinstance(statesync, dict) and statesync.get("enable") is True
-    try:
-        validate_comet_state_sync_disabled(config)
-    except ValueError as exc:
-        return {"enabled": enabled, "state": "unsupported", "ready": False, "error": str(exc)}
-    return {"enabled": enabled, "state": "disabled", "ready": False}
+        validate(path)
+    except (ValueError, OSError) as exc:
+        return {"ok": False, "path": str(path), "error": str(exc)}
+    return {"ok": True, "path": str(path)}
 
 
 def _collect_node_health(args: argparse.Namespace) -> dict[str, object]:
@@ -657,13 +645,10 @@ def _collect_node_health(args: argparse.Namespace) -> dict[str, object]:
     if stack_dir is not None:
         payload["stack_dir"] = str(stack_dir)
 
-    try:
-        payload["statesync"] = _collect_statesync_readiness(home)
-    except Exception as exc:
-        payload["statesync"] = {
-            "state": "unavailable",
-            "error": str(exc),
-        }
+    payload["profile_config"] = _config_check(context["profile_path"], read_node_profile)
+    payload["cometbft_config"] = _config_check(
+        home / "config" / "config.toml", _validate_rendered_cometbft_config
+    )
 
     if stack_dir is not None:
         payload["health"] = get_xian_stack_node_health(
@@ -685,7 +670,7 @@ def _collect_node_health(args: argparse.Namespace) -> dict[str, object]:
 def _handle_node_health(args: argparse.Namespace) -> int:
     result = _collect_node_health(args)
     print(json.dumps(result, indent=2))
-    return 1 if result.get("statesync", {}).get("error") else 0
+    return 0 if (result["profile_config"]["ok"] and result["cometbft_config"]["ok"]) else 1
 
 
 def _handle_snapshot_restore(args: argparse.Namespace) -> int:
@@ -696,6 +681,7 @@ def _handle_snapshot_restore(args: argparse.Namespace) -> int:
         profile_arg=args.profile,
         network_arg=args.network,
         configs_dir=args.configs_dir,
+        ignore_legacy_state_sync=True,
     )
     stack_dir = _resolve_stack_dir_from_profile(
         base_dir=base_dir,

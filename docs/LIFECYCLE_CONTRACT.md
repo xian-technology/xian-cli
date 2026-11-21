@@ -49,13 +49,18 @@ Command intent:
 
 ### Supported Bootstrap and Upstream Provenance
 
-Xian uses unmodified upstream CometBFT. P2P application state sync is disabled.
-Initialization rejects enabled state-sync profile intent; a rendered
-`[statesync].enable = true` is rejected by startup, doctor, health, and deployment, including startup with
-`--skip-health-check`. Health returns a nonzero exit code and reports
-`statesync.state: "unsupported"` with the supported alternatives. Use replay
-from genesis or a verified full-node-store snapshot. `node stop` remains usable
-for an existing profile with unsupported state-sync intent.
+Xian uses unmodified upstream CometBFT. Bootstrap through replay from genesis
+or a verified full-node-store snapshot. Managed CometBFT configuration sets
+`[statesync].enable = false`. Initialization validates an existing `config.toml`
+before overwriting it, and startup validates it before launching the runtime,
+including with `--skip-health-check`. `node health` and `doctor` report invalid
+or unreadable configuration under `cometbft_config` and exit nonzero.
+
+Generated profiles omit `advanced.statesync`. Existing profiles can omit the
+section or include a legacy object with `enabled` absent or set to `false`.
+Recognized legacy trust settings are ignored. Health and doctor report enabled
+or malformed legacy settings under `profile_config`. Stop, status, endpoints
+and stopped full-store snapshot operations remain available for these profiles.
 
 Release manifest schema 1 preserves optional `build.cometbft_source_commit`
 (40 lowercase hex characters) alongside the existing source URL/SHA256 and

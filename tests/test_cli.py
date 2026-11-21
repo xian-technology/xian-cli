@@ -4740,7 +4740,7 @@ class NodeRuntimeTests(unittest.TestCase):
                 "http://127.0.0.1:9090",
             )
 
-    def test_node_health_reports_runtime_and_statesync(self) -> None:
+    def test_node_health_reports_runtime_and_invalid_cometbft_config(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             base_dir = Path(tmp_dir)
             (base_dir / "networks").mkdir()
@@ -4841,9 +4841,9 @@ trust_period = "336h0m0s"
             # Without --skip-disk-check the health probe checks the disk.
             self.assertIs(node_health.call_args.kwargs["check_disk"], True)
             self.assertEqual(result["health"]["state"], "healthy")
-            self.assertEqual(result["statesync"]["state"], "unsupported")
-            self.assertFalse(result["statesync"]["ready"])
-            self.assertIn("full-node-store", result["statesync"]["error"])
+            self.assertNotIn("statesync", result)
+            self.assertFalse(result["cometbft_config"]["ok"])
+            self.assertIn("full-node-store", result["cometbft_config"]["error"])
             self.assertEqual(
                 result["effective_snapshot_url"],
                 "https://example.invalid/snapshot.tar.gz",
@@ -5099,7 +5099,7 @@ class DoctorTests(unittest.TestCase):
             check_names = {check["name"] for check in result["checks"]}
             self.assertIn("backend", check_names)
             self.assertIn("rpc", check_names)
-            self.assertIn("statesync", check_names)
+            self.assertIn("cometbft_config", check_names)
             self.assertIn("snapshot_bootstrap", check_names)
             self.assertIn("dashboard", check_names)
             self.assertIn("prometheus", check_names)
@@ -5511,6 +5511,17 @@ class SnapshotCommandTests(unittest.TestCase):
                 (),
                 {"apply_snapshot_archive": staticmethod(snapshot_mock)},
             )()
+            recovery_args = [
+                "recovery",
+                "apply",
+                str(plan_path),
+                "validator-1",
+                "--base-dir",
+                str(base_dir),
+                "--rpc-url",
+                "http://127.0.0.1:1/status",
+                "--yes",
+            ]
             stdout = io.StringIO()
             with (
                 patch(
@@ -5539,20 +5550,15 @@ class SnapshotCommandTests(unittest.TestCase):
                     },
                 ),
             ):
+                config_path = config_dir / "config.toml"
+                config_path.write_text("[statesync]\nenable = true\n", encoding="utf-8")
+                with self.assertRaisesRegex(ValueError, "full-node-store"):
+                    main([*recovery_args, "--start-node", "--no-wait"])
+                stop_mock.assert_not_called()
+                snapshot_mock.assert_not_called()
+                config_path.write_text("", encoding="utf-8")
                 with redirect_stdout(stdout):
-                    exit_code = main(
-                        [
-                            "recovery",
-                            "apply",
-                            str(plan_path),
-                            "validator-1",
-                            "--base-dir",
-                            str(base_dir),
-                            "--rpc-url",
-                            "http://127.0.0.1:1/status",
-                            "--yes",
-                        ]
-                    )
+                    exit_code = main(recovery_args)
 
             self.assertEqual(exit_code, 0)
             stop_mock.assert_called_once()
