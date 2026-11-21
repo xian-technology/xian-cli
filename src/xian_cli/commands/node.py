@@ -450,16 +450,13 @@ def _collect_node_endpoints(args: argparse.Namespace) -> dict[str, object]:
     stack_dir = context["stack_dir"]
     home = context["home"]
     rpc_status_url = getattr(args, "rpc_url", "http://127.0.0.1:26657/status")
-    node_image_mode, node_integrated_image, node_split_image = _effective_node_image_config(
-        profile, network
-    )
+    node_image_mode, node_integrated_image = _effective_node_image_config(profile, network)
 
     payload: dict[str, object] = {
         "profile_path": str(context["profile_path"]),
         "network_path": str(context["network_path"]),
         "node_image_mode": node_image_mode,
         "node_integrated_image": node_integrated_image,
-        "node_split_image": node_split_image,
         "operator_profile": profile.get("operator_profile"),
         **_profile_service_summary(profile),
     }
@@ -499,9 +496,7 @@ def _initial_node_status(context: dict, *, name: str, check_rpc: bool) -> dict:
     network = context["network"]
     stack_dir = context["stack_dir"]
     home = context["home"]
-    node_image_mode, node_integrated_image, node_split_image = _effective_node_image_config(
-        profile, network
-    )
+    node_image_mode, node_integrated_image = _effective_node_image_config(profile, network)
     node_release_manifest = _effective_node_release_manifest(profile, network)
     config_path = home / "config" / "config.toml"
     xian_config_path = home / "config" / "xian.toml"
@@ -533,7 +528,6 @@ def _initial_node_status(context: dict, *, name: str, check_rpc: bool) -> dict:
             "network": profile.get("network"),
             "node_image_mode": node_image_mode,
             "node_integrated_image": node_integrated_image,
-            "node_split_image": node_split_image,
             "node_release_manifest": node_release_manifest,
             "operator_profile": profile.get("operator_profile"),
             "services": profile.get("services"),
@@ -645,16 +639,13 @@ def _collect_node_health(args: argparse.Namespace) -> dict[str, object]:
     network = context["network"]
     stack_dir = context["stack_dir"]
     home = context["home"]
-    node_image_mode, node_integrated_image, node_split_image = _effective_node_image_config(
-        profile, network
-    )
+    node_image_mode, node_integrated_image = _effective_node_image_config(profile, network)
 
     payload: dict[str, object] = {
         "profile_path": str(context["profile_path"]),
         "network_path": str(context["network_path"]),
         "node_image_mode": node_image_mode,
         "node_integrated_image": node_integrated_image,
-        "node_split_image": node_split_image,
         "home": str(home),
         "operator_profile": profile.get("operator_profile"),
         **_profile_service_summary(profile),

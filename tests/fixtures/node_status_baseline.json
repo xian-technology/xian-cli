@@ -10,7 +10,6 @@
         "operator_profile": "validator",
         "node_image_mode": "registry",
         "node_integrated_image": "node:integrated",
-        "node_split_image": "node:split",
         "services": {
           "bds": {
             "enabled": true
@@ -94,7 +93,6 @@
         "operator_profile": "validator",
         "node_image_mode": "registry",
         "node_integrated_image": "node:integrated",
-        "node_split_image": "node:split",
         "services": {
           "bds": {
             "enabled": true
@@ -178,7 +176,6 @@
         "operator_profile": "validator",
         "node_image_mode": "registry",
         "node_integrated_image": "node:integrated",
-        "node_split_image": "node:split",
         "services": {
           "bds": {
             "enabled": true
@@ -262,7 +259,6 @@
         "operator_profile": "validator",
         "node_image_mode": "registry",
         "node_integrated_image": "node:integrated",
-        "node_split_image": "node:split",
         "services": {
           "bds": {
             "enabled": true
@@ -410,7 +406,6 @@
         "operator_profile": "validator",
         "node_image_mode": "registry",
         "node_integrated_image": "node:integrated",
-        "node_split_image": "node:split",
         "services": {
           "bds": {
             "enabled": true
@@ -474,7 +469,6 @@
       "peer_count": "4",
       "node_image_mode": "registry",
       "node_integrated_image": "node:integrated",
-      "node_split_image": "node:split",
       "release_manifest_refs": {
         "xian-abci": "abc"
       },
@@ -525,7 +519,6 @@
       "peer_count": "4",
       "node_image_mode": "registry",
       "node_integrated_image": "node:integrated",
-      "node_split_image": "node:split",
       "release_manifest_refs": {
         "xian-abci": "abc"
       },
@@ -576,7 +569,6 @@
       "peer_count": "4",
       "node_image_mode": "registry",
       "node_integrated_image": "node:integrated",
-      "node_split_image": "node:split",
       "release_manifest_refs": {
         "xian-abci": "abc"
       },
@@ -627,7 +619,6 @@
       "peer_count": "4",
       "node_image_mode": "registry",
       "node_integrated_image": "node:integrated",
-      "node_split_image": "node:split",
       "release_manifest_refs": {
         "xian-abci": "abc"
       },
@@ -677,8 +668,7 @@
       "rpc_network": null,
       "peer_count": null,
       "node_image_mode": null,
-      "node_integrated_image": null,
-      "node_split_image": null
+      "node_integrated_image": null
     },
     "disabled_services": {
       "state": "ready",
@@ -701,7 +691,6 @@
       "peer_count": "4",
       "node_image_mode": null,
       "node_integrated_image": null,
-      "node_split_image": null,
       "release_manifest_refs": {
         "xian-abci": "abc"
       },
@@ -740,8 +729,7 @@
       "rpc_network": "local",
       "peer_count": "4",
       "node_image_mode": "registry",
-      "node_integrated_image": "node:integrated",
-      "node_split_image": "node:split"
+      "node_integrated_image": "node:integrated"
     }
   }
 }

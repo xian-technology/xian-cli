@@ -289,8 +289,8 @@ def _require_stopped_node(*, stack_dir: Path, home: Path, profile: dict, network
         or not isinstance(status.get("compose_services"), list)
     ):
         raise RuntimeError("cannot verify stopped runtime status; fix the status query first")
-    # Aggregated flags can miss a partially running split runtime. Paused,
-    # restarting or unknown containers are also not proof of a stopped node.
+    # Aggregated flags can miss a partially running runtime. Paused, restarting
+    # or unknown containers are not proof of a stopped node.
     if (
         status.get("runtime_services_running") is not False
         or status.get("backend_running") is not False

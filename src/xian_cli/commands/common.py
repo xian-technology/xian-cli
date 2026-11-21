@@ -107,17 +107,13 @@ def _default_intentkit_network_id(network_name: str | None) -> str:
 def _effective_node_image_config(
     profile: dict[str, object],
     network: dict[str, object] | None = None,
-) -> tuple[str, str | None, str | None]:
+) -> tuple[str, str | None]:
     network_mode = None if network is None else network.get("node_image_mode") or "local_build"
     return _resolve_node_image_settings(
         node_image_mode=str(profile.get("node_image_mode") or network_mode or "local_build"),
         node_integrated_image=(
             profile.get("node_integrated_image")
             or (None if network is None else network.get("node_integrated_image"))
-        ),
-        node_split_image=(
-            profile.get("node_split_image")
-            or (None if network is None else network.get("node_split_image"))
         ),
     )
 
@@ -126,7 +122,7 @@ def _effective_node_release_manifest(
     profile: dict[str, object],
     network: dict[str, object] | None = None,
 ) -> dict[str, object] | None:
-    node_image_mode, _, _ = _effective_node_image_config(profile, network)
+    node_image_mode, _ = _effective_node_image_config(profile, network)
     if node_image_mode != "registry":
         return None
     profile_manifest = profile.get("node_release_manifest")
@@ -140,9 +136,7 @@ def _stack_runtime_profile_kwargs(
     profile: dict[str, object],
     network: dict[str, object] | None = None,
 ) -> dict[str, object]:
-    node_image_mode, node_integrated_image, node_split_image = _effective_node_image_config(
-        profile, network
-    )
+    node_image_mode, node_integrated_image = _effective_node_image_config(profile, network)
     services = profile.get("services")
     if not isinstance(services, dict):
         services = {}
@@ -161,7 +155,6 @@ def _stack_runtime_profile_kwargs(
     return {
         "node_image_mode": node_image_mode,
         "node_integrated_image": node_integrated_image,
-        "node_split_image": node_split_image,
         "bds_enabled": bool(bds.get("enabled")),
         "dashboard_enabled": bool(dashboard.get("enabled")),
         "monitoring_enabled": bool(monitoring.get("enabled")),
@@ -242,12 +235,9 @@ def _resolve_node_image_settings(
     *,
     node_image_mode: str,
     node_integrated_image: str | None,
-    node_split_image: str | None,
-) -> tuple[str, str | None, str | None]:
+) -> tuple[str, str | None]:
     if node_image_mode not in SUPPORTED_NODE_IMAGE_MODES:
         raise ValueError(f"node_image_mode must be one of {sorted(SUPPORTED_NODE_IMAGE_MODES)}")
-    if node_image_mode == "registry" and (not node_integrated_image or not node_split_image):
-        raise ValueError(
-            "registry node image mode requires both --node-integrated-image and --node-split-image"
-        )
-    return node_image_mode, node_integrated_image, node_split_image
+    if node_image_mode == "registry" and not node_integrated_image:
+        raise ValueError("registry node image mode requires --node-integrated-image")
+    return node_image_mode, node_integrated_image

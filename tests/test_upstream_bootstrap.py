@@ -32,7 +32,7 @@ def release() -> dict:
             "s6_overlay_x86_64_sha256": "b" * 64,
             "s6_overlay_aarch64_sha256": "c" * 64,
         },
-        "images": {"integrated": "xian-node", "split": "xian-node-split"},
+        "images": {"integrated": "xian-node"},
     }
 
 
@@ -44,7 +44,6 @@ def profile(manifest=None) -> dict:
         "moniker": "node",
         "node_image_mode": "registry",
         "node_integrated_image": "registry.example/xian-node@sha256:" + "a" * 64,
-        "node_split_image": "registry.example/xian-node-split@sha256:" + "b" * 64,
         "node_release_manifest": manifest,
     }
 

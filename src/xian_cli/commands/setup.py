@@ -139,7 +139,6 @@ class SetupNodePlan:
     genesis_bundle: str
     node_image_mode: str | None
     node_integrated_image: str | None
-    node_split_image: str | None
     moniker: str | None
     force: bool
     rpc_url: str
@@ -691,7 +690,6 @@ def _resolve_plan(args: argparse.Namespace) -> SetupNodePlan:
         genesis_bundle=args.genesis_bundle,
         node_image_mode=args.node_image_mode,
         node_integrated_image=args.node_integrated_image,
-        node_split_image=args.node_split_image,
         moniker=args.moniker,
         force=bool(args.force),
         rpc_url=args.rpc_url,
@@ -765,7 +763,6 @@ def _network_command(plan: SetupNodePlan) -> list[str]:
     _add_repeated_option(command, "--seed", plan.seed)
     _add_value_option(command, "--node-image-mode", plan.node_image_mode)
     _add_value_option(command, "--node-integrated-image", plan.node_integrated_image)
-    _add_value_option(command, "--node-split-image", plan.node_split_image)
     _add_runtime_options(command, plan.runtime_args)
     if plan.force:
         command.append("--force")
@@ -904,7 +901,6 @@ def _network_args(plan: SetupNodePlan) -> argparse.Namespace:
         "validator_key_dir": plan.validator_key_dir,
         "node_image_mode": plan.node_image_mode,
         "node_integrated_image": plan.node_integrated_image,
-        "node_split_image": plan.node_split_image,
         "stack_dir": plan.stack_dir,
         "seed": plan.seed,
         "genesis_source": plan.genesis_source,

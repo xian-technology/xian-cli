@@ -105,7 +105,6 @@ def test_restore_native_inspector_uses_the_selected_image_and_recipient_genesis(
     profile = {
         "node_image_mode": "registry",
         "node_integrated_image": "image@sha256:" + "a" * 64,
-        "node_split_image": "split@sha256:" + "b" * 64,
     }
     inspector = node_context._snapshot_store_inspector(
         stack_dir=tmp_path, home=tmp_path / "recipient", profile=profile, network={}
@@ -158,7 +157,6 @@ def test_current_stack_parser_accepts_actual_cli_snapshot_requests(tmp_path, mon
         "node-store-snapshot-" + action,
         node_image_mode="registry",
         node_integrated_image="reviewed-image",
-        node_split_image="reviewed-split-image",
         snapshot_options=options,
     )
     request = json.loads(capture.call_args.kwargs["input"])

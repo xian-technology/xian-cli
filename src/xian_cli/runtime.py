@@ -22,7 +22,6 @@ BACKEND_STDERR_TAIL_CHARS = 65_536
 BACKEND_OPTION_KEYS = (
     ("node_image_mode", "node_image_mode"),
     ("node_integrated_image", "node_integrated_image"),
-    ("node_split_image", "node_split_image"),
     ("bds_enabled", "bds_enabled"),
     ("dashboard_enabled", "dashboard"),
     ("monitoring_enabled", "monitoring"),
@@ -57,10 +56,7 @@ def _snapshot_backend_options(values: Mapping[str, Any], options: dict) -> dict:
     """Offline tools accept image selection, not unrelated service toggles."""
     return drop_none(
         {
-            **{
-                name: values.get(name)
-                for name in ("node_image_mode", "node_integrated_image", "node_split_image")
-            },
+            **{name: values.get(name) for name in ("node_image_mode", "node_integrated_image")},
             **options,
         }
     )
@@ -228,7 +224,6 @@ def run_backend_command(
     cometbft_home: Path | None = None,
     node_image_mode: str | None = None,
     node_integrated_image: str | None = None,
-    node_split_image: str | None = None,
     bds_enabled: bool = False,
     dashboard_enabled: bool = False,
     monitoring_enabled: bool = False,
@@ -311,7 +306,6 @@ class StackRuntimeOptions:
     cometbft_home: Path | None = None
     node_image_mode: str = "local_build"
     node_integrated_image: str | None = None
-    node_split_image: str | None = None
     dashboard_enabled: bool = False
     monitoring_enabled: bool = False
     dashboard_host: str = "127.0.0.1"

@@ -139,7 +139,6 @@ def summarize_node_status(result: dict, *, block_age_seconds: Callable) -> dict:
         **_rpc_summary(result, block_age_seconds),
         "node_image_mode": profile.get("node_image_mode"),
         "node_integrated_image": profile.get("node_integrated_image"),
-        "node_split_image": profile.get("node_split_image"),
         **_release_summary(result.get("node_release_manifest")),
         **_backend_summary(result.get("backend_status"), services),
     }

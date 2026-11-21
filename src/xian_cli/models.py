@@ -442,10 +442,7 @@ def _normalize_node_release_manifest(
     images_raw = value.get("images")
     if not isinstance(images_raw, dict):
         raise ValueError(f"{key}.images must be an object")
-    images = {
-        "integrated": _require_str(images_raw, "integrated"),
-        "split": _require_str(images_raw, "split"),
-    }
+    images = {"integrated": _require_str(images_raw, "integrated")}
 
     return {
         "schema_version": SCHEMA_VERSION,
@@ -655,17 +652,12 @@ def _validate_node_image_config(
     *,
     mode: str | None,
     integrated_image: str | None,
-    split_image: str | None,
-) -> tuple[str | None, str | None, str | None]:
-    if mode != "registry" and (integrated_image is not None or split_image is not None):
-        raise ValueError(
-            "node_integrated_image and node_split_image require node_image_mode=registry"
-        )
-    if mode == "registry" and (integrated_image is None or split_image is None):
-        raise ValueError(
-            "registry node image mode requires both node_integrated_image and node_split_image"
-        )
-    return mode, integrated_image, split_image
+) -> tuple[str | None, str | None]:
+    if mode != "registry" and integrated_image is not None:
+        raise ValueError("node_integrated_image requires node_image_mode=registry")
+    if mode == "registry" and integrated_image is None:
+        raise ValueError("registry node image mode requires node_integrated_image")
+    return mode, integrated_image
 
 
 def _require_block_policy_mode(payload: dict, key: str) -> str:
@@ -1021,7 +1013,6 @@ def normalize_network_manifest(payload: dict) -> dict:
             "block_policy_interval",
             "node_image_mode",
             "node_integrated_image",
-            "node_split_image",
             "shielded_relayers",
             "privacy_artifact_catalog",
             "shielded_history_policy",
@@ -1034,10 +1025,9 @@ def normalize_network_manifest(payload: dict) -> dict:
     )
     shielded_relayers = _normalize_shielded_relayers_manifest(payload)
 
-    node_image_mode, node_integrated_image, node_split_image = _validate_node_image_config(
+    node_image_mode, node_integrated_image = _validate_node_image_config(
         mode=_require_node_image_mode(payload, "node_image_mode"),
         integrated_image=_require_optional_str(payload, "node_integrated_image"),
-        split_image=_require_optional_str(payload, "node_split_image"),
     )
 
     return {
@@ -1054,7 +1044,6 @@ def normalize_network_manifest(payload: dict) -> dict:
         "block_policy_interval": _require_block_policy_interval(payload, "block_policy_interval"),
         "node_image_mode": node_image_mode,
         "node_integrated_image": node_integrated_image,
-        "node_split_image": node_split_image,
         "shielded_relayers": shielded_relayers,
         "privacy_artifact_catalog": _normalize_privacy_artifact_catalog(
             payload, "privacy_artifact_catalog"
@@ -1100,7 +1089,6 @@ def normalize_node_profile(payload: dict) -> dict:
             "validator_key_ref",
             "node_image_mode",
             "node_integrated_image",
-            "node_split_image",
             "node_release_manifest",
             "stack_dir",
             "p2p",
@@ -1130,10 +1118,9 @@ def normalize_node_profile(payload: dict) -> dict:
         label="node profile",
     )
 
-    node_image_mode, node_integrated_image, node_split_image = _validate_node_image_config(
+    node_image_mode, node_integrated_image = _validate_node_image_config(
         mode=_require_optional_node_image_mode(payload, "node_image_mode"),
         integrated_image=_require_optional_str(payload, "node_integrated_image"),
-        split_image=_require_optional_str(payload, "node_split_image"),
     )
 
     return {
@@ -1147,7 +1134,6 @@ def normalize_node_profile(payload: dict) -> dict:
         ),
         "node_image_mode": node_image_mode,
         "node_integrated_image": node_integrated_image,
-        "node_split_image": node_split_image,
         "node_release_manifest": _normalize_node_release_manifest(
             payload,
             "node_release_manifest",
@@ -1377,7 +1363,6 @@ class NetworkManifest:
     genesis_build: dict | None = None
     node_image_mode: str = "local_build"
     node_integrated_image: str | None = None
-    node_split_image: str | None = None
     shielded_relayers: list[dict] = field(default_factory=list)
     privacy_artifact_catalog: dict | None = None
     shielded_history_policy: dict | None = None
@@ -1403,7 +1388,6 @@ class NodeProfile:
     validator_key_ref: str | None = None
     node_image_mode: str | None = None
     node_integrated_image: str | None = None
-    node_split_image: str | None = None
     node_release_manifest: dict | None = None
     stack_dir: str | None = None
     p2p: dict = field(default_factory=lambda: deepcopy(DEFAULT_P2P))

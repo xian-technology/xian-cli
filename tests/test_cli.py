@@ -62,10 +62,6 @@ CANONICAL_RELEASE_INTEGRATED_IMAGE = (
     "ghcr.io/xian-technology/xian-node@sha256:"
     "014527ec7a7e5bc0b63f512421a3d6feedc7b3999c68113d195deb6b41eae6c3"
 )
-CANONICAL_RELEASE_SPLIT_IMAGE = (
-    "ghcr.io/xian-technology/xian-node-split@sha256:"
-    "2351ca938fe147af9bed8e827ac9c86de6686dbac228f3822de7e1b4ac41a54c"
-)
 
 
 class ParserUxTests(unittest.TestCase):
@@ -2006,7 +2002,6 @@ class NetworkManifestTests(unittest.TestCase):
             self.assertNotIn("tracer_mode", manifest)
             self.assertEqual(manifest["node_image_mode"], "local_build")
             self.assertIsNone(manifest["node_integrated_image"])
-            self.assertIsNone(manifest["node_split_image"])
             self.assertIsNone(manifest["node_release_manifest"])
 
     def test_network_create_defaults_to_network_first_layout(self) -> None:
@@ -2155,7 +2150,6 @@ class NetworkManifestTests(unittest.TestCase):
                 json.dumps(
                     _manifest_payload(
                         node_image_mode="registry",
-                        node_integrated_image=("ghcr.io/xian-technology/xian-node@sha256:abc"),
                         block_policy_mode="on_demand",
                         block_policy_interval="0s",
                     )
@@ -2163,7 +2157,7 @@ class NetworkManifestTests(unittest.TestCase):
                 encoding="utf-8",
             )
 
-            with self.assertRaisesRegex(ValueError, "requires both node_integrated_image"):
+            with self.assertRaisesRegex(ValueError, "requires node_integrated_image"):
                 read_network_manifest(manifest_path)
 
     def test_network_create_uses_template_defaults(self) -> None:
@@ -2472,7 +2466,6 @@ class NetworkManifestTests(unittest.TestCase):
             self.assertNotIn("tracer_mode", profile)
             self.assertEqual(profile["node_image_mode"], "local_build")
             self.assertIsNone(profile["node_integrated_image"])
-            self.assertIsNone(profile["node_split_image"])
 
     def test_network_join_dry_run_validates_without_writing_profile(
         self,
@@ -2571,7 +2564,6 @@ class NetworkManifestTests(unittest.TestCase):
                         block_policy_interval="10s",
                         node_image_mode="registry",
                         node_integrated_image=("ghcr.io/xian-technology/xian-node@sha256:abc"),
-                        node_split_image=("ghcr.io/xian-technology/xian-node-split@sha256:def"),
                         node_release_manifest=(CANONICAL_NODE_RELEASE_MANIFEST),
                     )
                 ),
@@ -2607,10 +2599,6 @@ class NetworkManifestTests(unittest.TestCase):
             self.assertEqual(
                 profile["node_integrated_image"],
                 "ghcr.io/xian-technology/xian-node@sha256:abc",
-            )
-            self.assertEqual(
-                profile["node_split_image"],
-                "ghcr.io/xian-technology/xian-node-split@sha256:def",
             )
             self.assertEqual(
                 profile["node_release_manifest"],
@@ -2722,7 +2710,6 @@ class NetworkManifestTests(unittest.TestCase):
                         block_policy_interval="0s",
                         node_image_mode="registry",
                         node_integrated_image=("ghcr.io/xian-technology/xian-node@sha256:abc"),
-                        node_split_image=("ghcr.io/xian-technology/xian-node-split@sha256:def"),
                         node_release_manifest=(CANONICAL_NODE_RELEASE_MANIFEST),
                     )
                 ),
@@ -2752,7 +2739,6 @@ class NetworkManifestTests(unittest.TestCase):
             profile = json.loads(output_path.read_text(encoding="utf-8"))
             self.assertEqual(profile["node_image_mode"], "local_build")
             self.assertIsNone(profile["node_integrated_image"])
-            self.assertIsNone(profile["node_split_image"])
             self.assertIsNone(profile["node_release_manifest"])
 
     def test_network_join_allows_block_policy_override(self) -> None:
@@ -4264,7 +4250,6 @@ class NodeRuntimeTests(unittest.TestCase):
             self.assertFalse(kwargs["wait_for_rpc"])
             self.assertEqual(kwargs["node_image_mode"], "local_build")
             self.assertIsNone(kwargs["node_integrated_image"])
-            self.assertIsNone(kwargs["node_split_image"])
 
     def test_node_start_inherits_registry_images_from_network(
         self,
@@ -4287,7 +4272,6 @@ class NodeRuntimeTests(unittest.TestCase):
                         chain_id="xian-local-1",
                         node_image_mode="registry",
                         node_integrated_image=(CANONICAL_RELEASE_INTEGRATED_IMAGE),
-                        node_split_image=CANONICAL_RELEASE_SPLIT_IMAGE,
                         block_policy_mode="on_demand",
                         block_policy_interval="0s",
                     )
@@ -4336,10 +4320,6 @@ class NodeRuntimeTests(unittest.TestCase):
                 kwargs["node_integrated_image"],
                 CANONICAL_RELEASE_INTEGRATED_IMAGE,
             )
-            self.assertEqual(
-                kwargs["node_split_image"],
-                CANONICAL_RELEASE_SPLIT_IMAGE,
-            )
 
     def test_node_status_surfaces_release_manifest_provenance(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -4356,7 +4336,6 @@ class NodeRuntimeTests(unittest.TestCase):
                         chain_id="xian-local-1",
                         node_image_mode="registry",
                         node_integrated_image=(CANONICAL_RELEASE_INTEGRATED_IMAGE),
-                        node_split_image=CANONICAL_RELEASE_SPLIT_IMAGE,
                         node_release_manifest=(CANONICAL_NODE_RELEASE_MANIFEST),
                         block_policy_mode="on_demand",
                         block_policy_interval="0s",
@@ -4370,7 +4349,6 @@ class NodeRuntimeTests(unittest.TestCase):
                         network="mainnet",
                         node_image_mode="registry",
                         node_integrated_image=(CANONICAL_RELEASE_INTEGRATED_IMAGE),
-                        node_split_image=CANONICAL_RELEASE_SPLIT_IMAGE,
                         node_release_manifest=(CANONICAL_NODE_RELEASE_MANIFEST),
                         stack_dir=str(stack_dir),
                         home=None,
@@ -4443,10 +4421,6 @@ class NodeRuntimeTests(unittest.TestCase):
             self.assertEqual(
                 payload["summary"]["node_integrated_image"],
                 CANONICAL_RELEASE_INTEGRATED_IMAGE,
-            )
-            self.assertEqual(
-                payload["summary"]["node_split_image"],
-                CANONICAL_RELEASE_SPLIT_IMAGE,
             )
 
     def test_node_stop_uses_xian_stack_backend(self) -> None:
@@ -5664,7 +5638,6 @@ class RuntimeHelperTests(unittest.TestCase):
             cometbft_home=cometbft_home,
             node_image_mode="local_build",
             node_integrated_image=None,
-            node_split_image=None,
             bds_enabled=True,
             dashboard_enabled=True,
             monitoring_enabled=True,
@@ -5700,7 +5673,6 @@ class RuntimeHelperTests(unittest.TestCase):
                 stack_dir=stack_dir,
                 node_image_mode="registry",
                 node_integrated_image="ghcr.io/xian-technology/xian-node@sha256:abc",
-                node_split_image="ghcr.io/xian-technology/xian-node-split@sha256:def",
                 bds_enabled=False,
                 wait_for_rpc=False,
             )
@@ -5711,7 +5683,6 @@ class RuntimeHelperTests(unittest.TestCase):
             cometbft_home=None,
             node_image_mode="registry",
             node_integrated_image="ghcr.io/xian-technology/xian-node@sha256:abc",
-            node_split_image="ghcr.io/xian-technology/xian-node-split@sha256:def",
             bds_enabled=False,
             dashboard_enabled=False,
             monitoring_enabled=False,
@@ -5759,7 +5730,6 @@ class RuntimeHelperTests(unittest.TestCase):
             cometbft_home=cometbft_home,
             node_image_mode="local_build",
             node_integrated_image=None,
-            node_split_image=None,
             bds_enabled=False,
             dashboard_enabled=True,
             monitoring_enabled=True,
@@ -5808,7 +5778,6 @@ class RuntimeHelperTests(unittest.TestCase):
             cometbft_home=cometbft_home,
             node_image_mode="local_build",
             node_integrated_image=None,
-            node_split_image=None,
             bds_enabled=True,
             dashboard_enabled=True,
             monitoring_enabled=True,
@@ -5855,7 +5824,6 @@ class RuntimeHelperTests(unittest.TestCase):
             cometbft_home=cometbft_home,
             node_image_mode="local_build",
             node_integrated_image=None,
-            node_split_image=None,
             bds_enabled=True,
             dashboard_enabled=True,
             monitoring_enabled=True,
@@ -5901,7 +5869,6 @@ class RuntimeHelperTests(unittest.TestCase):
             cometbft_home=cometbft_home,
             node_image_mode="local_build",
             node_integrated_image=None,
-            node_split_image=None,
             bds_enabled=True,
             dashboard_enabled=True,
             monitoring_enabled=True,

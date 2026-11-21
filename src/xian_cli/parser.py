@@ -493,10 +493,6 @@ def build_parser() -> argparse.ArgumentParser:
         help="pinned integrated node image reference for registry mode",
     )
     create_parser.add_argument(
-        "--node-split-image",
-        help="pinned split-runtime node image reference for registry mode",
-    )
-    create_parser.add_argument(
         "--genesis-source",
         help="path or URL for the genesis source used to bootstrap the network",
     )
@@ -682,10 +678,6 @@ def build_parser() -> argparse.ArgumentParser:
     join_parser.add_argument(
         "--node-integrated-image",
         help="explicit integrated node image override for registry mode",
-    )
-    join_parser.add_argument(
-        "--node-split-image",
-        help="explicit split-runtime node image override for registry mode",
     )
     join_parser.add_argument(
         "--stack-dir",
@@ -908,10 +900,6 @@ def build_parser() -> argparse.ArgumentParser:
     setup_node_parser.add_argument(
         "--node-integrated-image",
         help="explicit integrated node image override for registry mode",
-    )
-    setup_node_parser.add_argument(
-        "--node-split-image",
-        help="explicit split-runtime node image override for registry mode",
     )
     add_node_profile_runtime_args(
         setup_node_parser,

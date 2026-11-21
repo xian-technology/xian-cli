@@ -350,14 +350,13 @@ def _network_manifest(
     genesis_build: dict[str, object] | None,
     fee_policy: dict,
 ) -> NetworkManifest:
-    node_image_mode, node_integrated_image, node_split_image = _resolve_node_image_settings(
+    node_image_mode, node_integrated_image = _resolve_node_image_settings(
         node_image_mode=_pick_template_value(
             args.node_image_mode,
             None,
             "local_build",
         ),
         node_integrated_image=args.node_integrated_image,
-        node_split_image=args.node_split_image,
     )
     return NetworkManifest(
         name=args.name,
@@ -380,7 +379,6 @@ def _network_manifest(
         ),
         node_image_mode=node_image_mode,
         node_integrated_image=node_integrated_image,
-        node_split_image=node_split_image,
         node_release_manifest=None,
     )
 
@@ -401,7 +399,6 @@ def _creation_validator_profile(
         validator_key_ref=validator["validator_key_ref"],
         node_image_mode=manifest.node_image_mode,
         node_integrated_image=manifest.node_integrated_image,
-        node_split_image=manifest.node_split_image,
         node_release_manifest=manifest.node_release_manifest,
         stack_dir=(str(args.stack_dir) if is_bootstrap and args.stack_dir is not None else None),
         p2p={"seeds": [], "persistent_peers": []},
@@ -652,7 +649,7 @@ def _handle_network_join(args: argparse.Namespace) -> int:
         None,
         network.get("node_image_mode") or "local_build",
     )
-    node_image_mode, node_integrated_image, node_split_image = _resolve_node_image_settings(
+    node_image_mode, node_integrated_image = _resolve_node_image_settings(
         node_image_mode=requested_node_image_mode,
         node_integrated_image=_pick_template_value(
             args.node_integrated_image,
@@ -660,11 +657,6 @@ def _handle_network_join(args: argparse.Namespace) -> int:
             network.get("node_integrated_image")
             if requested_node_image_mode == "registry"
             else None,
-        ),
-        node_split_image=_pick_template_value(
-            args.node_split_image,
-            None,
-            network.get("node_split_image") if requested_node_image_mode == "registry" else None,
         ),
     )
 
@@ -694,12 +686,10 @@ def _handle_network_join(args: argparse.Namespace) -> int:
         validator_key_ref=validator_key_ref,
         node_image_mode=node_image_mode,
         node_integrated_image=node_integrated_image,
-        node_split_image=node_split_image,
         node_release_manifest=_effective_node_release_manifest(
             {
                 "node_image_mode": node_image_mode,
                 "node_integrated_image": node_integrated_image,
-                "node_split_image": node_split_image,
             },
             network,
         ),

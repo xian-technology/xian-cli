@@ -197,8 +197,8 @@ The signing file contains the publisher's 32-byte hexadecimal private key and
 uses mode `0600`. Export writes the archive and signed manifest locally; it
 does not upload them. It uses the profile's current node image for native
 store inspection, so a host Go binary is not required. Both export and restore
-require a successful stopped-runtime status check; unknown status, partial
-split runtimes, paused or restarting containers are refused. A known-empty
+require a successful stopped-runtime status check; unknown status, paused or
+restarting containers are refused. A known-empty
 fresh home can be restored after its own genesis/configuration/keys are initialized.
 `node stop` remains available for profiles with unsupported old state-sync intent.
 
