@@ -54,9 +54,7 @@ from xian_cli.runtime import (
 
 WORKSPACE_ROOT = Path(__file__).resolve().parents[2]
 TEST_FIXTURE_GENESIS = Path(__file__).resolve().parent / "fixtures" / "genesis.json"
-CANONICAL_LOCAL_MANIFEST = (
-    WORKSPACE_ROOT / "xian-configs" / "networks" / "local" / "manifest.json"
-)
+CANONICAL_LOCAL_MANIFEST = WORKSPACE_ROOT / "xian-configs" / "networks" / "local" / "manifest.json"
 CANONICAL_NODE_RELEASE_MANIFEST = json.loads(
     (WORKSPACE_ROOT / "xian-stack" / "release-manifest.json").read_text(encoding="utf-8")
 )
