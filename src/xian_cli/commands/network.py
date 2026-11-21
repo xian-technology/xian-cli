@@ -605,10 +605,7 @@ def _handle_network_create(args: argparse.Namespace) -> int:
 
 
 def _validate_join_flags(args: argparse.Namespace) -> None:
-    if args.generate_validator_key and args.validator_key_ref is not None:
-        raise ValueError("pass either --validator-key-ref or --generate-validator-key, not both")
-    if args.validator_key_dir is not None and not args.generate_validator_key:
-        raise ValueError("--validator-key-dir requires --generate-validator-key")
+    _validate_validator_key_args(args)
     if args.restore_snapshot and not args.init_node:
         raise ValueError("--restore-snapshot requires --init-node")
 
