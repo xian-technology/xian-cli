@@ -604,6 +604,124 @@ def _handle_network_create(args: argparse.Namespace) -> int:
     return 0
 
 
+def _validate_join_flags(args: argparse.Namespace) -> None:
+    if args.generate_validator_key and args.validator_key_ref is not None:
+        raise ValueError("pass either --validator-key-ref or --generate-validator-key, not both")
+    if args.validator_key_dir is not None and not args.generate_validator_key:
+        raise ValueError("--validator-key-dir requires --generate-validator-key")
+    if args.restore_snapshot and not args.init_node:
+        raise ValueError("--restore-snapshot requires --init-node")
+
+
+def _join_dry_run_plan(args: argparse.Namespace, *, network_path: Path, target: Path) -> dict:
+    return {
+        "dry_run": True,
+        "name": args.name,
+        "network": args.network,
+        "network_manifest": str(network_path),
+        "node_profile_path": str(target),
+        "generate_validator_key": bool(args.generate_validator_key),
+        "init_node": bool(args.init_node),
+        "restore_snapshot": bool(args.restore_snapshot),
+    }
+
+
+def _join_node_image(args: argparse.Namespace, network: dict) -> tuple[str, str | None]:
+    mode = _pick_template_value(
+        args.node_image_mode, None, network.get("node_image_mode") or "local_build"
+    )
+    network_image = network.get("node_integrated_image") if mode == "registry" else None
+    return _resolve_node_image_settings(
+        node_image_mode=mode,
+        node_integrated_image=_pick_template_value(args.node_integrated_image, None, network_image),
+    )
+
+
+def _join_validator_key_ref(args: argparse.Namespace, base_dir: Path) -> str | None:
+    if args.validator_key_ref is not None:
+        return _stringify_path_for_profile(args.validator_key_ref, base_dir=base_dir)
+    if not args.generate_validator_key:
+        return None
+    key_dir = args.validator_key_dir or base_dir / "keys" / args.name
+    if not key_dir.is_absolute():
+        key_dir = (base_dir / key_dir).resolve()
+    metadata_path = _write_validator_material_files(out_dir=key_dir, force=args.force)
+    return _stringify_path_for_profile(metadata_path, base_dir=base_dir)
+
+
+def _join_block_policy(args: argparse.Namespace, template: dict | None, network: dict) -> dict:
+    template = template or {}
+    return {
+        "block_policy_mode": _pick_template_value(
+            args.block_policy_mode,
+            template.get("block_policy_mode"),
+            network.get("block_policy_mode", DEFAULT_BLOCK_POLICY_MODE),
+        ),
+        "block_policy_interval": _pick_template_value(
+            args.block_policy_interval,
+            template.get("block_policy_interval"),
+            network.get("block_policy_interval", DEFAULT_BLOCK_POLICY_INTERVAL),
+        ),
+    }
+
+
+def _join_profile(
+    args: argparse.Namespace,
+    *,
+    template: dict | None,
+    network: dict,
+    node_image: tuple[str, str | None],
+    validator_key_ref: str | None,
+) -> NodeProfile:
+    node_image_mode, node_integrated_image = node_image
+    return NodeProfile(
+        name=args.name,
+        network=args.network,
+        moniker=args.moniker or args.name,
+        validator_key_ref=validator_key_ref,
+        node_image_mode=node_image_mode,
+        node_integrated_image=node_integrated_image,
+        node_release_manifest=_effective_node_release_manifest(
+            {"node_image_mode": node_image_mode, "node_integrated_image": node_integrated_image},
+            network,
+        ),
+        stack_dir=str(args.stack_dir) if args.stack_dir is not None else None,
+        p2p={"seeds": args.seed or [], "persistent_peers": []},
+        genesis=(
+            {"kind": "source", "source": args.genesis_source} if args.genesis_source else None
+        ),
+        snapshot_url=args.snapshot_url,
+        snapshot_signing_keys=args.snapshot_signing_key or [],
+        home=str(args.home) if args.home is not None else None,
+        **_join_block_policy(args, template, network),
+        **build_profile_runtime_fields(
+            args=args,
+            template=template,
+            runtime_services=True,
+            intentkit_network_id_default=_default_intentkit_network_id(network.get("name")),
+        ),
+    )
+
+
+def _join_init_node(
+    args: argparse.Namespace, *, base_dir: Path, target: Path, network_path: Path
+) -> dict:
+    init_args = argparse.Namespace(
+        name=args.name,
+        base_dir=base_dir,
+        profile=target,
+        network=network_path,
+        validator_key=None,
+        stack_dir=args.stack_dir,
+        configs_dir=args.configs_dir,
+        home=args.home,
+        force=args.force,
+        restore_snapshot=args.restore_snapshot,
+        snapshot_url=args.snapshot_url,
+    )
+    return _initialize_node_from_args(init_args)
+
+
 def _handle_network_join(args: argparse.Namespace) -> int:
     base_dir = args.base_dir.resolve()
     template = _load_template(
@@ -618,128 +736,33 @@ def _handle_network_join(args: argparse.Namespace) -> int:
         configs_dir=args.configs_dir,
     )
     network = read_network_manifest(network_path)
-    if args.generate_validator_key and args.validator_key_ref is not None:
-        raise ValueError("pass either --validator-key-ref or --generate-validator-key, not both")
-    if args.validator_key_dir is not None and not args.generate_validator_key:
-        raise ValueError("--validator-key-dir requires --generate-validator-key")
-    if args.restore_snapshot and not args.init_node:
-        raise ValueError("--restore-snapshot requires --init-node")
-
+    _validate_join_flags(args)
+    target = _resolve_output_path(
+        base_dir=base_dir,
+        explicit_output=args.output,
+        default_path=base_dir / "nodes" / f"{args.name}.json",
+    )
     if getattr(args, "dry_run", False):
-        target_profile = _resolve_output_path(
-            base_dir=base_dir,
-            explicit_output=args.output,
-            default_path=base_dir / "nodes" / f"{args.name}.json",
+        print(
+            json.dumps(_join_dry_run_plan(args, network_path=network_path, target=target), indent=2)
         )
-        dry_plan: dict[str, object] = {
-            "dry_run": True,
-            "name": args.name,
-            "network": args.network,
-            "network_manifest": str(network_path),
-            "node_profile_path": str(target_profile),
-            "generate_validator_key": bool(args.generate_validator_key),
-            "init_node": bool(args.init_node),
-            "restore_snapshot": bool(args.restore_snapshot),
-        }
-        print(json.dumps(dry_plan, indent=2))
         return 0
 
-    requested_node_image_mode = _pick_template_value(
-        args.node_image_mode,
-        None,
-        network.get("node_image_mode") or "local_build",
-    )
-    node_image_mode, node_integrated_image = _resolve_node_image_settings(
-        node_image_mode=requested_node_image_mode,
-        node_integrated_image=_pick_template_value(
-            args.node_integrated_image,
-            None,
-            network.get("node_integrated_image")
-            if requested_node_image_mode == "registry"
-            else None,
-        ),
-    )
-
-    validator_key_ref: str | None = None
-    if args.validator_key_ref is not None:
-        validator_key_ref = _stringify_path_for_profile(
-            args.validator_key_ref,
-            base_dir=base_dir,
-        )
-    elif args.generate_validator_key:
-        key_dir = args.validator_key_dir or base_dir / "keys" / args.name
-        if not key_dir.is_absolute():
-            key_dir = (base_dir / key_dir).resolve()
-        metadata_path = _write_validator_material_files(
-            out_dir=key_dir,
-            force=args.force,
-        )
-        validator_key_ref = _stringify_path_for_profile(
-            metadata_path,
-            base_dir=base_dir,
-        )
-
-    profile = NodeProfile(
-        name=args.name,
-        network=args.network,
-        moniker=args.moniker or args.name,
+    node_image = _join_node_image(args, network)
+    validator_key_ref = _join_validator_key_ref(args, base_dir)
+    profile = _join_profile(
+        args,
+        template=template,
+        network=network,
+        node_image=node_image,
         validator_key_ref=validator_key_ref,
-        node_image_mode=node_image_mode,
-        node_integrated_image=node_integrated_image,
-        node_release_manifest=_effective_node_release_manifest(
-            {
-                "node_image_mode": node_image_mode,
-                "node_integrated_image": node_integrated_image,
-            },
-            network,
-        ),
-        stack_dir=str(args.stack_dir) if args.stack_dir is not None else None,
-        p2p={"seeds": args.seed or [], "persistent_peers": []},
-        genesis=(
-            {"kind": "source", "source": args.genesis_source} if args.genesis_source else None
-        ),
-        snapshot_url=args.snapshot_url,
-        snapshot_signing_keys=args.snapshot_signing_key or [],
-        home=str(args.home) if args.home is not None else None,
-        block_policy_mode=_pick_template_value(
-            args.block_policy_mode,
-            None if template is None else template.get("block_policy_mode"),
-            network.get("block_policy_mode", DEFAULT_BLOCK_POLICY_MODE),
-        ),
-        block_policy_interval=_pick_template_value(
-            args.block_policy_interval,
-            None if template is None else template.get("block_policy_interval"),
-            network.get("block_policy_interval", DEFAULT_BLOCK_POLICY_INTERVAL),
-        ),
-        **build_profile_runtime_fields(
-            args=args,
-            template=template,
-            runtime_services=True,
-            intentkit_network_id_default=_default_intentkit_network_id(network.get("name")),
-        ),
     )
-    target = args.output or base_dir / "nodes" / f"{args.name}.json"
-    if not target.is_absolute():
-        target = (base_dir / target).resolve()
     write_json(target, profile.to_dict(), force=args.force)
     if not args.init_node:
         print(f"wrote node profile to {target} using {network_path}")
         return 0
 
-    init_args = argparse.Namespace(
-        name=args.name,
-        base_dir=base_dir,
-        profile=target,
-        network=network_path,
-        validator_key=None,
-        stack_dir=args.stack_dir,
-        configs_dir=args.configs_dir,
-        home=args.home,
-        force=args.force,
-        restore_snapshot=args.restore_snapshot,
-        snapshot_url=args.snapshot_url,
-    )
-    init_result = _initialize_node_from_args(init_args)
+    init_result = _join_init_node(args, base_dir=base_dir, target=target, network_path=network_path)
     print(
         json.dumps(
             {
