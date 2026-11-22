@@ -136,12 +136,13 @@ def test_initialization_preserves_every_effective_option(tmp_path, case):
         (Path(__file__).parent / "fixtures/node_options_baseline.json").read_text()
     )
     options, setup, restore, result = observe_initialization(tmp_path, case)
+    # Older ABCI versions still carry a state-sync option in their dataclass.
+    options.pop("statesync", None)
     assert options == expected[case]
-    assert setup.materialize_cometbft_home.call_args.kwargs["home"] == tmp_path / "home"
-    assert (
-        setup.materialize_cometbft_home.call_args.kwargs["priv_validator_key"]["address"]
-        == "profile"
-    )
+    materialized = setup.materialize_cometbft_home.call_args.kwargs
+    assert materialized["config"]["statesync"]["enable"] is False
+    assert materialized["home"] == tmp_path / "home"
+    assert materialized["priv_validator_key"]["address"] == "profile"
     assert result == {
         "home": "materialized-home",
         "effective_genesis_source": "bundle:local",
