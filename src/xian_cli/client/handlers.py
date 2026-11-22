@@ -77,11 +77,6 @@ def _parse_json_object(raw: str, *, flag_name: str) -> dict[str, Any]:
     return value
 
 
-def _parse_json_object_from_path(path: str, *, label: str) -> dict[str, Any]:
-    raw = sys.stdin.read() if path == "-" else Path(path).read_text(encoding="utf-8")
-    return _parse_json_object(raw, flag_name=label)
-
-
 def _read_text_from_path(path: str) -> str:
     return sys.stdin.read() if path == "-" else Path(path).read_text(encoding="utf-8")
 

@@ -40,15 +40,6 @@ def validate_optional_positive_int(name: str, value: Any) -> int | None:
     return None if value is None else validate_positive_int(name, value)
 
 
-def validate_non_negative_int(name: str, value: Any) -> int:
-    if isinstance(value, bool):
-        raise ValueError(f"{name} must be a non-negative integer")
-    normalized = int(value)
-    if normalized < 0:
-        raise ValueError(f"{name} must be a non-negative integer")
-    return normalized
-
-
 def _template_value(
     args: argparse.Namespace,
     template: Mapping[str, Any] | None,
@@ -62,21 +53,6 @@ def _template_value(
         None if template is None else template.get(template_key),
         default,
     )
-
-
-def _nested_template_value(
-    template: Mapping[str, Any] | None,
-    section: str,
-    key: str,
-    default: Any,
-) -> Any:
-    if template is None:
-        return default
-    section_value = template.get(section)
-    if not isinstance(section_value, Mapping):
-        return default
-    item_value = section_value.get(key)
-    return default if item_value is None else item_value
 
 
 def _merge_mapping_defaults(
