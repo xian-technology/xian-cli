@@ -1,8 +1,10 @@
 import hashlib
+import json
 from pathlib import Path
 
 import pytest
 
+from xian_cli.cli import main
 from xian_cli.contract_bundles import read_contract_source_from_bundle
 
 
@@ -25,3 +27,31 @@ def test_source_read_returns_the_exact_bytes_that_were_verified(tmp_path, monkey
     assert reads == [source]
     with pytest.raises(ValueError, match="sha256 mismatch"):
         read_contract_source_from_bundle(tmp_path / "bundle.json", entry)
+
+
+@pytest.mark.parametrize("version", [True, 1.0])
+def test_bundle_validation_requires_an_integer_schema_version(tmp_path, version):
+    source = tmp_path / "contract.py"
+    source.write_bytes(b"# valid source")
+    bundle = tmp_path / "bundle.json"
+    bundle.write_text(
+        json.dumps(
+            {
+                "schema": "xian.contract_bundle.v1",
+                "schema_version": version,
+                "name": "test",
+                "display_name": "Test",
+                "version": "1.0.0",
+                "contracts": [
+                    {
+                        "name": "contract",
+                        "path": source.name,
+                        "sha256": hashlib.sha256(source.read_bytes()).hexdigest(),
+                    }
+                ],
+            }
+        )
+    )
+
+    with pytest.raises(ValueError, match="schema_version must be 1"):
+        main(["contract", "bundle", "validate", str(bundle)])

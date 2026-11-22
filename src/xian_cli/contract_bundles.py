@@ -57,7 +57,8 @@ def validate_contract_bundle(bundle_path: Path) -> dict[str, Any]:
     schema = _require_str(payload, "schema")
     if schema != CONTRACT_BUNDLE_SCHEMA:
         raise ValueError(f"unsupported contract bundle schema: {schema}")
-    if payload.get("schema_version") != 1:
+    schema_version = payload.get("schema_version")
+    if type(schema_version) is not int or schema_version != 1:
         raise ValueError("schema_version must be 1")
 
     bundle_name = _require_str(payload, "name")

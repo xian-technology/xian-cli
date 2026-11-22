@@ -132,3 +132,21 @@ def test_archive_holds_the_bundle_and_is_not_overwritten_without_force(tmp_path)
     with pytest.raises(FileExistsError, match="pass --force to overwrite"):
         package(tmp_path, "--archive")
     assert package(tmp_path, "--archive", "--force")["archive_path"] == str(archive)
+
+
+def test_repackaging_excludes_files_created_by_a_participant(tmp_path):
+    create_network(tmp_path)
+    bundle_dir = Path(package(tmp_path)["bundle_dir"])
+    for name in ("keys/joined/priv_validator_key.json", "nodes/joined/profile.json"):
+        path = bundle_dir / name
+        path.parent.mkdir(parents=True)
+        path.write_text("participant data")
+
+    result = package(tmp_path, "--archive", "--force")
+
+    with tarfile.open(result["archive_path"]) as tar:
+        files = {entry.name for entry in tar if entry.isfile()}
+    assert files == {
+        f"shared-operator-bundle/{name}" for name in [*BUNDLE_FILES, "operator-bundle.json"]
+    }
+    assert (bundle_dir / "keys/joined/priv_validator_key.json").read_text() == "participant data"

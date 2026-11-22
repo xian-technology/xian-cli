@@ -4,6 +4,7 @@ import argparse
 import json
 import shlex
 import shutil
+import tarfile
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -1082,16 +1083,15 @@ def _write_operator_bundle_docs(
         )
 
 
-def _archive_operator_bundle(output_dir: Path, *, force: bool) -> str:
+def _archive_operator_bundle(output_dir: Path, files: list[str], *, force: bool) -> str:
     candidate = output_dir.with_suffix(output_dir.suffix + ".tar.gz")
-    if candidate.exists() and not force:
-        raise FileExistsError(f"{candidate} already exists; pass --force to overwrite")
-    return shutil.make_archive(
-        str(output_dir),
-        "gztar",
-        root_dir=output_dir.parent,
-        base_dir=output_dir.name,
-    )
+    try:
+        with tarfile.open(candidate, mode="w:gz" if force else "x:gz") as archive:
+            for name in files:
+                archive.add(output_dir / name, arcname=f"{output_dir.name}/{name}", recursive=False)
+    except FileExistsError:
+        raise FileExistsError(f"{candidate} already exists; pass --force to overwrite") from None
+    return str(candidate)
 
 
 def _handle_network_package_operator_bundle(args: argparse.Namespace) -> int:
@@ -1160,7 +1160,11 @@ def _handle_network_package_operator_bundle(args: argparse.Namespace) -> int:
         },
         force=args.force,
     )
-    archive_path = _archive_operator_bundle(output_dir, force=args.force) if args.archive else None
+    archive_path = (
+        _archive_operator_bundle(output_dir, [*files, "operator-bundle.json"], force=args.force)
+        if args.archive
+        else None
+    )
 
     result = {
         "bundle_dir": str(output_dir),
