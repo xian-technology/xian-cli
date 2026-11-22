@@ -6073,6 +6073,19 @@ class RuntimeHelperTests(unittest.TestCase):
 
 
 class ConfigRepoTests(unittest.TestCase):
+    def test_read_network_manifest_requires_supported_integer_schema_version(self) -> None:
+        manifest = json.loads(CANONICAL_LOCAL_MANIFEST.read_text(encoding="utf-8"))
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            manifest_path = Path(tmp_dir) / "manifest.json"
+            manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+            self.assertEqual(read_network_manifest(manifest_path)["schema_version"], 1)
+            for version in (True, 1.0, 2):
+                with self.subTest(version=version):
+                    manifest["schema_version"] = version
+                    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+                    with self.assertRaisesRegex(ValueError, "unsupported schema_version"):
+                        read_network_manifest(manifest_path)
+
     def test_read_network_manifest_requires_explicit_schema_version(
         self,
     ) -> None:

@@ -589,16 +589,9 @@ def _normalize_privacy_submission_policy(
 
 def _require_schema_version(payload: dict) -> int:
     schema_version = payload.get("schema_version")
-    if schema_version != SCHEMA_VERSION:
+    if type(schema_version) is not int or schema_version != SCHEMA_VERSION:
         raise ValueError(f"unsupported schema_version: {schema_version}; expected {SCHEMA_VERSION}")
     return schema_version
-
-
-def _require_schema(payload: dict, *, expected: str) -> str:
-    schema = _require_str(payload, "schema")
-    if schema != expected:
-        raise ValueError(f"unsupported schema: {schema}; expected {expected}")
-    return schema
 
 
 def _reject_unknown_fields(
