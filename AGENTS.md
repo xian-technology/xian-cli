@@ -21,7 +21,6 @@
   `xian-configs`.
 - `src/xian_cli/runtime.py`: backend-specific runtime helpers.
 - `src/xian_cli/abci_bridge.py`: import bridge into `xian-abci`.
-- `src/xian_cli/cometbft.py`: key generation and CometBFT-specific helpers.
 - `docs/LIFECYCLE_CONTRACT.md`: canonical lifecycle and artifact contract.
 - `tests/`: CLI, manifest/profile, and backend dispatch tests.
 
@@ -45,8 +44,8 @@
   `node init`, not fork a second bootstrap implementation.
 - Snapshot restore precedence must stay explicit: CLI override, then node
   profile, then canonical manifest.
-- Canonical manifests from `xian-configs` now live at
-  `networks/<name>/manifest.json` with colocated `genesis.json`.
+- Canonical manifests live at `xian-configs/networks/<name>/manifest.json`.
+  The network manifest specifies how to obtain or generate genesis.
 
 ## Validation
 - Preferred setup: `uv sync --group dev`
