@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "xian-tech-cli"
-version = "0.2.2"
+version = "0.2.3"
 description = "Operator CLI for Xian networks and nodes"
 readme = "README.md"
 license = "MIT"
@@ -13,9 +13,9 @@ authors = [{ name = "Xian Core Team" }]
 requires-python = ">=3.14,<3.15"
 dependencies = [
     "pynacl>=1.6.2,<2",
-    "xian-tech-abci>=0.9.4,<0.10",
+    "xian-tech-abci>=0.10.0,<0.11",
     "xian-tech-compiler-core>=0.2.1,<0.3",
-    "xian-tech-py>=0.5.3,<0.6",
+    "xian-tech-py>=0.5.4,<0.6",
 ]
 keywords = ["blockchain", "cometbft", "cli", "operator", "xian"]
 classifiers = [

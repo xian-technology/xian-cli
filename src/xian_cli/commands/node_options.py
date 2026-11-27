@@ -134,7 +134,6 @@ def node_config_options(
 ) -> NodeConfigOptions:
     defaults = node_setup.NodeConfigOptions(moniker=profile["moniker"])
     advanced_cometbft = profile_config(profile, "advanced", "cometbft")
-    advanced_pending_nonce = profile_config(profile, "advanced", "pending_nonce")
     return node_setup.NodeConfigOptions(
         moniker=profile["moniker"],
         p2p_seeds=_peer_values(profile, network, "seeds"),
@@ -164,14 +163,6 @@ def node_config_options(
         metrics=metrics_options(node_setup, profile),
         app_logging=app_logging_options(node_setup, profile),
         simulation=simulation_options(node_setup, profile),
-        pending_nonce_reservation_ttl_seconds=float(
-            advanced_pending_nonce.get(
-                "reservation_ttl_seconds", defaults.pending_nonce_reservation_ttl_seconds
-            )
-        ),
-        max_pending_nonces_per_sender=int(
-            advanced_pending_nonce.get("max_per_sender", defaults.max_pending_nonces_per_sender)
-        ),
         bds=bds_options(node_setup, profile),
         proxy_app=str(advanced_cometbft.get("proxy_app", defaults.proxy_app)),
         prometheus=bool(advanced_cometbft.get("prometheus", defaults.prometheus)),

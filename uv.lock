@@ -587,7 +587,7 @@ requires-dist = [{ name = "pynacl", specifier = ">=1.5.0,<2" }]
 
 [[package]]
 name = "xian-tech-cli"
-version = "0.2.2"
+version = "0.2.3"
 source = { editable = "." }
 dependencies = [
     { name = "pynacl" },
@@ -659,7 +659,7 @@ dev = [
 
 [[package]]
 name = "xian-tech-py"
-version = "0.5.3"
+version = "0.5.4"
 source = { editable = "../xian-py" }
 dependencies = [
     { name = "aiohttp" },

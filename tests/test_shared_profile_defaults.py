@@ -30,7 +30,7 @@ def test_profiles_templates_and_plans_follow_the_shared_baseline():
             defaults.RUNTIME_DEFAULTS = replace(
                 defaults.RUNTIME_DEFAULTS,
                 simulation_timeout_ms=4567, app_log_retention_days=11,
-                metrics_port=9208, max_pending_nonces_per_sender=32, simulation_max_chi=1234,
+                metrics_port=9208, simulation_max_chi=1234,
             )
             original_bds = bds.BdsConfig
             bds.BdsConfig = lambda: replace(original_bds(), pool_max_size=23)
@@ -65,7 +65,7 @@ def test_profiles_templates_and_plans_follow_the_shared_baseline():
                 assert value['simulation_max_chi'] == 1234
                 assert value['app_log_retention_days'] == 11
                 assert value['advanced']['metrics']['port'] == 9208
-                assert value['advanced']['pending_nonce']['max_per_sender'] == 32
+                assert 'pending_nonce' not in value['advanced']
             for value in (profile, sparse, plan):
                 assert value['services']['bds']['pool_max_size'] == 23
                 assert value['services']['bds']['host'] == ''

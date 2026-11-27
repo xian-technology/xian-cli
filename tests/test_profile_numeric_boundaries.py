@@ -9,7 +9,6 @@ from xian_cli.models import read_node_profile
 NUMERIC_OPTIONS = [
     ("services", "bds", "catchup_poll_seconds"),
     ("advanced", "metrics", "bds_refresh_seconds"),
-    ("advanced", "pending_nonce", "reservation_ttl_seconds"),
 ]
 
 

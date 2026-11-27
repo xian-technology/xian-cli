@@ -31,8 +31,6 @@
       "timeout_ms": 3000,
       "max_chi": null
     },
-    "pending_nonce_reservation_ttl_seconds": 60.0,
-    "max_pending_nonces_per_sender": 128,
     "bds": {
       "dsn": "",
       "host": "postgres",
@@ -89,8 +87,6 @@
       "timeout_ms": 3000,
       "max_chi": null
     },
-    "pending_nonce_reservation_ttl_seconds": 60.0,
-    "max_pending_nonces_per_sender": 128,
     "bds": {
       "dsn": "",
       "host": "postgres",
@@ -153,8 +149,6 @@
       "timeout_ms": 1010,
       "max_chi": 333333
     },
-    "pending_nonce_reservation_ttl_seconds": 12.5,
-    "max_pending_nonces_per_sender": 7,
     "bds": {
       "dsn": "postgresql://user@localhost:5432/db",
       "host": "postgres",
