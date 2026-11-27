@@ -149,10 +149,6 @@ DEFAULT_ADVANCED_RUNTIME = {
         "port": RUNTIME_DEFAULTS.metrics_port,
         "bds_refresh_seconds": RUNTIME_DEFAULTS.metrics_bds_refresh_seconds,
     },
-    "pending_nonce": {
-        "reservation_ttl_seconds": RUNTIME_DEFAULTS.pending_nonce_reservation_ttl_seconds,
-        "max_per_sender": RUNTIME_DEFAULTS.max_pending_nonces_per_sender,
-    },
 }
 
 
@@ -922,7 +918,8 @@ def _normalize_advanced_runtime(payload: dict) -> dict:
     advanced_input = payload.get("advanced")
     _reject_unknown_object_fields(
         advanced_input,
-        allowed=set(DEFAULT_ADVANCED_RUNTIME) | {"statesync"},
+        # Older profiles can carry the obsolete per-node nonce settings.
+        allowed=set(DEFAULT_ADVANCED_RUNTIME) | {"statesync", "pending_nonce"},
         label="advanced",
     )
     if isinstance(advanced_input, dict):
@@ -939,21 +936,11 @@ def _normalize_advanced_runtime(payload: dict) -> dict:
         raise ValueError("advanced must be an object")
     cometbft = _merge_defaults(DEFAULT_ADVANCED_RUNTIME["cometbft"], raw.get("cometbft"))
     metrics = _merge_defaults(DEFAULT_ADVANCED_RUNTIME["metrics"], raw.get("metrics"))
-    pending_nonce = _merge_defaults(
-        DEFAULT_ADVANCED_RUNTIME["pending_nonce"], raw.get("pending_nonce")
-    )
     metrics_refresh = _require_float(
         metrics, "bds_refresh_seconds", default=RUNTIME_DEFAULTS.metrics_bds_refresh_seconds
     )
     if metrics_refresh <= 0:
         raise ValueError("advanced.metrics.bds_refresh_seconds must be greater than zero")
-    pending_nonce_ttl = _require_float(
-        pending_nonce,
-        "reservation_ttl_seconds",
-        default=RUNTIME_DEFAULTS.pending_nonce_reservation_ttl_seconds,
-    )
-    if pending_nonce_ttl < 0:
-        raise ValueError("advanced.pending_nonce.reservation_ttl_seconds must be non-negative")
     return {
         "cometbft": _normalize_advanced_cometbft(cometbft),
         "metrics": {
@@ -965,14 +952,6 @@ def _normalize_advanced_runtime(payload: dict) -> dict:
                 metrics, "port", default=DEFAULT_ADVANCED_RUNTIME["metrics"]["port"]
             ),
             "bds_refresh_seconds": metrics_refresh,
-        },
-        "pending_nonce": {
-            "reservation_ttl_seconds": pending_nonce_ttl,
-            "max_per_sender": _require_positive_int(
-                pending_nonce,
-                "max_per_sender",
-                default=DEFAULT_ADVANCED_RUNTIME["pending_nonce"]["max_per_sender"],
-            ),
         },
     }
 

@@ -162,7 +162,8 @@ The total must be at least the segment limit; disk pressure from logging may
 remove older records before seven days. See the node logging guide in
 `xian-docs-web/node/managing.md` for diagnostic and container-log boundaries.
 
-Numeric timing and ratio options in node profiles and templates must be finite.
+Advanced runtime settings cover CometBFT and application metrics. Numeric
+timing and ratio options in node profiles and templates must be finite.
 
 Xian uses unmodified upstream CometBFT. Bootstrap through ordinary replay from
 genesis or a verified full-node-store snapshot. `node init` and `node start`
