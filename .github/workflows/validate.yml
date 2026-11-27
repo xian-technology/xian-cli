@@ -48,6 +48,20 @@ jobs:
           repository: xian-technology/xian-stack
           path: xian-stack
 
+      - name: Use matching dependency branches when available
+        shell: bash
+        env:
+          BRANCH: ${{ github.head_ref || github.ref_name }}
+        run: |
+          set -euo pipefail
+          for repo in xian-abci xian-py; do
+            remote="https://github.com/xian-technology/${repo}"
+            if git ls-remote --exit-code --heads "$remote" "refs/heads/$BRANCH" >/dev/null 2>&1; then
+              git -C "$repo" fetch --depth=1 origin "$BRANCH"
+              git -C "$repo" checkout --detach FETCH_HEAD
+            fi
+          done
+
       - name: Set up Python 3.14
         uses: actions/setup-python@v6
         with:
